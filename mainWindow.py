@@ -4,13 +4,15 @@ import os
 from PyQt6.QtGui import QCloseEvent
 from PyQt6 import QtWidgets, uic, QtCore
 
-from scan_info import *
-from scanlist import ScanList
 
 # from sr830 import SR830
-from nidaq import NIDAQ
+from nidaq_core.nidaq import NIDAQ
 # from keithley24xx import Keithley24xx
-from k10cr1 import K10CR1
+from equipments.k10cr1 import K10CR1
+
+from core.scan_info import *
+from core.scanlist import ScanList
+
 
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):

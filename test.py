@@ -1,5 +1,9 @@
-import os
+from nidaq_core.nidaq import NIDAQ
+from PyQt6 import QtWidgets, uic, QtCore
+import sys
 
-name = "0000_A"
-name_part, ext = os.path.splitext(name)
-print(name_part, "a",ext)
+app = QtWidgets.QApplication(sys.argv)
+window = NIDAQ()
+window.logic.initialize("Dev1")
+window.show()
+app.exec()
