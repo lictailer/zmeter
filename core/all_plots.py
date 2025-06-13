@@ -1,5 +1,4 @@
-
-from scan_info import *
+from .scan_info import *
 import random
 import warnings
 from pptx import Presentation
@@ -15,7 +14,7 @@ class LinePlot(QtWidgets.QWidget):
     def __init__(self, label=None,coordinate=None,setting_info=None,data=None):
         # print(coordinate)
         super(LinePlot, self).__init__()
-        uic.loadUi("ui/line_plot.ui", self)
+        uic.loadUi("core/ui/line_plot.ui", self)
         self.plot = pg.PlotWidget()
 
         self.label = QtWidgets.QLabel()
@@ -470,7 +469,7 @@ class AllPlots(QtWidgets.QWidget):
 
     def __init__(self, level_info=None, *, page_number: int = 0):
         super().__init__()
-        uic.loadUi("ui/all_plots.ui", self)
+        uic.loadUi("core/ui/all_plots.ui", self)
 
         self.level_info = level_info or copy.deepcopy(ScanInfo['levels'])
         self.plot_setting_info = None

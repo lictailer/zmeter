@@ -1,5 +1,5 @@
-from nested_menu import NestedMenu
-from scan_info import *
+from .nested_menu import NestedMenu
+from .scan_info import *
 
 
 class LinearSetting(QtWidgets.QWidget):
@@ -7,7 +7,7 @@ class LinearSetting(QtWidgets.QWidget):
 
     def __init__(self, info=None):
         super(LinearSetting, self).__init__()
-        uic.loadUi("ui/linear_setting.ui", self)
+        uic.loadUi("core/ui/linear_setting.ui", self)
         if info == None:
             self.info = copy.deepcopy(ScanInfo['levels']['level0']['setters']['setter0']["linear_setting"])
         else:
@@ -118,7 +118,7 @@ class ExplicitSetting(QtWidgets.QWidget):
 
     def __init__(self, info=None):
         super(ExplicitSetting, self).__init__()
-        uic.loadUi("ui/explicit_setting.ui", self)
+        uic.loadUi("core/ui/explicit_setting.ui", self)
         if info == None:
             self.info = copy.deepcopy(ScanInfo['levels']['level0']['setters']['setter0']['explicit_setting'])
         else:
@@ -168,7 +168,7 @@ class IndividualSetter(QtWidgets.QWidget):
 
     def __init__(self, info=None,setter_equipment_info=None):
         super(IndividualSetter, self).__init__()
-        uic.loadUi("ui/individual_setter.ui", self)
+        uic.loadUi("core/ui/individual_setter.ui", self)
         self.equipment_info=setter_equipment_info
         self.linear_setting = LinearSetting()
         self.explicit_setting = ExplicitSetting()

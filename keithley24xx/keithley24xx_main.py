@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from keithley24xx_core.keithley24xx_logic import Keithley24xxLogic
+from keithley24xx.keithley24xx_logic import Keithley24xxLogic
 import numpy as np
 import pyqtgraph as pg
 import pyvisa

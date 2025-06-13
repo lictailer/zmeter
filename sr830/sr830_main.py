@@ -1,7 +1,7 @@
 import time
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from sr830_core.sr830_logic import SR830_Logic
+from sr830.sr830_logic import SR830_Logic
 import numpy as np
 import pyqtgraph as pg
 import pyvisa

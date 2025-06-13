@@ -6,7 +6,7 @@ import PyQt6.QtWidgets as QtWidgets
 import PyQt6.QtCore as QtCore
 import PyQt6.QtGui as QtGui
 from PyQt6 import uic
-from scan import Scan
+from .scan import Scan
 
 
 class ScanItem(QtWidgets.QLabel):
@@ -74,7 +74,7 @@ class DeleteItem(QtWidgets.QLabel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.resize(20, 20)
-        self.setPixmap(QtGui.QPixmap("ui/bin.png").scaledToWidth(64))
+        self.setPixmap(QtGui.QPixmap("core/ui/bin.png").scaledToWidth(64))
         self.setAcceptDrops(True)
 
     def dragEnterEvent(self, e):
@@ -262,7 +262,7 @@ class ScanList(QtWidgets.QWidget):
         getter_equipment_info=None,
     ):
         super().__init__()
-        uic.loadUi("ui/scanlist.ui", self)
+        uic.loadUi(r"core/ui/scanlist.ui", self)
         self.info = info
         self.setter_equipment_info = setter_equipment_info
         self.getter_equipment_info = getter_equipment_info

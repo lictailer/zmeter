@@ -1,4 +1,4 @@
-from scan_info import *
+from .scan_info import *
 
 
 class IndividualImagePlotSetting(QtWidgets.QWidget):
@@ -6,7 +6,7 @@ class IndividualImagePlotSetting(QtWidgets.QWidget):
     
     def __init__(self,info=None):
         super(IndividualImagePlotSetting, self).__init__()
-        uic.loadUi("ui/individual_image_setting.ui", self)
+        uic.loadUi("core/ui/individual_image_setting.ui", self)
         if info==None:
             self.info = {'x': 'None', 'y': 'None', 'z': 'None'}
         else:
@@ -151,7 +151,7 @@ class IndividualLinePlotSetting(QtWidgets.QWidget):
 
     def __init__(self, info=None):
         super(IndividualLinePlotSetting, self).__init__()
-        uic.loadUi("ui/individual_line_setting.ui.ui", self)
+        uic.loadUi("core/ui/individual_line_setting.ui.ui", self)
         self.info = {'x': 'None', 'y': 'None'}
         self.comboBox_x.currentTextChanged.connect(self.when_cb_x_changed)
         self.comboBox_y.currentTextChanged.connect(self.when_cb_y_changed)
@@ -265,7 +265,7 @@ class AllPlotSetting(QtWidgets.QWidget):
 
     def __init__(self,level_info=None):
         super(AllPlotSetting, self).__init__()
-        uic.loadUi("ui/plot_setting.ui", self)
+        uic.loadUi("core/ui/plot_setting.ui", self)
         self.info = {'line_plots': {},
                      'image_plots': {}, }
         if level_info == None:

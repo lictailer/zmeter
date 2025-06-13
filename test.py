@@ -1,4 +1,4 @@
-from nidaq_core.nidaq import NIDAQ
+from nidaq.nidaq_main import NIDAQ
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
 

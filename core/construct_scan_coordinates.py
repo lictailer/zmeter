@@ -1,4 +1,4 @@
-from scan_info import *
+from .scan_info import *
 from copy import deepcopy
 
 class Construct:

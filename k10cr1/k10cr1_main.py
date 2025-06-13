@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from k10cr1_core.k10cr1_logic import K10CR1Logic
+from k10cr1.k10cr1_logic import K10CR1Logic
 import numpy as np
 import pyqtgraph as pg
 
@@ -8,7 +8,7 @@ import pyqtgraph as pg
 class K10CR1(QtWidgets.QWidget):
     def __init__(self):
         super(K10CR1, self).__init__()
-        uic.loadUi(r"Equipments/k10cr1_core/k10cr1.ui", self)
+        uic.loadUi(r"k10cr1/k10cr1.ui", self)
         self.logic = K10CR1Logic()
 
         self.connect_button.clicked.connect(self.connect)

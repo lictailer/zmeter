@@ -6,9 +6,9 @@ from PyQt6 import QtWidgets, uic, QtCore
 
 
 # from sr830 import SR830
-from nidaq_core.nidaq import NIDAQ
+from nidaq.nidaq_main import NIDAQ
 # from keithley24xx import Keithley24xx
-from equipments.k10cr1 import K10CR1
+from k10cr1.k10cr1_main import K10CR1
 
 from core.scan_info import *
 from core.scanlist import ScanList
@@ -19,8 +19,7 @@ class MainWindow(QtWidgets.QWidget):
     def __init__(self, info=None):
         super().__init__()
         print("Initiating the Program")
-        uic.loadUi(os.path.join(os.getcwd(),"ui\\mainwindow.ui"), self)
-        # uic.loadUi(r"ui\mainwindow.ui", self)
+        uic.loadUi(r"core/ui/mainwindow.ui", self)
         self.info = info
         
         ####################################### edit this part##############################################

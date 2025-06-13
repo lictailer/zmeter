@@ -1,7 +1,6 @@
-
-from scan_info import *
-from individual_setter import IndividualSetter
-from nested_menu import NestedMenu
+from .scan_info import *
+from .individual_setter import IndividualSetter
+from .nested_menu import NestedMenu
 
 
 class IndividualLevel(QtWidgets.QWidget):
@@ -9,7 +8,7 @@ class IndividualLevel(QtWidgets.QWidget):
 
     def __init__(self, individual_level_info=None,setter_equipment_info=None,getter_equipment_info=None, manual_set_before_info=None, manual_set_after_info=None):
         super(IndividualLevel, self).__init__()
-        uic.loadUi("ui/individual_level.ui", self)
+        uic.loadUi("core/ui/individual_level.ui", self)
         self.setter_equipment_info=setter_equipment_info
         self.getter_equipment_info = getter_equipment_info
         if individual_level_info != None:
@@ -220,7 +219,7 @@ class AllLevelSetting(QtWidgets.QWidget):
 
     def __init__(self, all_level_info=None, setter_equipment_info=None, getter_equipment_info=None):
         super(AllLevelSetting, self).__init__()
-        uic.loadUi("ui/scan_setting.ui", self)
+        uic.loadUi("core/ui/scan_setting.ui", self)
         self.add_pb.clicked.connect(self.add_level)
         self.getter_equipment_info=getter_equipment_info
         self.delete_pb.clicked.connect(self.delete_level)

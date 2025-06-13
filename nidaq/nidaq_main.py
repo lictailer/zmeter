@@ -10,7 +10,7 @@ class NIDAQ(QtWidgets.QWidget):
 
     def __init__(self):
         super(NIDAQ, self).__init__()
-        uic.loadUi(r"nidaq_core/nidaq.ui", self)
+        uic.loadUi(r"nidaq/nidaq.ui", self)
         self.logic = NIDAQLogic()
 
         self.connect_sig_slot()

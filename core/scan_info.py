@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 import math
 import datetime
-from brakets import Brakets
+from .brakets import Brakets
 import re
 from copy import deepcopy
 import json

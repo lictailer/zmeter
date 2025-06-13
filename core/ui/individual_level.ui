@@ -67,7 +67,7 @@
         <item>
          <widget class="QLabel" name="label">
           <property name="text">
-           <string>setting method ()-&gt;serial []-&gt;parallel</string>
+           <string>setting method (Not Available)()-&gt;serial []-&gt;parallel</string>
           </property>
          </widget>
         </item>

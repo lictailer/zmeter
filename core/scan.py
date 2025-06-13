@@ -1,11 +1,11 @@
-from scan_info import *
-from scan_logic import ScanLogic
-from all_level import AllLevelSetting
-from all_plot_settings import AllPlotSetting
-from all_plots import AllPlots
-from construct_scan_coordinates import Construct
-from all_plots import LinePlot
-from all_plots import ImagePlot
+from .scan_info import *
+from .scan_logic import ScanLogic
+from .all_level import AllLevelSetting
+from .all_plot_settings import AllPlotSetting
+from .all_plots import AllPlots
+from .construct_scan_coordinates import Construct
+from .all_plots import LinePlot
+from .all_plots import ImagePlot
 import os, shutil
 
 
@@ -16,7 +16,7 @@ class Scan(QtWidgets.QWidget):
     def __init__(self,name=None, info=None,setter_equipment_info=None,main_window=None,getter_equipment_info=None):
         super(Scan, self).__init__()
         # uic.loadUi("ui/scan.ui", self)
-        self.ui = uic.loadUi("ui/scan new.ui", self)
+        self.ui = uic.loadUi("core/ui/scan new.ui", self)
 
         self.logic = ScanLogic(main_window=main_window)
         self.logic.sig_new_data.connect(self.new_data)
