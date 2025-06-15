@@ -17,9 +17,12 @@ class ANC300Hardware:
             print(f"Error initializing ANC300: {e}")
             self.anc300 = None
             return False
+        
+    def close(self):
+        self.anc300.close()
     
     #----------------------------- Positioner Axis Control ----------------------------
-    def set_anm150_mode(self, axis):
+    def set_anm150_mode_to_stp(self, axis):
         self.anc300.enable_axis(axis=axis, mode="stp")
 
     def set_anm150_ground(self, axis):
@@ -40,9 +43,15 @@ class ANC300Hardware:
     def anm150_moveby(self, axis, steps):
         self.anc300.move_by(axis, steps)
 
-    def get_anm200_capacitance(self, axis):
+    def get_anm150_capacitance(self, axis):
         return self.anc300.measure_capacitance(axis, wait=True)
-
+    
+    def get_anm150_mode(self, axis):
+        return self.anc300.get_mode(axis)
+    
+    def get_anm150_step_volt(self, axis):
+        return self.anc300.get_voltage(axis)
+    
     #----------------------------- Scanner Axis Control ----------------------------
     def set_anm200_mode_to_inp(self, axis):
         self.anc300.enable_axis(axis=axis, mode='inp')
@@ -59,8 +68,11 @@ class ANC300Hardware:
     def get_anm200_capacitance(self, axis):
         return self.anc300.measure_capacitance(axis, wait=True)
     
-    def close(self):
-        self.anc300.close()
+    def get_anm200_mode(self, axis):
+        return self.anc300.get_mode(axis)
+    
+
+
 
 
 if __name__ == "__main__":

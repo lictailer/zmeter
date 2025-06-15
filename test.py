@@ -1,9 +1,2 @@
-from nidaq.nidaq_main import NIDAQ
-from PyQt6 import QtWidgets, uic, QtCore
-import sys
-
-app = QtWidgets.QApplication(sys.argv)
-window = NIDAQ()
-window.logic.initialize("Dev1")
-window.show()
-app.exec()
+a = {1:10.4, 2:5.2}
+print(a)
