@@ -1,7 +1,8 @@
 import numpy as np
 import PyDAQmx as Daq
-from PyDAQmx import Task
+from PyDAQmx import Task, DAQmx_Val_Volts, DAQmx_Val_Rising, DAQmx_Val_FiniteSamps, DAQmx_Val_GroupByChannel
 import ctypes
+import PyDAQmx.DAQmxTypes as Types
 import time
 
 
@@ -190,11 +191,52 @@ class NIDAQHardWare:
 
     def write_single_AO_task(self, physical_channel, AO_value):
         self._AO_dict[physical_channel].WriteAnalogScalarF64(True, 10.0, AO_value, None)
+        
+
+        # ---code for ramping up the voltage, need to jump wire from AO to AI to read the voltage
+
+        # # start_volt = self.read_AO(physical_channel)
+        # ramp_volt = np.append(np.arange(0, AO_value, 0.005), 0.95)
+
+        # print('start')
+        # written = Types.int32()
+        # self._AO_dict[physical_channel].WriteAnalogF64(
+        #     1000, False, 10.0,            # timeout 10 s
+        #     DAQmx_Val_GroupByChannel,
+        #     ramp_volt, written, None)
 
     def close_single_AO_task(self, physical_channel):
         if self._AO_dict[physical_channel] is not None:
             self._AO_dict[physical_channel].StopTask()
             self._AO_dict[physical_channel] = None
+
+    def read_AO(self, physical_channel) -> float:
+        """
+        Returns the present output voltage on analog-output channel *ch*
+        (e.g. 'ao0' or 'ao1') by sampling NI-DAQmx internal channel
+        _aoX_vs_aognd.
+
+
+        Not working with NI 6002
+        """
+        internal_name = f"{physical_channel}_vs_aognd"
+ 
+        with Task() as t_read:
+            t_read.CreateAIVoltageChan(
+                internal_name,
+                "",
+                Daq.DAQmx_Val_Cfg_Default,
+                self._AOVoltage_minVal,
+                self._AOVoltage_maxVal,
+                Daq.DAQmx_Val_Volts,
+                None)
+
+            # single-sample, blocking read
+            data = Types.float64()
+            Daq.DAQmxReadAnalogScalarF64(t_read.handle, 10.0, data, None)
+
+        return data.value
+    
 
     # ================ AI voltage Commands =======================
     def set_up_single_AI_task_old(self, physical_channel):

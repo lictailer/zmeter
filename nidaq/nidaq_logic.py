@@ -34,6 +34,7 @@ class NIDAQLogic(QtCore.QThread):
             self.daq.setup_single_AO_task(ch)
         self.next_channel = "AO0"
         self.target_AO = {"AO0": 0.0, "AO1": 0.0, "AO2": 0.0, "AO3": 0.0}
+        self.current_AO = {"AO0": 0.0, "AO1": 0.0, "AO2": 0.0, "AO3": 0.0}
         self.hold_AO = {
             "AO0": 0.0,
             "AO1": 0.0,
@@ -72,8 +73,21 @@ class NIDAQLogic(QtCore.QThread):
 
     #############      start of AO    ###############
     def setup_AO(self, ch, val):
-        self.daq.write_single_AO_task("/" + self.dev_name + "/" + ch, val)
-        self.sig_new_write.emit([self.AO_channels.index(ch), val])
+        current_val = self.current_AO[ch]
+
+        if current_val <= val:
+            ramp_volt = np.append(np.arange(current_val, val, 0.01), val)
+        elif current_val > val:
+            ramp_volt = np.append(np.arange(current_val, val, -0.01), val)
+
+        for volt in ramp_volt:
+            self.daq.write_single_AO_task("/" + self.dev_name + "/" + ch, volt)
+            self.sig_new_write.emit([self.AO_channels.index(ch), volt])
+            self.current_AO[ch] = volt
+            time.sleep(0.001)
+
+        # self.daq.write_single_AO_task("/" + self.dev_name + "/" + ch, val)
+        
 
     def set_AO0(self, val):
         self.setup_AO("AO0", val)

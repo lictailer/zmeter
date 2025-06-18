@@ -1,2 +1,5 @@
-a = {1:10.4, 2:5.2}
+import numpy as np
+
+a = np.arange(0, -2, 0.1)
+
 print(a)

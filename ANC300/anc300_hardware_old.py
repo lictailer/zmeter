@@ -44,7 +44,7 @@ class ANC300Hardware:
         self.anc300.move_by(axis, steps)
 
     def get_anm150_capacitance(self, axis):
-        return self.anc300.measure_capacitance(axis, wait=True)
+        return self.anc300.get_capacitance(axis, measure=True)
     
     def get_anm150_mode(self, axis):
         return self.anc300.get_mode(axis)
@@ -66,7 +66,7 @@ class ANC300Hardware:
         self.anc300.query("setdci {} off".format(axis))  
 
     def get_anm200_capacitance(self, axis):
-        return self.anc300.measure_capacitance(axis, wait=True)
+        return self.anc300.get_capacitance(axis, measure=True)
     
     def get_anm200_mode(self, axis):
         return self.anc300.get_mode(axis)
