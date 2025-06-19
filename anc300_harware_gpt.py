@@ -182,7 +182,7 @@ class ANC300:
         self,
         conn: Union[str, Tuple[str, int]],
         pwd: Optional[str] = "123456",
-        timeout: float = 3.0,
+        timeout: float = 5.0,
     ):
         self._pwd = pwd
         self._timeout = timeout
