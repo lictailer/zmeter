@@ -62,12 +62,9 @@ class ANC300Logic(QtCore.QThread):
 
     #----------------------------- ANM150/200 Mode Switch ----------------------------
     def set_ground_all_axis(self):
-        for i in self.anm150_list:
-            self.ANC300.set_anm150_ground(i)
-            self.ANC300_info[i]['mode'] = 'gnd'
-        for i in self.anm200_list:
-            self.ANC300.set_anm200_ground(i)
-            self.ANC300_info[i]['mode'] = 'gnd'
+        for axis in self.anm150_list + self.anm200_list:
+            self.ANC300.set_mode(axis, 'gnd')
+            
         
         self.sig_ANC300_info.emit(self.ANC300_info)
 
@@ -177,7 +174,7 @@ class ANC300Logic(QtCore.QThread):
     
 if __name__ == "__main__":
     anc300_logic = ANC300Logic()
-    anc300_logic.initialize("COM6")  # Example port name
+    # anc300_logic.initialize("COM6")  # Example port name
 
     time_start = time.time()
     print("start info reading", time.time())
