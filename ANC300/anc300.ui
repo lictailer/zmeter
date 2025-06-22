@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>696</width>
-    <height>540</height>
+    <width>800</width>
+    <height>570</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -117,34 +117,103 @@ p, li { white-space: pre-wrap; }
    </item>
    <item>
     <layout class="QGridLayout" name="gridLayout_3">
-     <item row="0" column="1">
-      <widget class="QLabel" name="axis1cap">
-       <property name="minimumSize">
-        <size>
-         <width>90</width>
-         <height>0</height>
-        </size>
+     <item row="4" column="2">
+      <widget class="QPushButton" name="enable_axis4_button">
+       <property name="text">
+        <string>Enable</string>
        </property>
+      </widget>
+     </item>
+     <item row="2" column="2">
+      <widget class="QPushButton" name="enable_axis3_button">
+       <property name="text">
+        <string>Enable</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="3">
+      <widget class="QPushButton" name="gnd_axis5_button">
+       <property name="text">
+        <string>GND</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="3">
+      <widget class="QPushButton" name="gnd_axis2_button">
+       <property name="text">
+        <string>GND</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="2">
+      <widget class="QPushButton" name="enable_axis2_button">
+       <property name="text">
+        <string>Enable</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="2">
+      <widget class="QPushButton" name="enable_axis5_button">
+       <property name="text">
+        <string>Enable</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="4">
+      <widget class="QLabel" name="axis2_status">
+       <property name="text">
+        <string>Unknow</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="4">
+      <widget class="QLabel" name="axis3_status">
+       <property name="text">
+        <string>Unknow</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QLabel" name="axis3cap">
        <property name="text">
         <string>TextLabel</string>
        </property>
       </widget>
      </item>
-     <item row="4" column="0">
-      <widget class="QLabel" name="label_6">
+     <item row="3" column="0">
+      <widget class="QLabel" name="label_12">
        <property name="text">
-        <string>Scan X:</string>
+        <string/>
        </property>
       </widget>
      </item>
-     <item row="5" column="0">
-      <widget class="QLabel" name="label_4">
-       <property name="text">
-        <string>Scan Y:</string>
+     <item row="3" column="7">
+      <widget class="QSpinBox" name="axis3_stepvolt_val">
+       <property name="maximumSize">
+        <size>
+         <width>90</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="maximum">
+        <number>80</number>
+       </property>
+       <property name="singleStep">
+        <number>5</number>
+       </property>
+       <property name="value">
+        <number>50</number>
        </property>
       </widget>
      </item>
-     <item row="0" column="3">
+     <item row="1" column="0">
+      <widget class="QLabel" name="label_5">
+       <property name="text">
+        <string>Pos Y:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="6">
       <widget class="QLabel" name="label_8">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -163,21 +232,20 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="2" column="3">
-      <widget class="QLabel" name="label_9">
-       <property name="text">
-        <string>Z Axis Freqency</string>
+     <item row="0" column="1">
+      <widget class="QLabel" name="axis1cap">
+       <property name="minimumSize">
+        <size>
+         <width>90</width>
+         <height>0</height>
+        </size>
        </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLabel" name="axis3cap">
        <property name="text">
         <string>TextLabel</string>
        </property>
       </widget>
      </item>
-     <item row="0" column="4">
+     <item row="0" column="7">
       <widget class="QLabel" name="label_10">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -202,24 +270,10 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="2" column="4">
-      <widget class="QLabel" name="label_11">
+     <item row="1" column="1">
+      <widget class="QLabel" name="axis2cap">
        <property name="text">
-        <string>Z Axis Step Volt</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="label_7">
-       <property name="text">
-        <string>Pos Z:</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="label_12">
-       <property name="text">
-        <string/>
+        <string>TextLabel</string>
        </property>
       </widget>
      </item>
@@ -230,92 +284,14 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_3">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="minimumSize">
-        <size>
-         <width>50</width>
-         <height>0</height>
-        </size>
-       </property>
+     <item row="4" column="0">
+      <widget class="QLabel" name="label_6">
        <property name="text">
-        <string>Pos X:</string>
+        <string>Scan X:</string>
        </property>
       </widget>
      </item>
-     <item row="3" column="3">
-      <widget class="QSpinBox" name="axis3_freq_val">
-       <property name="maximumSize">
-        <size>
-         <width>90</width>
-         <height>16777215</height>
-        </size>
-       </property>
-       <property name="maximum">
-        <number>2000</number>
-       </property>
-       <property name="singleStep">
-        <number>10</number>
-       </property>
-       <property name="value">
-        <number>300</number>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="1">
-      <widget class="QLabel" name="axis5cap">
-       <property name="text">
-        <string>TextLabel</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QLabel" name="axis2cap">
-       <property name="text">
-        <string>TextLabel</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="3" colspan="2">
-      <widget class="QPushButton" name="measure_all_axis_capacitance_button">
-       <property name="text">
-        <string>Measure All Axis Capacitance</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_5">
-       <property name="text">
-        <string>Pos Y:</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="4">
-      <widget class="QSpinBox" name="axis3_stepvolt_val">
-       <property name="maximumSize">
-        <size>
-         <width>90</width>
-         <height>16777215</height>
-        </size>
-       </property>
-       <property name="maximum">
-        <number>80</number>
-       </property>
-       <property name="singleStep">
-        <number>5</number>
-       </property>
-       <property name="value">
-        <number>50</number>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="3">
+     <item row="1" column="6">
       <widget class="QSpinBox" name="axis12_freq_val">
        <property name="minimumSize">
         <size>
@@ -340,7 +316,7 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="1" column="4">
+     <item row="1" column="7">
       <widget class="QSpinBox" name="axis12_stepvolt_val">
        <property name="maximumSize">
         <size>
@@ -359,7 +335,14 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="0" column="2">
+     <item row="2" column="6">
+      <widget class="QLabel" name="label_9">
+       <property name="text">
+        <string>Z Axis Freqency</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="5">
       <spacer name="horizontalSpacer_3">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
@@ -371,6 +354,135 @@ p, li { white-space: pre-wrap; }
         </size>
        </property>
       </spacer>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLabel" name="label_7">
+       <property name="text">
+        <string>Pos Z:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="7">
+      <widget class="QLabel" name="label_11">
+       <property name="text">
+        <string>Z Axis Step Volt</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="0">
+      <widget class="QLabel" name="label_4">
+       <property name="text">
+        <string>Scan Y:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="1">
+      <widget class="QLabel" name="axis5cap">
+       <property name="text">
+        <string>TextLabel</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="6">
+      <widget class="QSpinBox" name="axis3_freq_val">
+       <property name="maximumSize">
+        <size>
+         <width>90</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="maximum">
+        <number>2000</number>
+       </property>
+       <property name="singleStep">
+        <number>10</number>
+       </property>
+       <property name="value">
+        <number>300</number>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="0">
+      <widget class="QLabel" name="label_3">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>50</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Pos X:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="3">
+      <widget class="QPushButton" name="gnd_axis3_button">
+       <property name="text">
+        <string>GND</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="6" colspan="2">
+      <widget class="QPushButton" name="set_ground_all_button">
+       <property name="text">
+        <string>GND All</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="6" colspan="2">
+      <widget class="QPushButton" name="measure_all_axis_capacitance_button">
+       <property name="text">
+        <string>Measure All Axis Capacitance</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="4">
+      <widget class="QLabel" name="axis5_status">
+       <property name="text">
+        <string>Unknow</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="3">
+      <widget class="QPushButton" name="gnd_axis4_button">
+       <property name="text">
+        <string>GND</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="3">
+      <widget class="QPushButton" name="gnd_axis1_button">
+       <property name="text">
+        <string>GND</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="4">
+      <widget class="QLabel" name="axis4_status">
+       <property name="text">
+        <string>Unknow</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="2">
+      <widget class="QPushButton" name="enable_axis1_button">
+       <property name="text">
+        <string>Enable</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="4">
+      <widget class="QLabel" name="axis1_status">
+       <property name="text">
+        <string>Unknow</string>
+       </property>
+      </widget>
      </item>
     </layout>
    </item>
