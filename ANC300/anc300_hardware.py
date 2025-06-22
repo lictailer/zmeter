@@ -350,8 +350,8 @@ if __name__ == "__main__":
         print("Axis 5 mode       :", stage.get_mode(5))
         stage.set_mode(5, "stp")
         print("Axis 5 mode       :", stage.get_mode(5))
-        print("Moving +100 steps …")
-        stage.move_by(5, 100)
+        # print("Moving +100 steps …")
+        # stage.move_by(5, 100)
 
 
         # for i in range(1,6):

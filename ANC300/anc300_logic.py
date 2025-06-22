@@ -78,7 +78,7 @@ class ANC300Logic(QtCore.QThread):
         
     def set_enable_axis(self, axis):
         if axis in self.anm150_list:
-            self.ANC300.set_mode(axis, 'stp')  # Set voltage to 0V to enable the axis
+            self.ANC300.set_mode(axis, 'stp')
             self.ANC300_info[axis]['mode'] = 'stp'
             self.sig_ANC300_info.emit(self.ANC300_info)
         elif axis in self.anm200_list:
@@ -90,21 +90,21 @@ class ANC300Logic(QtCore.QThread):
 
 
     #----------------------------- ANM150 Position Move ----------------------------
-    def move_anm150_one_step(self, axis):
+    def move_anm150_one_step(self, axis, direction = True):
         if axis not in self.anm150_list:
             print(f"Invalid axis: {axis}")
             return
-        self.ANC300.move_by(axis, 1)
-        self.ANC300_info[axis]['pos'] += 1
+        self.ANC300.move_by(axis, 1 if direction else -1)
+        self.ANC300_info[axis]['pos'] += 1 if direction else -1
         self.sig_ANC300_info.emit(self.ANC300_info)
 
-    def move_an150_continuesly(self, axis):
+    def move_an150_continuesly(self, axis, direction = True):
         if axis not in self.anm150_list:
             print(f"Invalid axis: {axis}")
             return
         step_count = int(round(self.ANC300_info[axis]['freq'] / self._positioner_refresh_rate))
-        self.ANC300.move_by(axis, step_count)
-        self.ANC300_info[axis]['pos'] += step_count
+        self.ANC300.move_by(axis, step_count if direction else -step_count)
+        self.ANC300_info[axis]['pos'] += step_count if direction else -step_count
         self.sig_ANC300_info.emit(self.ANC300_info)
 
 
@@ -140,10 +140,12 @@ class ANC300Logic(QtCore.QThread):
     def read_all_axis_capacitance(self):
         self.sig_cap_measurement_info.emit("Please wait till capacitance measurement is done.")
 
-        for axis in self.anm150_list:
-            self.ANC300_info[axis]['capacitance'] = self.ANC300.get_anm150_capacitance(axis)
-        for axis in self.anm200_list:
-            self.ANC300_info[axis]['capacitance'] = self.ANC300.get_anm200_capacitance(axis)
+        # for axis in self.anm150_list:
+        #     self.ANC300_info[axis]['capacitance'] = self.ANC300.get_anm150_capacitance(axis)
+        # for axis in self.anm200_list:
+        #     self.ANC300_info[axis]['capacitance'] = self.ANC300.get_anm200_capacitance(axis)
+        for axis in self.anm150_list + self.anm200_list:
+            self.ANC300_info[axis]['capacitance'] = self.ANC300.get_capacitance(axis, measure=True)
         print(self.ANC300_info)
         self.sig_ANC300_info.emit(self.ANC300_info)
         self.sig_cap_measurement_info.emit("")
@@ -168,6 +170,15 @@ class ANC300Logic(QtCore.QThread):
         elif self.job == 'reset_scan_center':
             self.reset_pos_indictor()
 
+        elif self.job == 'move_anm150_one_step':
+            self.move_anm150_one_step(self.target_axis, self.target_direction)
+            self.target_axis = None
+            self.target_direction = None
+
+        elif self.job == 'move_anm150_continuesly':
+            self.move_an150_continuesly(self.target_axis, self.target_direction)
+            self.target_axis = None
+            self.target_direction = None
 
         self.reset_flags()
         self.job = ""

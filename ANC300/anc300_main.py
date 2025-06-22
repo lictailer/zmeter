@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from .anc300_logic import ANC300Logic
+from anc300_logic import ANC300Logic
 import numpy as np
 import pyqtgraph as pg
 
@@ -8,7 +8,8 @@ import pyqtgraph as pg
 class ANC300(QtWidgets.QWidget):
 
     def __init__(self):
-        uic.loadUi(r"anc300/anc300.ui", self)
+        super(ANC300, self).__init__()
+        uic.loadUi(r"ANC300/anc300.ui", self)
         self.logic = ANC300Logic()
 
         self.connect_sig_slot()
@@ -41,23 +42,23 @@ class ANC300(QtWidgets.QWidget):
         self.move_zup_button.clicked.connect(lambda: self.when_move_button_clicked("zup"))
         self.move_zdown_button.clicked.connect(lambda: self.when_move_button_clicked("zdown"))
 
-        self.logic.sig_name.connect(self.setup_name_label)
+        # self.logic.sig_name.connect(self.sig_name)
         self.logic.sig_ANC300_info.connect(self.update_ANC300_info)
-        self.logic.sig_cap_measurement_info.connect(self.update_cap_measurement_info)
-        self.logic.sig_anm150_pos_indictor.connect(self.update_anm150_pos_indictor)
+        # self.logic.sig_cap_measurement_info.connect(self.update_cap_measurement_info)
+        # self.logic.sig_anm150_pos_indictor.connect(self.update_anm150_pos_indictor)
 
 
     def connect(self, device=""):
         if device == "":
-            device = self.port_name_text.text()
+            device = self.port_name_text.toPlainText()
         else:
             pass
         self.logic.initialize(device)
-        self.status_text.setText("Connected to " + self.logic.port_name)
+        self.connect_info.setText("Connected to " + self.logic.port_name)
 
     def close(self):
         self.logic.close()
-        self.status_text.setText("Not Connected")
+        self.connect_info.setText("Not Connected")
 
     def when_connect_button_clicked(self):
         self.connect()
@@ -67,13 +68,56 @@ class ANC300(QtWidgets.QWidget):
 
     def when_set_ground_all_button_clicked(self):
         self.logic.set_ground_all_axis()
-        self.update_ANC300_info()
 
-        
+    def when_reset_step_record_button_clicked(self):
+        self.logic.reset_step_record()
 
+    def when_enable_axis_button_clicked(self, axis):
+        self.logic.enable_axis(axis)
 
+    def when_gnd_axis_button_clicked(self, axis):
+        self.logic.set_ground_axis(axis)
 
+    def when_measure_all_cap_button_clicked(self):
+        self.logic.job = "measure_all_capacitance"
+        self.logic.start()
+
+    def when_move_button_clicked(self, direction):
+        stepMove = self.stepMoveCheckBox.isChecked()
+        if stepMove:
+            self.logic.job = "move_anm150_one_step"
+        else:
+            self.logic.job = "move_anm150_continuesly"
+
+        if direction == "left":
+            self.logic.target_axis = 1
+            self.logic.direction = False
+        elif direction == "right":
+            self.logic.target_axis = 1
+            self.logic.direction = True
+        elif direction == "down":
+            self.logic.target_axis = 2
+            self.logic.direction = False
+        elif direction == "down":
+            self.logic.target_axis = 2
+            self.logic.direction = True
+        elif direction == "zup":
+            self.logic.target_axis = 3
+            self.logic.direction = True
+        elif direction == "zdown":
+            self.logic.target_axis = 3
+            self.logic.direction = False
+
+        self.logic.start()
+
+    
+    def update_ANC300_info(self, info):
+        print( "ANC300 info updated", info)
 
     
 
-
+if __name__ == "__main__":
+    app = QtWidgets.QApplication(sys.argv)
+    window = ANC300()
+    window.show()
+    sys.exit(app.exec())
