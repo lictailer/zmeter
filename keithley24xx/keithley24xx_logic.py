@@ -110,7 +110,7 @@ class Keithley24xxLogic(QtCore.QThread):
             if self.force_stop:
                 break
             self.set_sour_volt_to(v)
-            time.sleep(0.01)
+            time.sleep(0.1)
             self.read()
         if change_back_to_curr:
             self.set_sens_func_to_curr()

@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from keithley24xx.keithley24xx_logic import Keithley24xxLogic
+from .keithley24xx_logic import Keithley24xxLogic
 import numpy as np
 import pyqtgraph as pg
 import pyvisa
@@ -10,7 +10,7 @@ import time
 class Keithley24xx(QtWidgets.QWidget):
     def __init__(self):
         super(Keithley24xx, self).__init__()
-        uic.loadUi("Equipments/keithley24xx_core/keithley24xx.ui", self)
+        uic.loadUi("keithley24xx/keithley24xx.ui", self)
         self.logic = Keithley24xxLogic()
         self.connect_sig_slot()
         self.is_connected = False

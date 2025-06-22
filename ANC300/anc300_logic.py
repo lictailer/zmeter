@@ -1,7 +1,7 @@
 import numpy as np
 from PyQt6 import QtCore, QtWidgets, uic
 import time
-from .anc300_hardware import ANC300Hardware
+from anc300_hardware import ANC300Hardware
 import sys
 
 class ANC300Logic(QtCore.QThread):
@@ -46,12 +46,12 @@ class ANC300Logic(QtCore.QThread):
         self.reset_flags()
 
         if self.is_initialized:
-            self.set_all_axis_gnd()
+            self.set_ground_all_axis()
             self.sig_name.emit(self.port_name)
             self.reset_pos_indictor()
 
     def close(self):
-        self.set_all_axis_gnd()
+        self.set_ground_all_axis()
         self.ANC300.close()
         self.sig_name.emit("Disconnected")
 
@@ -62,12 +62,9 @@ class ANC300Logic(QtCore.QThread):
 
     #----------------------------- ANM150/200 Mode Switch ----------------------------
     def set_ground_all_axis(self):
-        for i in self.anm150_list:
-            self.ANC300.set_anm150_ground(i)
-            self.ANC300_info[i]['mode'] = 'gnd'
-        for i in self.anm200_list:
-            self.ANC300.set_anm200_ground(i)
-            self.ANC300_info[i]['mode'] = 'gnd'
+        for axis in self.anm150_list + self.anm200_list:
+            self.ANC300.set_mode(axis, 'gnd')
+            
         
         self.sig_ANC300_info.emit(self.ANC300_info)
 
@@ -131,11 +128,11 @@ class ANC300Logic(QtCore.QThread):
     def read_all_axis_info(self):
         for axis in self.anm150_list:
             self.ANC300_info[axis]['mode'] = self.ANC300.get_anm150_mode(axis)
-            self.ANC300_info[axis]['step_volt'] =  self.ACN300.get_anm150_step_volt(axis)
+            self.ANC300_info[axis]['step_volt'] =  self.ANC300.get_anm150_step_volt(axis)
             self.ANC300_info[axis]['freq'] = self.ANC300.get_anm150_freq(axis)
         for axis in self.anm200_list:
             self.ANC300_info[axis]['mode'] = self.ANC300.get_anm200_mode(axis)
-        
+        print(self.ANC300_info)
         self.sig_ANC300_info.emit(self.ANC300_info)
 
     def read_all_axis_capacitance(self):
@@ -145,7 +142,7 @@ class ANC300Logic(QtCore.QThread):
             self.ANC300_info[axis]['capacitance'] = self.ANC300.get_anm150_capacitance(axis)
         for axis in self.anm200_list:
             self.ANC300_info[axis]['capacitance'] = self.ANC300.get_anm200_capacitance(axis)
-        
+        print(self.ANC300_info)
         self.sig_ANC300_info.emit(self.ANC300_info)
         self.sig_cap_measurement_info.emit("")
 
@@ -175,7 +172,22 @@ class ANC300Logic(QtCore.QThread):
 
 
     
+if __name__ == "__main__":
+    anc300_logic = ANC300Logic()
+    # anc300_logic.initialize("COM6")  # Example port name
 
+    time_start = time.time()
+    print("start info reading", time.time())
+    anc300_logic.read_all_axis_info()
+    time_end = time.time()
+    print("Time taken for reading info", time_end - time_start)
+
+    print("start capacitance reading")
+    time_start = time.time()
+    anc300_logic.read_all_axis_capacitance()
+    time_end = time.time()
+    print("Time taken for reading info and capacitance:", time_end - time_start)
+    anc300_logic.close()
 
         
 
