@@ -65,28 +65,24 @@ class ANC300Logic(QtCore.QThread):
         for axis in self.anm150_list + self.anm200_list:
             self.ANC300.set_mode(axis, 'gnd')
             
-        
         self.sig_ANC300_info.emit(self.ANC300_info)
 
     def set_ground_axis(self, axis):
-        if axis in self.anm150_list:
-            self.ANC300.set_anm150_ground(axis)
-        elif axis in self.anm200_list:
-            self.ANC300.set_anm200_ground(axis)
+        if axis in self.anm150_list + self.anm200_list:
+            self.ANC300.set_mode(axis, 'gnd')
+            self.ANC300_info[axis]['mode'] = 'gnd'
+            self.sig_ANC300_info.emit(self.ANC300_info)
         else:
             print(f"Invalid axis: {axis}")
             return
         
-        self.ANC300_info[axis]['mode'] = 'gnd'
-        self.sig_ANC300_info.emit(self.ANC300_info)
-        
     def set_enable_axis(self, axis):
         if axis in self.anm150_list:
-            self.ANC300.set_anm150_mode_to_stp(axis)
+            self.ANC300.set_mode(axis, 'stp')  # Set voltage to 0V to enable the axis
             self.ANC300_info[axis]['mode'] = 'stp'
             self.sig_ANC300_info.emit(self.ANC300_info)
         elif axis in self.anm200_list:
-            self.ANC300.set_anm200_mode_to_inp(axis)
+            self.ANC300.set_mode(axis, 'inp')
             self.ANC300_info[axis]['mode'] = 'inp'
             self.sig_ANC300_info.emit(self.ANC300_info)
         else:
@@ -95,13 +91,19 @@ class ANC300Logic(QtCore.QThread):
 
     #----------------------------- ANM150 Position Move ----------------------------
     def move_anm150_one_step(self, axis):
-        self.ANC300.anm150_moveby(axis, 1)
+        if axis not in self.anm150_list:
+            print(f"Invalid axis: {axis}")
+            return
+        self.ANC300.move_by(axis, 1)
         self.ANC300_info[axis]['pos'] += 1
         self.sig_ANC300_info.emit(self.ANC300_info)
 
     def move_an150_continuesly(self, axis):
+        if axis not in self.anm150_list:
+            print(f"Invalid axis: {axis}")
+            return
         step_count = int(round(self.ANC300_info[axis]['freq'] / self._positioner_refresh_rate))
-        self.ANC300.anm150_moveby(axis, step_count)
+        self.ANC300.move_by(axis, step_count)
         self.ANC300_info[axis]['pos'] += step_count
         self.sig_ANC300_info.emit(self.ANC300_info)
 
@@ -109,7 +111,7 @@ class ANC300Logic(QtCore.QThread):
     #----------------------------- ANM150 Properties Change (not for scan) ----------------------------
     def change_anm150_freq(self, axis, freq):
         if axis in self.anm150_list:
-            self.ANC300.set_anm150_freq(axis, freq)
+            self.ANC300.set_frequency(axis, freq)
             self.ANC300_info[axis]['freq'] = freq
             self.sig_ANC300_info.emit(self.ANC300_info)
         else:
@@ -127,11 +129,11 @@ class ANC300Logic(QtCore.QThread):
     #----------------------------- Read ANC300 Info ----------------------------
     def read_all_axis_info(self):
         for axis in self.anm150_list:
-            self.ANC300_info[axis]['mode'] = self.ANC300.get_anm150_mode(axis)
-            self.ANC300_info[axis]['step_volt'] =  self.ANC300.get_anm150_step_volt(axis)
-            self.ANC300_info[axis]['freq'] = self.ANC300.get_anm150_freq(axis)
+            self.ANC300_info[axis]['mode'] = self.ANC300.get_mode(axis)
+            self.ANC300_info[axis]['step_volt'] =  self.ANC300.get_voltage(axis)
+            self.ANC300_info[axis]['freq'] = self.ANC300.get_frequency(axis)
         for axis in self.anm200_list:
-            self.ANC300_info[axis]['mode'] = self.ANC300.get_anm200_mode(axis)
+            self.ANC300_info[axis]['mode'] = self.ANC300.get_mode(axis)
         print(self.ANC300_info)
         self.sig_ANC300_info.emit(self.ANC300_info)
 
