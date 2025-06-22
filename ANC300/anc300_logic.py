@@ -56,7 +56,7 @@ class ANC300Logic(QtCore.QThread):
         self.sig_name.emit("Disconnected")
 
     def reset_pos_indictor(self):
-        for axis in self.anm150_list + self.anm200_list:
+        for axis in self.anm150_list:
             self.ANC300_info[axis]['pos'] = 0
         self.sig_ANC300_info.emit(self.ANC300_info)
 
