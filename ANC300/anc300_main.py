@@ -111,9 +111,51 @@ class ANC300(QtWidgets.QWidget):
         self.logic.start()
 
     
-    def update_ANC300_info(self, info):
-        print( "ANC300 info updated", info)
+    def update_ANC300_info(self, sig):
+        # print( "ANC300 info updated", info)
+        axis, info, val = sig
+        if info == "mode":
+            self.update_axis_mode(axis, val)
 
+        elif info == "capacitance":
+            self.update_axis_capacitance(axis, val)
+
+        elif info == "position":
+            self.update_axis_position(axis, val)
+        
+
+    def update_axis_mode(self, axis, val):
+        if axis == 1:
+            self.axis1_status.setText(val)
+        elif axis == 2:
+            self.axis2_status.setText(val)
+        elif axis == 3:
+            self.axis3_status.setText(val)
+        elif axis == 4:
+            self.axis4_status.setText(val)
+        elif axis == 5:
+            self.axis5_status.setText(val)
+    
+    def update_axis_capacitance(self, axis, val):  
+        val = float(val) * 1e9
+        if axis == 1:
+            self.axis1_cap.setText(f"{val:.2f} nF")
+        elif axis == 2:
+            self.axis2_cap.setText(f"{val:.2f} nF")
+        elif axis == 3:
+            self.axis3_cap.setText(f"{val:.2f} nF")
+        elif axis == 4:
+            self.axis4_cap.setText(f"{val:.2f} nF")
+        elif axis == 5:
+            self.axis5_cap.setText(f"{val:.2f} nF")
+
+    def update_axis_position(self, axis, val):
+        if axis == 1:
+            self.x_position.setText(f"x = {val}")
+        elif axis == 2:
+            self.y_position.setText(f"y = {val}")
+        elif axis == 3:
+            self.z_position.setText(f"z = {val}")
     
 
 if __name__ == "__main__":
