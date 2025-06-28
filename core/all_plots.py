@@ -85,7 +85,7 @@ class LinePlot(QtWidgets.QWidget):
     def slope(self,x1, y1, x2, y2): 
         if(x2 - x1 != 0): 
             return (float)(y2-y1)/(x2-x1) 
-        return sys.maxint 
+        return 0 
 
     def plot_line(self,current_target_index):
         self.plot.clear()
@@ -232,43 +232,50 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         y1 = math.floor(y)
         y2 = math.ceil(y)
 
-        if x1<0 or x2>self.data.shape[1]-1:
-            self.x_label.setText('Out of bounds')
-            self.y_label.setText('Out of bounds')
-            self.z_label.setText('Out of bounds')
-            return
+        # if x1<0 or x2>self.data.shape[1]-1:
+        #     self.x_label.setText('Out of bounds')
+        #     self.y_label.setText('Out of bounds')
+        #     self.z_label.setText('Out of bounds')
+        #     return
         
-        if y1<0 or y2>self.data.shape[0]-1:
-            self.x_label.setText('Out of bounds')
-            self.y_label.setText('Out of bounds')
-            self.z_label.setText('Out of bounds')
-            return
+        # if y1<0 or y2>self.data.shape[0]-1:
+        #     self.x_label.setText('Out of bounds')
+        #     self.y_label.setText('Out of bounds')
+        #     self.z_label.setText('Out of bounds')
+        #     return
             
         #x
         xy_label_text='X: '
-        for setter,setting_points in self.x_setting_info.items():
-            X_1 = setting_points[x1]
-            X_2 = setting_points[x2]
-            x_print = (x-x1)*(X_2 - X_1) + X_1
-            xy_label_text+=f'{x_print:.4e},     '
-        # self.x_label.setText(x_label_text)
+        if x1<0 or x2>self.data.shape[1]-1:
+            xy_label_text += 'Out of bounds,     '
+        else:
+            for setter,setting_points in self.x_setting_info.items():
+                X_1 = setting_points[x1]
+                X_2 = setting_points[x2]
+                x_print = (x-x1)*(X_2 - X_1) + X_1
+                xy_label_text+=f'{x_print:.4e},     '
 
 
 
         #y
         xy_label_text+='Y: '
-        for setter,setting_points in self.y_setting_info.items():
-            Y_1 = setting_points[y1]
-            Y_2 = setting_points[y2]
-            y_print = (y-y1)*(Y_2 - Y_1) + Y_1
-            xy_label_text+=f'{y_print:.4e}'
-            
+        if y1<0 or y2>self.data.shape[0]-1:
+            xy_label_text +=('Out of bounds')
+        else:
+            for setter,setting_points in self.y_setting_info.items():
+                Y_1 = setting_points[y1]
+                Y_2 = setting_points[y2]
+                y_print = (y-y1)*(Y_2 - Y_1) + Y_1
+                xy_label_text+=f'{y_print:.4e}'
+
         self.xy_label.setText(xy_label_text)
 
         #z
-        value = self.data[int(y),int(x)]
-        self.z_label.setText(f'Value: {value:.4e}')
-
+        try:
+            value = self.data[int(y),int(x)]
+            self.z_label.setText(f'Value: {value:.4e}')
+        except IndexError:
+            self.z_label.setText('Out of bounds')
         return
     
         # Adjust coordinates to account for pixel center

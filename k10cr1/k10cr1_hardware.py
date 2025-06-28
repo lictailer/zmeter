@@ -27,10 +27,13 @@ from .thorlabs_utilities import (
 
 source_dir = r"C:\Users\QMLab\Desktop\Xuguo_local\zmeter_local\v2025.04\zmeter_venv"
 
-if os.path.isfile(source_dir+ r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
-    lib = cdll.LoadLibrary(r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
-elif os.path.isfile(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
-    lib = cdll.LoadLibrary(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
+try: 
+    lib = cdll.LoadLibrary(r"k10cr1\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
+except:
+    if os.path.isfile(source_dir+ r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
+        lib = cdll.LoadLibrary(r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
+    elif os.path.isfile(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
+        lib = cdll.LoadLibrary(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
 
 
 # enum FT_Status

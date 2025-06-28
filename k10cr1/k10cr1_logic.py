@@ -26,7 +26,7 @@ class K10CR1Logic(QtCore.QThread):
 
     def pass_info(self, info):
         self.sig_info.emit(info)
-        print(info)
+        # print(info)
 
     def connect(self):
         if not ism.TLI_BuildDeviceList() == 0:
