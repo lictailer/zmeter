@@ -1,6 +1,7 @@
 from .scan_info import *
 from .individual_setter import IndividualSetter
 from .nested_menu import NestedMenu
+import re
 
 
 class IndividualLevel(QtWidgets.QWidget):
@@ -25,6 +26,7 @@ class IndividualLevel(QtWidgets.QWidget):
         self.master_delete_one_pb.clicked.connect(self.delete_master)
         self.record_clean_pb.clicked.connect(self.when_clean_clicked)
         self.setting_method_le.editingFinished.connect(self.setting_method_changed)
+        self.enable_setting_method_checkBox.stateChanged.connect(self.setting_method_changed)
         self.manual_set_before.editingFinished.connect(self.when_manual_set_before_changed)
         self.manual_set_after.editingFinished.connect(self.when_manual_set_after_changed)
         
@@ -85,7 +87,7 @@ class IndividualLevel(QtWidgets.QWidget):
         self.add_master()
 
     def add_master(self, info=None):
-        w = IndividualSetter(info,setter_equipment_info=self.setter_equipment_info)
+        w = IndividualSetter(info,setter_equipment_info=self.setter_equipment_info,order=self.verticalLayout.count()+1)
         self.verticalLayout.addWidget(w)
         w.sig_self_changed.connect(self.setter_changed)
         self.setter_changed(w)
@@ -103,7 +105,7 @@ class IndividualLevel(QtWidgets.QWidget):
         self.individual_level_info['setters'][f'setter{i}'] = info
         self.setting_method_changed()
 
-    def get_setting_array(self):
+    def get_setting_array(self, personalized_method=False):
         cmd = self.individual_level_info['setting_method']
         destinations = {}
         letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
@@ -132,10 +134,15 @@ class IndividualLevel(QtWidgets.QWidget):
         return Brakets(cmd, destinations).output
 
     def setting_method_changed(self):
-        self.individual_level_info['setting_method'] = self.setting_method_le.text()
-        self.individual_level_info['setting_array'] = self.get_setting_array()
-        # print(self.info['setting_array'])
-        self.sig_info_changed.emit([self, self.individual_level_info])
+        if self.enable_setting_method_checkBox.isChecked():
+            self.individual_level_info['setting_method'] = self.setting_method_le.text()
+            self.individual_level_info['setting_array'] = self.get_setting_array(personalized_method=True)
+            # print(self.info['setting_array'])
+            self.sig_info_changed.emit([self, self.individual_level_info])
+        elif not self.enable_setting_method_checkBox.isChecked():
+            self.individual_level_info['setting_method'] = ''
+            self.individual_level_info['setting_array'] = self.get_setting_array(personalized_method=False)
+            self.sig_info_changed.emit([self, self.individual_level_info])  
 
     def delete_master(self):
         n = self.verticalLayout.count()
@@ -202,7 +209,6 @@ class IndividualLevel(QtWidgets.QWidget):
     def when_artificial_channel_added(self):
         text = self.artificial_channel.text()
         equation,new_channel = text.split('=')
-
 
 
 # if __name__ == "__main__":

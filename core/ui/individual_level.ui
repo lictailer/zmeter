@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>556</width>
+    <width>690</width>
     <height>169</height>
    </rect>
   </property>
@@ -67,7 +67,7 @@
         <item>
          <widget class="QLabel" name="label">
           <property name="text">
-           <string>setting method (Not Available)()-&gt;serial []-&gt;parallel</string>
+           <string>setting method (+ for parallel , for series)</string>
           </property>
          </widget>
         </item>
@@ -86,7 +86,14 @@
            </size>
           </property>
           <property name="text">
-           <string>()</string>
+           <string>A+B,C</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="enable_setting_method_checkBox">
+          <property name="text">
+           <string>Enable</string>
           </property>
          </widget>
         </item>

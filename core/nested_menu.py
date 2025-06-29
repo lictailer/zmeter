@@ -39,13 +39,18 @@ def create_menu_for_setter(d, menu):
 class NestedMenu(QtWidgets.QWidget):
     sig_self_changed = QtCore.pyqtSignal(object)
 
-    def __init__(self, d=None):
+    def __init__(self, d=None, order=1):
         super().__init__()
+        if 1 <= order <= 26:
+            self.label  = QtWidgets.QLabel(f"{chr(ord('A') + order - 1)}: ")
+        else:
+            self.label  = QtWidgets.QLabel(f"{order}: ")
         self.button = QtWidgets.QPushButton()
         self.button.setFixedWidth(165)
         self.button.setFixedHeight(32)
         lay = QtWidgets.QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self.label)
         lay.addWidget(self.button)
         if d == None:
             d = ['None',

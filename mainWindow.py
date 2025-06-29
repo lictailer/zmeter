@@ -51,7 +51,7 @@ class MainWindow(QtWidgets.QWidget):
         # self.equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
         # self.equips["Keithley_0"].connect_visa("GPIB1::17::INSTR")
         # self.equips["Keithley_1"].connect_visa("GPIB1::18::INSTR")
-        self.equips["tlpm_0"].connect()
+        # self.equips["tlpm_0"].connect()
 
 
         daq_center = [0.26, 0.26]
@@ -286,6 +286,7 @@ class MainWindow(QtWidgets.QWidget):
         return result
 
     def stop_equipments_for_scanning(self):
+        # need fix
         for name, equipment in self.equips.items():
             if hasattr(equipment, "stop_scan"):
                 equipment.stop_scan()

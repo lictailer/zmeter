@@ -166,13 +166,13 @@ class ExplicitSetting(QtWidgets.QWidget):
 class IndividualSetter(QtWidgets.QWidget):
     sig_self_changed = QtCore.pyqtSignal(object)
 
-    def __init__(self, info=None,setter_equipment_info=None):
+    def __init__(self, info=None,setter_equipment_info=None,order=1):
         super(IndividualSetter, self).__init__()
         uic.loadUi("core/ui/individual_setter.ui", self)
         self.equipment_info=setter_equipment_info
         self.linear_setting = LinearSetting()
         self.explicit_setting = ExplicitSetting()
-        self.nested_menu = NestedMenu()
+        self.nested_menu = NestedMenu(order=order)
         self.verticalLayout.insertWidget(0, self.nested_menu)
         self.layout().addWidget(self.linear_setting)
         self.layout().addWidget(self.explicit_setting)

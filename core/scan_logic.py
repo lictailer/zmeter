@@ -64,7 +64,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2]
                 }
             },
-            "setting_method": "[A]",
+            "setting_method": "A+B,C",
             "getters": ['lockin_0_Y'],
             "setting_array": [[0,1,2]]
         }
