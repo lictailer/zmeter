@@ -82,6 +82,12 @@ class TLPM(QtWidgets.QWidget):
     def stop_indef(self):
         self.logic.receieved_stop = True
 
+    def force_stop(self):
+        self.disconnect()
+
+    def terminate_dev(self):
+        print("TLPM terminated.")
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)

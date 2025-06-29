@@ -17,9 +17,10 @@ from core.scanlist import ScanList
 
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):
+    print("Initiating the Program")
     def __init__(self, info=None):
         super().__init__()
-        print("Initiating the Program")
+        print("Loading the Main Window")
         uic.loadUi(r"core/ui/mainwindow.ui", self)
         self.info = info
         
@@ -301,13 +302,29 @@ class MainWindow(QtWidgets.QWidget):
             if hasattr(equipment, "force_stop"):
                 equipment.force_stop()
 
-    def closeEvent(self, event: QCloseEvent):
-        self.close()
-        for equipment_name, equipment in self.equips.items():
-            equipment.terminate_dev()
-            print(equipment_name, "is closed")
-        print("Main Window terminated.")
-        event.accept()  # Accept the event to close the window
+
+    def closeEvent(self, event: QtGui.QCloseEvent):          # <- keep the type
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Confirm Exit",
+            "Quit the application and disconnect all equipment?",
+            QtWidgets.QMessageBox.StandardButton.Yes
+            | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,         # default = “No”
+        )
+
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+            # proceed with the regular shutdown
+            self.scanlist.close()
+            self.force_stop_equipments()
+            self.stop_equipments_for_scanning()
+            for equipment_name, equipment in self.equips.items():
+                equipment.terminate_dev()
+                equipment.close()
+            print("Main Window terminated.")
+            event.accept()                                   # actually close
+        else:
+            event.ignore()                                   # stay open
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)

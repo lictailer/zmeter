@@ -158,6 +158,12 @@ class K10CR1Logic(QtCore.QThread):
     def get_angle(self):
         pos = int(ism.ISC_GetPosition(self.serial_no))
         return pos / 49152000 * 360
+    
+    def stop(self):
+        #doesn't work
+        self.pass_info(
+            f"Stopping polling{ism.ISC_StopImmediate(self.serial_no)}"
+        )
 
     def run(self):
 
@@ -165,6 +171,8 @@ class K10CR1Logic(QtCore.QThread):
             self.connect()
         elif self.job == "disconnect":
             self.disconnect()
+        elif self.job == "stop":
+            self.stop()
         elif self.job == "set_angle":
             self.set_angle(self.target)
         elif self.job == "home":

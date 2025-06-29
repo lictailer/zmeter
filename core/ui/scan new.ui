@@ -34,7 +34,7 @@
    <item>
     <widget class="QTabWidget" name="ScanTab">
      <property name="currentIndex">
-      <number>1</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="settingTab">
       <attribute name="title">
@@ -72,8 +72,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>735</width>
-            <height>624</height>
+            <width>723</width>
+            <height>612</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_4"/>
@@ -173,7 +173,7 @@
             </sizepolicy>
            </property>
            <property name="currentText">
-            <string>2</string>
+            <string>4</string>
            </property>
            <item>
             <property name="text">

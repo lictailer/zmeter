@@ -15,6 +15,7 @@ class K10CR1(QtWidgets.QWidget):
         self.disconnect_button.clicked.connect(self.disconnect)
         self.go_button.clicked.connect(self.set_angle)
         self.home_button.clicked.connect(self.home)
+        self.stop_button.clicked.connect(self.force_stop)
         self.logic.sig_last_pos.connect(self.update_pos)
         self.logic.sig_info.connect(self.update_info)
         self.logic.sig_connect.connect(self.set_on_off)
@@ -55,6 +56,9 @@ class K10CR1(QtWidgets.QWidget):
         self.logic.assign_target(pos)
         self.logic.job="set_angle"
         self.logic.start()
+
+    def force_stop(self):
+        pass
 
     def terminate_dev(self):
         print("K10cr10 terminated.")
