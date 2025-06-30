@@ -118,20 +118,20 @@ class IndividualLevel(QtWidgets.QWidget):
                 destinations[f'{letters[i]}'] = s['linear_setting']['destinations']
             # print(destinations[f'{letters[i]}'])
 
-        qualify = True
-        for letter in destinations.keys():
-            if letter not in cmd:
-                qualify = False
-        for letter in cmd:
-            if letter in letters:
-                if letter not in destinations.keys():
-                    qualify = False
-        if not qualify:
-            cmd = ''
-            for letter in destinations.keys():
-                cmd += letter
-            cmd = f"({cmd})"
-        return Brakets(cmd, destinations).output
+        # qualify = True
+        # for letter in destinations.keys():
+        #     if letter not in cmd:
+        #         qualify = False
+        # for letter in cmd:
+        #     if letter in letters:
+        #         if letter not in destinations.keys():
+        #             qualify = False
+        # if not qualify:
+        #     cmd = ''
+        #     for letter in destinations.keys():
+        #         cmd += letter
+        #     cmd = f"({cmd})"
+        return Brakets(cmd, destinations, personalized_input=personalized_method).output
 
     def setting_method_changed(self):
         if self.enable_setting_method_checkBox.isChecked():
