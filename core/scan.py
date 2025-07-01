@@ -361,6 +361,11 @@ class Scan(QtWidgets.QWidget):
 
             slide.shapes.add_picture(shot_path, left, top, width=nw, height=nh)
 
+            try:
+                os.remove(shot_path)          # delete the PNG immediately
+            except OSError:
+                pass                          # silent if, for any reason, it’s gone
+            
             # 4.  add name (bold) and comments box on left
             left_in = Inches(0.0)
             top_in  = Inches(0.2)

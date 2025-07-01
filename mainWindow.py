@@ -38,7 +38,7 @@ class MainWindow(QtWidgets.QWidget):
             # "lockin_0": SR830(),
             # "lockin_1": SR830(),
             "nidaq_0": NIDAQ(),
-            "HWP_0": K10CR1(),
+            "HWP": K10CR1(),
             # "HWP_1": K10CR1(),
             # "Keithley_0": Keithley24xx(),
             # "Keithley_1": Keithley24xx()
@@ -46,7 +46,7 @@ class MainWindow(QtWidgets.QWidget):
         }
         
         self.equips["nidaq_0"].connect("Dev1")
-        self.equips["HWP_0"].connect(serial = "55369504")
+        self.equips["HWP"].connect(serial = "55369504")
         # self.equips["HWP_1"].connect(serial = "55243324")
         # self.equips["lockin_0"].connect_visa("GPIB0::7::INSTR")
         # self.equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
@@ -83,6 +83,7 @@ class MainWindow(QtWidgets.QWidget):
         self.scanlist.show()
         self.scanlist.setWindowTitle("Scan List")
         self.scan_list_button.clicked.connect(self.scanlist.show)
+        self.update_serial_counter()              # set it once on start-up
 
         self.open_equipment_buttons = []
         for equipment_name, equipment in self.equips.items():
@@ -255,36 +256,110 @@ class MainWindow(QtWidgets.QWidget):
 
     # Read and write info
 
+    # def write_info(self, val, master):
+    #     if np.isnan(val):
+    #         return
+    #     for key, equipment in self.setter_equipment_info_for_scanning.items():
+    #         if key in master:  # key = lockin_0  master = lockin_0_amplitude
+    #             time.sleep(0.01)
+    #             variable = self.get_variable(master)
+    #             equipment[variable](val)
+
     def write_info(self, val, master):
         if np.isnan(val):
             return
-        for key, equipment in self.setter_equipment_info_for_scanning.items():
-            if key in master:  # key = lockin_0  master = lockin_0_amplitude
-                time.sleep(0.01)
-                variable = self.get_variable(master)
-                equipment[variable](val)
 
-    def get_variable(self, name):
-        counter = False
-        for index, character in enumerate(name):
-            if character == "_":
-                if counter:
-                    return name[index + 1 : :]
-                else:
-                    counter = True
+        for label, setters in self.setter_equipment_info_for_scanning.items():
+            # exact prefix match: label followed by an underscore
+            if master.startswith(f"{label}_"):
+                variable = self.get_variable(master, label)
+                try:
+                    setters[variable](val)
+                except KeyError:
+                    raise KeyError(
+                        f"Variable '{variable}' not found in equipment '{label}'. "
+                        f"Check your channel name '{master}'."
+                    )
+                break
+
+    # def get_variable(self, name):
+    #     counter = False
+    #     for index, character in enumerate(name):
+    #         if character == "_":
+    #             if counter:
+    #                 return name[index + 1 : :]
+    #             else:
+    #                 counter = True
+    
+    def get_variable(self, full_name: str, equip_label: str) -> str:
+        """
+        Given a full channel name like 'nidaq_0_voltage'
+        and its equipment label 'nidaq_0', return 'voltage'.
+        Works for labels that contain zero-or-many underscores.
+        """
+        prefix = f"{equip_label}_"
+        return full_name[len(prefix):]   # everything after the prefix
+
+    # def read_info(self, slave):
+
+    #     if slave == "none":
+    #         result = np.nan
+    #     else:
+    #         for key, equipment in self.getter_equipment_info_for_scanning.items():
+    #             if key in slave:
+    #                 variable = self.get_variable(slave)
+    #                 result = equipment[variable]()
+    #             # result=equipment.read_info(slave[-1])
+
+    #     return result
 
     def read_info(self, slave):
-
         if slave == "none":
-            result = np.nan
-        else:
-            for key, equipment in self.getter_equipment_info_for_scanning.items():
-                if key in slave:
-                    variable = self.get_variable(slave)
-                    result = equipment[variable]()
-                # result=equipment.read_info(slave[-1])
+            return np.nan
 
-        return result
+        for label, getters in self.getter_equipment_info_for_scanning.items():
+            if slave.startswith(f"{label}_"):
+                variable = self.get_variable(slave, label)
+                return getters[variable]()        # return the read value
+
+        raise KeyError(f"No equipment found that matches channel '{slave}'.")
+    
+    
+    _serial_regex = re.compile(r"^(\d{4})_")      # “0000_ …”
+
+    def _serial_folder(self) -> str:
+        """
+        Folder in which data files are stored, trimmed & normalised.
+        Falls back to cwd if the text box is empty.
+        """
+        txt = ""
+        if hasattr(self, "save_info_path"):
+            if callable(getattr(self.save_info_path, "toPlainText", None)):
+                txt = self.save_info_path.toPlainText()
+            elif callable(getattr(self.save_info_path, "text", None)):
+                txt = self.save_info_path.text()
+
+        txt = txt.strip().strip('"')
+        return os.path.normpath(txt) if txt else os.getcwd()
+
+    def update_serial_counter(self):
+        """
+        Look at existing files and set ScanList.serial accordingly.
+        """
+        folder = self._serial_folder()
+        if not os.path.isdir(folder):
+            self.scanlist.serial.setValue(0)
+            return
+
+        max_found = -1
+        for fname in os.listdir(folder):
+            m = self._serial_regex.match(fname)
+            if m:
+                num = int(m.group(1))
+                if num > max_found:
+                    max_found = num
+
+        self.scanlist.serial.setValue(max_found + 1 if max_found >= 0 else 0)
 
     def stop_equipments_for_scanning(self):
         # need fix
@@ -315,7 +390,7 @@ class MainWindow(QtWidgets.QWidget):
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             # proceed with the regular shutdown
-            self.scanlist.close()
+            self.scanlist.shutdown()
             self.force_stop_equipments()
             self.stop_equipments_for_scanning()
             for equipment_name, equipment in self.equips.items():

@@ -375,6 +375,31 @@ class ScanList(QtWidgets.QWidget):
             ManualSetItem("dummy->0", main_window=self.main_window)
         )
         
+    def _cleanup(self):
+        """Close every Scan window and stop the worker thread."""
+        for container in (self.list_available,
+                          self.list_queue,
+                          self.list_past):
+            for w in container.get_widgets():
+                if isinstance(w, ScanItem):
+                    try:
+                        w.scan.close()
+                    except RuntimeError:
+                        pass
+
+        if self.logic.isRunning():
+            self.logic.requestInterruption()
+            self.logic.quit()
+            self.logic.wait()
+
+    # ---------- public API ----------
+    def shutdown(self):
+        """
+        Call this *from your code* when you really want to
+        tear everything down and then close the main widget.
+        """
+        self._cleanup()
+        super().close()            # now close normally
 
 
 if __name__ == "__main__":
