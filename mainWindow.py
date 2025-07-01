@@ -39,15 +39,15 @@ class MainWindow(QtWidgets.QWidget):
             # "lockin_1": SR830(),
             "nidaq_0": NIDAQ(),
             "HWP_0": K10CR1(),
-            "HWP_1": K10CR1(),
+            # "HWP_1": K10CR1(),
             # "Keithley_0": Keithley24xx(),
             # "Keithley_1": Keithley24xx()
-            "tlpm_0": TLPM(),
+            # "tlpm_0": TLPM(),
         }
         
         self.equips["nidaq_0"].connect("Dev1")
         self.equips["HWP_0"].connect(serial = "55369504")
-        self.equips["HWP_1"].connect(serial = "55243324")
+        # self.equips["HWP_1"].connect(serial = "55243324")
         # self.equips["lockin_0"].connect_visa("GPIB0::7::INSTR")
         # self.equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
         # self.equips["Keithley_0"].connect_visa("GPIB1::17::INSTR")

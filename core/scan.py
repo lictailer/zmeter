@@ -159,6 +159,7 @@ class Scan(QtWidgets.QWidget):
         self.main_window.stop_equipments_for_scanning()
         self.logic.reset_flags()
         self.logic.go_scan = True
+        self.update_alllevel_setting_array()
         self.logic.initilize_data(self.info)
         self.update_all_plots()
         self.logic.start()
@@ -174,8 +175,13 @@ class Scan(QtWidgets.QWidget):
         while self.logic.isRunning():
             time.sleep(0.1)
     
+    def update_alllevel_setting_array(self):
+        self.all_level_setting.update_all_setting_array()
+
+
     def update_all_plots(self):
         """Call AllPlots.update_plots() for every page."""
+        self.update_alllevel_setting_array()
         for gp in self.graphing_plots:
             gp.update_plots()
 
@@ -489,6 +495,7 @@ class Scan(QtWidgets.QWidget):
                     
                     info = json.loads(content)  # Use json.loads() instead of json.load(file)
                     self.info = convert_special_values(info)
+                    print("info",self.info)
 
                     ppp_val = self.info.get('plots_per_page', None)
                     if ppp_val is not None:
@@ -542,7 +549,7 @@ class Scan(QtWidgets.QWidget):
 
         for l in range(level_number):
             targets_array_FEL.append(self.info['levels'][f'level{l}']['setting_array'])
-            setters_targets_len_FEL.append(targets_array_FEL[l].shape[1]-1)
+            setters_targets_len_FEL.append(len(targets_array_FEL[l])-1)
         if self.info['data']:
             for gp in self.graphing_plots:
                 for plot in range(gp.plots_layout.count()):

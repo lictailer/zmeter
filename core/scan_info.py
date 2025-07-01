@@ -88,7 +88,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2],
                 }
             },
-            "setting_method": "A+B,C",
+            "setting_method": "A+B,CF",
             "getters": ["none"],
             "setting_array": [],
             "manual_set_before": [],
@@ -120,7 +120,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                 },
             },
-            "setting_method": "A+B,C",
+            "setting_method": "A+B,CJ",
             "getters": ["nidaq_0_AI0"],
             "setting_array": [],
             "manual_set_before": [],
@@ -144,7 +144,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2],
                 }
             },
-            "setting_method": "A+B,C",
+            "setting_method": "A+B,CK",
             "getters": [],
             "setting_array": [],
             "manual_set_before": [],
@@ -157,6 +157,7 @@ ScanInfo = {
         "image_plots": {"0": {"x": "level0", "y": "level1", "z": "L0G0_nidaq_0_AI1"}},
     },
     "name": "reflection",
+    "plots_per_page": 4,
 }
 EquipmentInfo = [
     {"DAQ": ["AI0", "AI1", "AI2"]},

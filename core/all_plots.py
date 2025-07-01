@@ -100,14 +100,18 @@ class LinePlot(QtWidgets.QWidget):
         self.line = self.plot.plot(list(self.x_coordinates), list(self.y_coordinates), pen=pg.mkPen(color=(240, 255, 255), width=2))
 
     def load_plot(self,data,target_index):
-        target_index=target_index[self.setter_level_number+1::]
-        reversed_current_target_index=[]
-        for i in reversed(target_index):
-            reversed_current_target_index.append(i)
-        index_list = list(reversed_current_target_index[0:len(target_index) - self.setter_level_number])
-        temp = data[self.setter_level_number][self.getter_number]
-        for i in index_list:
-            self.y_coordinates = temp[i]
+        target_index=target_index[self.setter_level_number::]
+        reversed_current_target_index = target_index[::-1]
+        # for i in target_index[::-1]:
+        #     reversed_current_target_index.append(i)
+        # index_list = list(reversed_current_target_index[0:len(target_index) - self.setter_level_number])
+        # temp = data[self.setter_level_number][self.getter_number]
+        self.y_coordinates = data[self.setter_level_number][self.getter_number]
+        # print(temp)
+        # for i in index_list:
+        #     print(i)
+        #     self.y_coordinates = temp[i]
+        #     print(self.y_coordinates)
         self.line = self.plot.plot(list(self.x_coordinates), self.y_coordinates, pen=pg.mkPen(color=(240, 255, 255), width=2))
 
 
@@ -278,102 +282,6 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             self.z_label.setText('Out of bounds')
         return
     
-        # Adjust coordinates to account for pixel center
-        if 'level' in self.x_name:
-            if x1<0 or x2>self.data.shape[1]-1:
-                self.label.setText('Out of bounds')
-                return
-            if 'level' in self.y_name:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x:.4e}, {y:.4e}), Value: {value:.4e}')
-            elif self.y_interpolate:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    Y_1 = self.y_setting_info[y1]
-                    Y_2 = self.y_setting_info[y2]
-                    y_print = (y - y1)*(Y_2 - Y_1) + Y_1
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x:.4e}, {y_print:.4e}), Value: {value:.4e}')
-
-
-            else:
-                y_pixel = (y + 0.5 * self.y_step) / self.y_step
-                if 0 <= y_pixel < self.data.shape[0]:
-                    value = self.data[int(y_pixel),int(x)]
-                    self.label.setText(f'Coordinates: ({x:.4e}, {y+self.y_start:.4e}), Value: {value:.4e}')
-                else:
-                    self.label.setText('Out of bounds')
-                    return
-
-        elif self.x_interpolate:
-            if x1<0 or x2>self.data.shape[1]-1:
-                self.label.setText('Out of bounds')
-                return
-            X_1 = self.x_setting_info[x1]
-            X_2 = self.x_setting_info[x2]
-            x_print = (x - x1)*(X_2 - X_1) + X_1
-            if 'level' in self.y_name:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y:.4e}), Value: {value:.4e}')
-            elif self.y_interpolate:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    Y_1 = self.y_setting_info[y1]
-                    Y_2 = self.y_setting_info[y2]
-                    y_print = (y - y1)*(Y_2 - Y_1) + Y_1
-                    value = self.data[int(y), int(x)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y_print:.4e}), Value: {value:.4e}')
-            else:
-                y_pixel = (y + 0.5 * self.y_step) / self.y_step
-                if 0 <= y_pixel < self.data.shape[0]:
-                    value = self.data[int(y_pixel),int(x)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y+self.y_start:.4e}), Value: {value:.4e}')
-                else:
-                    self.label.setText('Out of bounds')
-                    return
-        else:
-            x_pixel = (x + 0.5 * self.x_step) / self.x_step
-            x_print = x+self.x_start
-            if x_pixel<0 or x_pixel > self.data.shape[1]:
-                self.label.setText('Out of bounds')
-                return
-            if 'level' in self.y_name:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    value = self.data[int(y), int(x_pixel)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y:.4e}), Value: {value:.4e}')
-            elif self.y_interpolate:
-                if y1 < 0 or y2>self.data.shape[0]-1:
-                    self.label.setText("Out of bounds")
-                    return
-                else:
-                    Y_1 = self.y_setting_info[y1]
-                    Y_2 = self.y_setting_info[y2]
-                    y_print = (y - y1)*(Y_2 - Y_1) + Y_1
-                    value = self.data[int(y), int(x_pixel)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y_print:.4e}), Value: {value:.4e}')
-            else:
-                y_pixel = (y + 0.5 * self.y_step) / self.y_step
-                if 0 <= y_pixel < self.data.shape[0]:
-                    value = self.data[int(y_pixel),int(x_pixel)]
-                    self.label.setText(f'Coordinates: ({x_print:.4e}, {y+self.y_start:.4e}), Value: {value:.4e}')
-                else:
-                    self.label.setText('Out of bounds')
-                    return
 
     def keyPressEvent(self, event):
         pos = self.roi.pos()
@@ -479,6 +387,7 @@ class AllPlots(QtWidgets.QWidget):
         uic.loadUi("core/ui/all_plots.ui", self)
 
         self.level_info = level_info or copy.deepcopy(ScanInfo['levels'])
+        # print(self.level_info)
         self.plot_setting_info = None
         self.page_number = page_number        # <── new
         self.grid_size = []
@@ -523,7 +432,7 @@ class AllPlots(QtWidgets.QWidget):
 
         # 3.  Decide grid size from per_page
         if   per_page == 2:  self.grid_size = [2, 1]
-        elif   per_page == 4:  self.grid_size = [2, 2]
+        elif per_page == 4:  self.grid_size = [2, 2]
         elif per_page == 8:  self.grid_size = [2, 4]
         else:                self.grid_size = [3, 3]   # per_page == 9
 
@@ -560,6 +469,7 @@ class AllPlots(QtWidgets.QWidget):
             level_number = match_level.group(1)
             level = f'level{level_number}'
             setting_array=self.level_info[level]['setting_array']
+            #might need to change this S to G
             match_setter = re.search(r'S(\d+)', x_name)
             setter_number = match_setter.group(1)
             
@@ -569,7 +479,10 @@ class AllPlots(QtWidgets.QWidget):
             # print(x_name)
             
             setting_array=self.level_info[level]['setting_array']
+            # print(setting_array)
+            # print(setting_array.shape)
             return setting_array
+        
     def get_setting_info_image(self,coordinate):
         x_name=coordinate['x']
         x_level=f'level{x_name[-1]}'
