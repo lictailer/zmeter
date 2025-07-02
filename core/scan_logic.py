@@ -64,7 +64,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2]
                 }
             },
-            "setting_method": "[A]",
+            "setting_method": "A+B,CL",
             "getters": ['lockin_0_Y'],
             "setting_array": [[0,1,2]]
         }
@@ -114,6 +114,7 @@ class ScanLogic(QtCore.QThread):
         # Calculate total number of points in the scan
         self.total_points = 1
         for l in range(len(info['levels'])):
+            # print(info['levels'][f'level{l}']['setting_array'])
             self.total_points *= info['levels'][f'level{l}']['setting_array'].shape[1]
         
 
