@@ -12,7 +12,7 @@ class SR830(QtWidgets.QWidget):
     start_signal = QtCore.pyqtSignal()
     def __init__(self):
         super(SR830, self).__init__()
-        uic.loadUi("Equipments/sr830_core/sr830.ui", self)
+        uic.loadUi("sr830/sr830.ui", self)
         w = pg.GraphicsLayoutWidget(show=True)
         w.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
         resource_manager = pyvisa.ResourceManager()
