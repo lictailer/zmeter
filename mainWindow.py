@@ -5,7 +5,7 @@ from PyQt6.QtGui import QCloseEvent
 from PyQt6 import QtWidgets, uic, QtCore
 
 
-# from sr830 import SR830
+from sr830.sr830_main import SR830
 from nidaq.nidaq_main import NIDAQ
 # from keithley24xx import Keithley24xx
 from k10cr1.k10cr1_main import K10CR1
@@ -35,7 +35,7 @@ class MainWindow(QtWidgets.QWidget):
 
         # Equip name has to include a serial number
         self.equips = {
-            # "lockin_0": SR830(),
+            "lockin_0": SR830(),
             # "lockin_1": SR830(),
             "nidaq_0": NIDAQ(),
             "HWP": K10CR1(),
