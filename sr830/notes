@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "c:\Users\qmlab\Desktop\Xuguo\zmeter repo\sr830\sr830_logic.py", line 422, in run
+    self.get_ref_input()
+  File "c:\Users\qmlab\Desktop\Xuguo\zmeter repo\sr830\sr830_logic.py", line 114, in get_ref_input
+    val = self.hardware.get_ref_input()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\qmlab\Desktop\Xuguo\zmeter repo\sr830\sr830_hardware.py", line 341, in get_ref_input
+    return int(self._visainstrument.query('FMOD?')) == 1
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: invalid literal for int() with base 10: '0.01\n'
+
+
+top 4d4F 443F
+bot 563f 2032

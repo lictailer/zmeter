@@ -1,4 +1,5 @@
 import pyvisa
+import time
 
 
 class Keithly24xxHardware():
@@ -52,6 +53,60 @@ class Keithly24xxHardware():
         self.inst.write(f':SENS:CURR:PROT {compliance}')
         self.inst.write(':SENS:CURR:RANG:AUTO ON')
         self.inst.write(':FORM:ELEM CURR') #Current reading only.
+
+    def close(self):
+        """Safely close the VISA connection"""
+        try:
+            if hasattr(self, 'inst') and self.inst is not None:
+                # Turn off output
+                self.inst.write(':OUTP OFF')
+                # Clear any pending commands
+                self.inst.write('*CLS')
+                # Close the connection
+                self.inst.close()
+                self.inst = None
+                print("Keithley24xx Hardware connection closed safely")
+        except Exception as e:
+            print(f"Error closing hardware connection: {e}")
+
+    def ramp_voltage(self, target_voltage: float, ramp_rate: float, step_time: float = 0.0):
+        """Ramp the source voltage to ``target_voltage`` at a given ``ramp_rate``.
+
+        Parameters
+        ----------
+        target_voltage : float
+            The final voltage to reach (in Volts).
+        ramp_rate : float
+            The rate at which to ramp in V/s. Must be positive.
+        step_time : float, optional
+            Time between successive voltage updates in seconds (default 0.1 s).
+        """
+        if ramp_rate <= 0:
+            raise ValueError("Ramp rate must be positive")
+
+        # Attempt to query the current voltage level
+        try:
+            current_voltage = float(self.inst.query(':SOUR:VOLT:LEV?'))
+        except Exception:
+            # If the instrument does not return a value, assume 0 V
+            current_voltage = 0.0
+
+        voltage_difference = target_voltage - current_voltage
+        direction = 1 if voltage_difference >= 0 else -1
+        step_size = ramp_rate * step_time * direction
+
+        next_voltage = current_voltage
+        while (direction == 1 and next_voltage < target_voltage) or (direction == -1 and next_voltage > target_voltage):
+            next_voltage += step_size
+            # Avoid overshooting the target
+            if (direction == 1 and next_voltage > target_voltage) or (direction == -1 and next_voltage < target_voltage):
+                next_voltage = target_voltage
+
+            self.set_sour_volt_to(next_voltage)
+            time.sleep(step_time)
+
+        # Ensure we finish exactly at the target voltage
+        self.set_sour_volt_to(target_voltage)
 
 
 if __name__=="__main__":

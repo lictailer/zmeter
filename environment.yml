@@ -1,4 +1,4 @@
-name: zmeter
+name: zmeter_July2025
 channels:
   - defaults
   - https://repo.anaconda.com/pkgs/main

@@ -17,8 +17,8 @@ class Keithley24xx(QtWidgets.QWidget):
         resource_manager = pyvisa.ResourceManager()
         ls = resource_manager.list_resources()
         self.address_cb.addItems(ls)
-        self.step_size_label.setText(
-            f"Current step size: {self.logic.volt_ramp_step:e}"
+        self.ramp_rate_label.setText(
+            f"Current ramp rate: {self.logic.ramp_rate:.2e} V/s"
         )
 
     def connect_visa(self, addr):
@@ -39,7 +39,7 @@ class Keithley24xx(QtWidgets.QWidget):
         self.read_btn.clicked.connect(self.when_read_clicked)
         self.stop_btn.clicked.connect(self.force_stop)
         self.reset_btn.clicked.connect(self.reset)
-        self.step_size_pb.clicked.connect(self.set_step_size)
+        self.ramp_rate_pb.clicked.connect(self.set_ramp_rate)
 
         self.logic.sig_last_set.connect(self.update_set)
         self.logic.sig_new_read.connect(self.update_read)
@@ -52,37 +52,40 @@ class Keithley24xx(QtWidgets.QWidget):
         self.logic.do_reset = True
         self.logic.start()
 
-    def set_step_size(self):
-        val = float(self.step_size_le.text())
-        t = f"Current step size: {val:e}"
-        self.step_size_label.setText(t)
-        self.logic.volt_ramp_step = val
+    def set_ramp_rate(self):
+        val = float(self.ramp_rate.value())
+        t = f"Current ramp rate: {val:.2e} V/s"
+        self.ramp_rate_label.setText(t)
+        self.logic.ramp_rate = val
+        # Maintain backward-compatibility for any code that still reads volt_ramp_step
+        self.logic.volt_ramp_step = val / self.logic.points_per_sec
 
     def update_sour_func(self, t):
         if t == "volt":
-            self.logic.set_sour_func_to_volt()
+            self.logic.sour_func_to_volt()
         if t == "curr":
-            self.logic.set_sour_func_to_curr()
+            self.logic.sour_func_to_curr()
 
     def update_sens_func(self, t):
         if t == "volt":
-            self.logic.set_sens_func_to_volt()
+            self.logic.sens_func_to_volt()
         if t == "curr":
-            self.logic.set_sens_func_to_curr()
+            self.logic.sens_func_to_curr()
 
     def update_set(self, val):
+        # Use scientific notation so very small or very large numbers are rendered accurately
         if self.logic.sour == "volt":
-            t = f"last set: {val} volts"
+            t = f"last set: {val:.4e} volts"
         elif self.logic.sour == "curr":
-            t = f"last set: {val} Amps"
-        print("aaa", t)
+            t = f"last set: {val:.4e} Amps"
         self.sour_label.setText(t)
 
     def update_read(self, val):
+        # Use scientific notation for accurate representation of small readings
         if self.logic.sens == "volt":
-            t = f"last read: {val} volts"
+            t = f"last read: {val:.4e} volts"
         elif self.logic.sens == "curr":
-            t = f"last read: {val} Amps"
+            t = f"last read: {val:.4e} Amps"
         self.sens_label.setText(t)
 
     def when_go_button_clicked(self):
@@ -90,7 +93,7 @@ class Keithley24xx(QtWidgets.QWidget):
             print("device not connected")
             return
         val = float(self.next_pos_le.text())
-        self.logic.set_next_pos(val)
+        self.logic.update_next_pos(val)
         if self.logic.sour == "volt":
             self.logic.do_volt = True
         if self.logic.sour == "curr":
@@ -129,19 +132,44 @@ class Keithley24xx(QtWidgets.QWidget):
         self.label_on_off.setText(t)
 
     def set_curr(self, val):
-        self.logic.set_next_pos(val)
+        self.logic.update_next_pos(val)
         self.logic.do_curr = True
         self.logic.start()
 
     def set_volt(self, val):
-        self.logic.set_next_pos(val)
+        self.logic.update_next_pos(val)
         self.logic.do_volt = True
         self.logic.start()
         while self.logic.isRunning():
             time.sleep(0.1)
 
     def terminate_dev(self):
-        print("Keithley24xx terminated.")
+        try:
+            if self.is_connected:
+                # Stop any ongoing operations
+                self.logic.force_stop = True
+                
+                # Wait for any running thread to finish
+                if self.logic.isRunning():
+                    self.logic.wait(2000)  # Wait up to 2 seconds
+                
+                # Safely disconnect the device
+                self.logic.close()
+                
+                # Update connection status
+                self.is_connected = False
+                self.on_off_label(False)
+                
+                print("Keithley24xx terminated safely.")
+            else:
+                print("Device was not connected.")
+        except Exception as e:
+            print(f"Error during termination: {e}")
+        finally:
+            # Ensure cleanup even if errors occur
+            self.is_connected = False
+            if hasattr(self.logic, 'k24xxHardware'):
+                self.logic.k24xxHardware.inst = None
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)

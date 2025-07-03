@@ -6,10 +6,10 @@ from PyQt6 import QtWidgets, uic, QtCore
 
 
 from sr830.sr830_main import SR830
-from nidaq.nidaq_main import NIDAQ
+# from nidaq.nidaq_main import NIDAQ
 from keithley24xx.keithley24xx_main import Keithley24xx
-from k10cr1.k10cr1_main import K10CR1
-from tlpm.tlpm_main import TLPM
+# from k10cr1.k10cr1_main import K10CR1
+# from tlpm.tlpm_main import TLPM
 
 from core.scan_info import *
 from core.scanlist import ScanList
@@ -35,29 +35,29 @@ class MainWindow(QtWidgets.QWidget):
 
         # Equip name has to include a serial number
         self.equips = {
-            "lockin_0": SR830(),
             # "lockin_1": SR830(),
-            "nidaq_0": NIDAQ(),
-            "HWP": K10CR1(),
+            # "lockin_2": SR830(),
+            # "nidaq_0": NIDAQ(),
+            # "HWP": K10CR1(),
             # "HWP_1": K10CR1(),
             "Keithley_0": Keithley24xx(),
-            # "Keithley_1": Keithley24xx()
+            "Keithley_1": Keithley24xx()
             # "tlpm_0": TLPM(),
         }
         
-        self.equips["nidaq_0"].connect("Dev1")
-        self.equips["HWP"].connect(serial = "55369504")
+        # self.equips["nidaq_0"].connect("Dev1")
+        # self.equips["HWP"].connect(serial = "55369504")
         # self.equips["HWP_1"].connect(serial = "55243324")
-        # self.equips["lockin_0"].connect_visa("GPIB0::7::INSTR")
         # self.equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
-        # self.equips["Keithley_0"].connect_visa("GPIB1::17::INSTR")
-        # self.equips["Keithley_1"].connect_visa("GPIB1::18::INSTR")
+        # self.equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
+        self.equips["Keithley_0"].connect_visa("GPIB2::18::INSTR")
+        # self.equips["Keithley_1"].connect_visa("GPIB::18::INSTR")
         # self.equips["tlpm_0"].connect()
 
 
-        daq_center = [0.26, 0.26]
-        self.equips["nidaq_0"].pos_to_go_doubleSpinBox.setValue(daq_center[0])
-        self.equips["nidaq_0"].pos_to_go_doubleSpinBox_2.setValue(daq_center[1])
+        # daq_center = [0.26, 0.26]
+        # self.equips["nidaq_0"].pos_to_go_doubleSpinBox.setValue(daq_center[0])
+        # self.equips["nidaq_0"].pos_to_go_doubleSpinBox_2.setValue(daq_center[1])
         ####################################################################################################
 
         # {equipment name (e.g. lockin_0) : {variable name : set method},....}
