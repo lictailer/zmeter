@@ -64,11 +64,11 @@ class SR860_Hardware:
         return int(self._query("OFLT?"))
 
     def set_sensitivity(self, index: int):
-        """0–26 → 1 nV … 1 V full-scale."""
-        self._write(f"SENS {index}")
+        """0–27 → 1 V … 1 nV full-scale."""
+        self._write(f"SCAL {index}")
 
     def get_sensitivity(self) -> int:
-        return int(self._query("SENS?"))
+        return int(self._query("SCAL?"))
 
     def set_phase(self, deg: float):
         self._write(f"PHAS {deg:.3f}")
@@ -81,19 +81,82 @@ class SR860_Hardware:
         "X":  "X",
         "Y":  "Y",
         "R":  "R",
-        "TH": "TH"   # θ (phase)
+        "Theta": "TH",   # θ (phase)
+        "AuX_In1": "IN1",
+        "AuX_In2": "IN2",
+        "AuX_In3": "IN3",
+        "AuX_In4": "IN4",
+        "Xnoise": "XNO",
+        "Ynoise": "YNO",
+        "AUX_Out1": "OUT1",
+        "AUX_Out2": "OUT2",
+        "Reference_Phase": "PHA",
+        "Sine_Out_Amplitude": "SAM",
+        "DC_Level": "LEV", # DC level
+        "Int_Ref_Freq": "FI", # Internal reference frequency
+        "Ext_Ref_Freq": "FE" # External reference frequency
     }
 
     def _read_output(self, key: str) -> float:
-        """Return X, Y, R or θ (TH) instantly with OUTP?."""
+        """Return X, Y, R or θ (Theta) instantly with OUTP?."""
         if key not in self._ch_map:
-            raise ValueError("key must be one of 'X','Y','R','TH'")
-        return float(self._query(f"OUTP? {self._ch_map[key]}"))
+            raise ValueError(f"key must be one of {list(self._ch_map.keys())}")
+
+        count = 0
+        while count < 5:
+            try:
+                return float(self._query(f"OUTP? {self._ch_map[key]}"))
+            except Exception as e:
+                count += 1
+                print(f"Error reading output, trying again {count} times")
+        print(f"Error reading output {key}: {e}")
+        return None
 
     def get_X(self):   return self._read_output("X")
     def get_Y(self):   return self._read_output("Y")
     def get_R(self):   return self._read_output("R")
-    def get_Theta(self): return self._read_output("TH")
+    def get_Theta(self): return self._read_output("Theta")
+
+    def _snap_output(self, *args: str):
+        """Return X, Y, R or θ (Theta) instantly with OUTP?."""
+        for arg in args:
+            if arg not in self._ch_map:
+                raise ValueError(f"arg must be one of {list(self._ch_map.keys())}")
+        if len(args) > 3:
+            raise ValueError("At most 3 arguments are allowed")
+        
+        count = 0
+        while count < 5:
+            try:
+                return self._query(f"SNAP? {','.join(args)}")
+            except Exception as e:
+                count += 1
+                print(f"Error reading snap output, trying again {count} times")
+        print(f"Error reading snap output: {e}")
+        return None
+
+    def get_multiple_outputs(self, *args: str):
+        time.sleep(0.001)
+        return {arg: float(x) for arg, x in zip(args, self._snap_output(*args).split(","))}
+
+    def _snap_display(self):
+        count = 0
+        while count < 5:
+            try:
+                return self._query("SNAPD?")
+            except Exception as e:
+                count += 1
+                print(f"Error reading snap display, trying again {count} times")
+        print(f"Error reading snap display: {e}")
+        return None
+
+    def get_display(self):
+        display = self._snap_display().split(",")
+        return {"green": float(display[0]),
+                "blue": float(display[1]),
+                "yellow": float(display[2]),
+                "orange": float(display[3])}
+
 
     # -------------- aux I/O (unchanged) -------------
     def set_aux_out(self, chan: int, volts: float):
@@ -116,12 +179,46 @@ class SR860_Hardware:
 
     # etc. – the remaining LIAS bits are identical to the SR830
     # -----------------------------------------------
+    def set_auto_range(self, mode: bool):
+        self._write(f"ARNG {1 if mode else 0}")
+    
+    def set_auto_scale(self, mode: bool):
+        self._write(f"ASCL {1 if mode else 0}")
+    
+    def set_auto_phase(self, mode: bool):
+        self._write(f"APHS {1 if mode else 0}")
+    
+
+    # -------------- connection teardown ---------------
+    def disconnect(self):
+        """Safely close the VISA resource.
+
+        Before closing we attempt to clear the device buffer so that no
+        outstanding responses remain in the queue. Any exceptions during
+        cleanup are caught and ignored to ensure the application can
+        continue shutting down gracefully.
+        """
+        if getattr(self, "_vi", None) is None:
+            return  # nothing to do
+
+        try:
+            # IEEE-488.2 device clear: flush buffers on the instrument side
+            self._vi.clear()  # type: ignore[attr-defined]
+        except Exception:
+            pass  # ignore issues during buffer clear
+
+        try:
+            self._vi.close()  # type: ignore[attr-defined]
+        except Exception:
+            pass  # ignore errors if already closed
+
+        self._vi = None
 
 
 if __name__ == "__main__":
 
     # ---------- simple exhaustive functional test ----------
-    ADDRESS = "GPIB0::12::INSTR"          # edit for your setup
+    ADDRESS = "GPIB0::7::INSTR"          # edit for your setup
     li = SR860_Hardware(ADDRESS)
 
     print("Connected to", li.idn())
@@ -148,12 +245,22 @@ if __name__ == "__main__":
     li.set_aux_out(1, 1.234)
     assert abs(li.get_aux_out(1) - 1.234) < 1e-3
 
+    li.set_auto_range(True)
+    li.set_auto_scale(True)
+    li.set_auto_phase(True)
+
     # Read instantaneous signals
     x = li.get_X()
     y = li.get_Y()
     r = li.get_R()
     th = li.get_Theta()
     print(f"X={x:.4e}  Y={y:.4e}  R={r:.4e}  θ={th:.3f}°")
+
+    # x, y, r = li.snap_output()
+    # print(f"X={x:.4e}  Y={y:.4e}  R={r:.4e}  θ={th:.3f}°")
+    print(li.get_multiple_outputs("X", "Y", "R"))
+
+    print(li.get_display())
 
     # Status flags
     print("Ref unlocked:", li.unlocked())
