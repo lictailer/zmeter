@@ -27,7 +27,19 @@ class SR860_Hardware:
 
     def _query(self, cmd: str) -> str:
         logging.debug(f"? {cmd}")
-        return self._vi.query(cmd).strip()
+        
+        count = 0
+        while count < 3:
+            try:
+                read = self._vi.query(cmd).strip()
+                print(f"read: {read}")
+                return read
+            except Exception as e:
+                count += 1
+                print(f"Error querying {cmd}, trying again {count} times")
+                time.sleep(0.01)
+        print(f"Error querying {cmd}")
+        return None
 
     # -------------- identity / reset ----------------
     def idn(self) -> str:
@@ -51,30 +63,305 @@ class SR860_Hardware:
     def get_amplitude(self) -> float:
         return float(self._query("SLVL?"))
 
-    def set_ref_mode(self, internal: bool = True):
-        """True ⇒ internal reference, False ⇒ external."""
-        self._write(f"FMOD {1 if internal else 0}")
+    # -------------- reference & trigger helpers -----------
+
+    _ref_mode_map = {
+        "internal": 0,
+        "external": 1,
+        "dual": 2,
+        "chop": 3
+    }
+
+    def ref_mode(self, mode=None, write=False, read=False):
+        """Set or get reference mode: internal (0), external (1), dual (2), chop (3)."""
+        if write and mode is not None:
+            if mode in self._ref_mode_map.keys():
+                self._write(f"RSRC {self._ref_mode_map[mode]}")
+            elif mode in self._ref_mode_map.values() or str(mode) in self._ref_mode_map.values():
+                self._write(f"RSRC {mode}")
+            else:
+                raise ValueError(f"internal must be one of {list(self._ref_mode_map.keys())}")
+        elif read:
+            ref_mode = int(self._query("RSRC?"))
+            for key, value in self._ref_mode_map.items():
+                if value == ref_mode:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+
+    _ext_trigger_map = {
+        "sine": 0,
+        "Pos_TTL": 1,
+        "Neg_TTL": 2
+    }
+
+    def ext_trigger(self, mode=None, write=False, read=False):
+        """Set or get external reference trigger source: 0=sine, 1=Positive TTL, 2=Negative TTL."""
+        if write and mode is not None:
+            if mode in self._ext_trigger_map.keys():
+                self._write(f"RTRG {self._ext_trigger_map[mode]}")
+            elif mode in self._ext_trigger_map.values() or str(mode) in self._ext_trigger_map.values():
+                self._write(f"RTRG {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._ext_trigger_map.keys())}")
+        elif read:
+            ext_trigger = int(self._query("RTRG?"))
+            for key, value in self._ext_trigger_map.items():
+                if value == ext_trigger:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+
+    def ref_input(self, mode=None, write=False, read=False):   
+        """Set or get reference input: 50 Ohms (0), 1 MOhms (1)."""
+        if write and mode is not None:
+            self._write(f"REFZ {1 if mode else 0}")
+        elif read:
+            return int(self._query("REFZ?")) == 1
+        else:
+            raise ValueError("Either write or read must be True")
+
+    def sync_filter(self, mode=None, write=False, read=False):
+        """Set or get sync filter: ON (1), OFF (0)."""
+        if write and mode is not None:
+            self._write(f"SYNC {1 if mode else 0}")
+        elif read:
+            return int(self._query("SYNC?")) == 1
+        else:
+            raise ValueError("Either write or read must be True")
+
+    def harmonic(self, value=None, write=False, read=False):
+        """Set or get detection harmonic (1-99)."""
+        if write and value is not None:
+            if value < 1 or value > 99:
+                raise ValueError("value must be between 1 and 99")
+            self._write(f"HARM {value}")
+        elif read:
+            return int(self._query("HARM?"))
+        else:
+            raise ValueError("Either write or read must be True")
+
 
     # -------------- detection settings --------------
-    def set_time_constant(self, index: int):
-        """0–24 → τ = 1 µs … 30 ks (see manual Table)."""
-        self._write(f"OFLT {index}")
+    _time_constant_map = {
+        "1 us": 0,
+        "3 us": 1,
+        "10 us": 2,
+        "30 us": 3,
+        "100 us": 4,
+        "300 us": 5,
+        "1 ms": 6,
+        "3 ms": 7,
+        "10 ms": 8,
+        "30 ms": 9,
+        "100 ms": 10,
+        "300 ms": 11,
+        "1 s": 12,
+        "3 s": 13,
+        "10 s": 14,
+        "30 s": 15,
+        "100 s": 16,
+        "300 s": 17,
+        "1 ks": 18,
+        "3 ks": 19,
+        "10 ks": 20,
+        "30 ks": 21
+    }
 
-    def get_time_constant(self) -> int:
-        return int(self._query("OFLT?"))
+    def time_constant(self, index=None, write=False, read=False):
+        """0–21 → τ = 1 µs … 30 ks (see manual Table)."""
+        if write and index is not None:
+            if index in self._time_constant_map.keys():
+                self._write(f"OFLT {self._time_constant_map[index]}")
+            elif index in self._time_constant_map.values() or str(index) in self._time_constant_map.values():
+                self._write(f"OFLT {index}")
+            else:
+                raise ValueError(f"index must be one of {list(self._time_constant_map.keys())}")
+        elif read:
+            time_constant = int(self._query("OFLT?"))
+            for key, value in self._time_constant_map.items():
+                if value == time_constant:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
 
-    def set_sensitivity(self, index: int):
+    _sensitivity_map = {
+        "1 V [uA]": 0,
+        "500 mV [nA]": 1,
+        "200 mV [nA]": 2,
+        "100 mV [nA]": 3,
+        "50 mV [nA]": 4,
+        "20 mV [nA]": 5,
+        "10 mV [nA]": 6,
+        "5 mV [nA]": 7,
+        "2 mV [nA]": 8,
+        "1 mV [nA]": 9,
+        "500 uV [pA]": 10,
+        "200 uV [pA]": 11,
+        "100 uV [pA]": 12,
+        "50 uV [pA]": 13,
+        "20 uV [pA]": 14,
+        "10 uV [pA]": 15,
+        "5 uV [pA]": 16,
+        "2 uV [pA]": 17,
+        "1 uV [pA]": 18,
+        "500 nV [fA]": 19,
+        "200 nV [fA]": 20,
+        "100 nV [fA]": 21,
+        "50 nV [fA]": 22,
+        "20 nV [fA]": 23,
+        "10 nV [fA]": 24,
+        "5 nV [fA]": 25,
+        "2 nV [fA]": 26,
+        "1 nV [fA]": 27
+    }
+    def sensitivity(self, index=None, write=False, read=False):
         """0–27 → 1 V … 1 nV full-scale."""
-        self._write(f"SCAL {index}")
+        if write and index is not None:
+            if index in self._sensitivity_map.keys():
+                self._write(f"SCAL {self._sensitivity_map[index]}")
+            elif index in self._sensitivity_map.values() or str(index) in self._sensitivity_map.values():
+                self._write(f"SCAL {index}")
+            else:
+                raise ValueError(f"index must be one of {list(self._sensitivity_map.keys())}")
+        elif read:
+            sensitivity = int(self._query("SCAL?"))
+            for key, value in self._sensitivity_map.items():
+                if value == sensitivity:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
 
-    def get_sensitivity(self) -> int:
-        return int(self._query("SCAL?"))
+    def phase(self, deg=None, write=False, read=False):
+        """Set or get phase: 0–360°."""
+        if write and deg is not None:
+            self._write(f"PHAS {deg:.3f}")
+        elif read:
+            return float(self._query("PHAS?"))
+        else:
+            raise ValueError("Either write or read must be True")
 
-    def set_phase(self, deg: float):
-        self._write(f"PHAS {deg:.3f}")
+    _signal_input_type_map = {
+        "voltage": 0,
+        "current": 1
+    }
+    def signal_input_type(self, mode=None, write=False, read=False):
+        """ sets the signal input to voltage (i=0) or current (i=1)."""
+        if write and mode is not None:
+            if mode in self._signal_input_type_map.keys():
+                self._write(f"IVMD {self._signal_input_type_map[mode]}")
+            elif mode in self._signal_input_type_map.values() or str(mode) in self._signal_input_type_map.values():
+                self._write(f"IVMD {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._signal_input_type_map.keys())}")
+        elif read:
+            signal_input_mode = int(self._query("IVMD?"))
+            for key, value in self._signal_input_type_map.items():
+                if value == signal_input_mode:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
 
-    def get_phase(self) -> float:
-        return float(self._query("PHAS?"))
+    _signal_input_mode_map = {
+        "A": 0,
+        "A-B": 1
+    }
+    def signal_input_mode(self, mode=None, write=False, read=False):
+        """ sets the signal input mode: 0=A, 1=A-B."""
+        if write and mode is not None:
+            if mode in self._signal_input_mode_map.keys():
+                self._write(f"ISRC {self._signal_input_mode_map[mode]}")
+            elif mode in self._signal_input_mode_map.values() or str(mode) in self._signal_input_mode_map.values():
+                self._write(f"ISRC {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._signal_input_mode_map.keys())}")
+        
+        elif read:
+            signal_input_mode = int(self._query("ISRC?"))
+            for key, value in self._signal_input_mode_map.items():
+                if value == signal_input_mode: return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+
+    _voltage_input_coupling_map = {
+        "AC": 0,
+        "DC": 1
+    }
+
+    def voltage_input_coupling(self, mode=None, write=False, read=False):
+        """ sets the voltage input coupling: 0=AC, 1=DC."""
+        if write and mode is not None:
+            if mode in self._voltage_input_coupling_map.keys():
+                self._write(f"ICPL {self._voltage_input_coupling_map[mode]}")
+            elif mode in self._voltage_input_coupling_map.values() or str(mode) in self._voltage_input_coupling_map.values():
+                self._write(f"ICPL {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._voltage_input_coupling_map.keys())}")
+    
+        elif read:
+            voltage_input_coupling = int(self._query("ICPL?"))
+            for key, value in self._voltage_input_coupling_map.items():
+                if value == voltage_input_coupling:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+
+    _voltage_input_range_map = {
+        "1 V": 0,
+        "300 mV": 1,
+        "100 mV": 2,
+        "30 mV": 3,
+        "10 mV": 4,
+    }
+
+    def voltage_input_range(self, mode=None, write=False, read=False):
+        """ sets the voltage input range: 0=1V, 1=300mV, 2=100mV, 3=30mV, 4=10mV."""
+        if write and mode is not None:
+            if mode in self._voltage_input_range_map.keys():
+                self._write(f"IRNG {self._voltage_input_range_map[mode]}")
+            elif mode in self._voltage_input_range_map.values() or str(mode) in self._voltage_input_range_map.values():
+                self._write(f"IRNG {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._voltage_input_range_map.keys())}")
+
+        elif read:
+            voltage_input_range = int(self._query("IRNG?"))
+            for key, value in self._voltage_input_range_map.items():
+                if value == voltage_input_range:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True") 
+    
+    _current_input_range_map = {
+        "1 uA": 0,
+        "10 nA": 1
+    }
+
+    def current_input_range(self, mode=None, write=False, read=False):
+        if write and mode is not None:
+            if mode in self._current_input_range_map.keys():
+                self._write(f"IRNG {self._current_input_range_map[mode]}")
+            elif mode in self._current_input_range_map.values() or str(mode) in self._current_input_range_map.values():
+                self._write(f"IRNG {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._current_input_range_map.keys())}")
+        elif read:
+            current_input_range = int(self._query("IRNG?"))
+            for key, value in self._current_input_range_map.items():
+                if value == current_input_range:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+    
 
     # -------------- outputs & readings --------------
     _ch_map = {
@@ -102,15 +389,8 @@ class SR860_Hardware:
         if key not in self._ch_map:
             raise ValueError(f"key must be one of {list(self._ch_map.keys())}")
 
-        count = 0
-        while count < 5:
-            try:
-                return float(self._query(f"OUTP? {self._ch_map[key]}"))
-            except Exception as e:
-                count += 1
-                print(f"Error reading output, trying again {count} times")
-        print(f"Error reading output {key}: {e}")
-        return None
+        return float(self._query(f"OUTP? {self._ch_map[key]}"))
+
 
     def get_X(self):   return self._read_output("X")
     def get_Y(self):   return self._read_output("Y")
@@ -124,31 +404,16 @@ class SR860_Hardware:
                 raise ValueError(f"arg must be one of {list(self._ch_map.keys())}")
         if len(args) > 3:
             raise ValueError("At most 3 arguments are allowed")
-        
-        count = 0
-        while count < 5:
-            try:
-                return self._query(f"SNAP? {','.join(args)}")
-            except Exception as e:
-                count += 1
-                print(f"Error reading snap output, trying again {count} times")
-        print(f"Error reading snap output: {e}")
-        return None
+
+        return self._query(f"SNAP? {','.join(args)}")
+
 
     def get_multiple_outputs(self, *args: str):
         time.sleep(0.001)
         return {arg: float(x) for arg, x in zip(args, self._snap_output(*args).split(","))}
 
     def _snap_display(self):
-        count = 0
-        while count < 5:
-            try:
-                return self._query("SNAPD?")
-            except Exception as e:
-                count += 1
-                print(f"Error reading snap display, trying again {count} times")
-        print(f"Error reading snap display: {e}")
-        return None
+        return self._query("SNAPD?")
 
     def get_display(self):
         display = self._snap_display().split(",")
@@ -217,53 +482,155 @@ class SR860_Hardware:
 
 if __name__ == "__main__":
 
-    # ---------- simple exhaustive functional test ----------
+    # ---------- comprehensive functional test ----------
     ADDRESS = "GPIB0::7::INSTR"          # edit for your setup
     li = SR860_Hardware(ADDRESS)
 
     print("Connected to", li.idn())
+    li.disconnect()
+    li = SR860_Hardware(ADDRESS)
+    print("Connected to", li.idn()) 
+    # Test reference oscillator functions
+    print("\n--- Testing Reference Oscillator ---")
 
-    # Reference oscillator
-    li.set_ref_mode(True)
+    print("\n--- Testing Reference Mode ---")
+    li.ref_mode("internal", write=True)
+    assert li.ref_mode(read=True) == "internal"
+    print("✓ Reference mode internal")
+
     li.set_frequency(1370)               # 1.370 kHz
     assert abs(li.get_frequency() - 1370) < 1e-3
+    print("✓ Frequency set/get")
 
     li.set_amplitude(0.123)              # 123 mVrms
     assert abs(li.get_amplitude() - 0.123) < 1e-6
+    print("✓ Amplitude set/get")
 
-    # Detection chain
-    li.set_time_constant(3)              # 10 ms
-    assert li.get_time_constant() == 3
+    # Test reference mode functions
+    print("\n--- Testing Reference Mode ---")
+    li.ref_mode("internal", write=True)
+    assert li.ref_mode(read=True) == "internal"
+    print("✓ Reference mode internal")
 
-    li.set_sensitivity(10)               # 100 µV FS
-    assert li.get_sensitivity() == 10
+    li.ref_mode("external", write=True)
+    assert li.ref_mode(read=True) == "external"
+    print("✓ Reference mode external")
 
-    li.set_phase(45.0)
-    assert abs(li.get_phase() - 45.0) < 1e-2
+    # Test external trigger functions
+    print("\n--- Testing External Trigger ---")
+    li.ext_trigger("sine", write=True)
+    assert li.ext_trigger(read=True) == "sine"
+    print("✓ External trigger sine")
 
-    # Aux outputs
+    li.ext_trigger("Pos_TTL", write=True)
+    assert li.ext_trigger(read=True) == "Pos_TTL"
+    print("✓ External trigger Pos_TTL")
+
+    # Test reference input functions
+    print("\n--- Testing Reference Input ---")
+    li.ref_input(True, write=True)
+    assert li.ref_input(read=True) == True
+    print("✓ Reference input 1 MOhms")
+
+    li.ref_input(False, write=True)
+    assert li.ref_input(read=True) == False
+    print("✓ Reference input 50 Ohms")
+
+    # Test sync filter functions
+    print("\n--- Testing Sync Filter ---")
+    li.sync_filter(True, write=True)
+    assert li.sync_filter(read=True) == True
+    print("✓ Sync filter ON")
+
+    li.sync_filter(False, write=True)
+    assert li.sync_filter(read=True) == False
+    print("✓ Sync filter OFF")
+
+    # Test harmonic functions
+    print("\n--- Testing Harmonic ---")
+    li.harmonic(2, write=True)
+    assert li.harmonic(read=True) == 2
+    print("✓ Harmonic 2")
+
+    li.harmonic(1, write=True)
+    assert li.harmonic(read=True) == 1
+    print("✓ Harmonic 1")
+
+    # Test detection settings
+    print("\n--- Testing Detection Settings ---")
+    li.time_constant(3, write=True)      # 10 ms
+    assert li.time_constant(read=True) == 3
+    print("✓ Time constant 3")
+
+    li.sensitivity(10, write=True)       # 100 µV FS
+    assert li.sensitivity(read=True) == 10
+    print("✓ Sensitivity 10")
+
+    li.phase(45.0, write=True)
+    assert abs(li.phase(read=True) - 45.0) < 1e-2
+    print("✓ Phase 45.0°")
+
+    # Test signal input type functions
+    print("\n--- Testing Signal Input Type ---")
+    li.signal_input_type("voltage", write=True)
+    assert li.signal_input_type(read=True) == "voltage"
+    print("✓ Signal input type voltage")
+
+    li.signal_input_type("current", write=True)
+    assert li.signal_input_type(read=True) == "current"
+    print("✓ Signal input type current")
+
+    # Test signal input mode functions
+    print("\n--- Testing Signal Input Mode ---")
+    li.signal_input_mode("A", write=True)
+    assert li.signal_input_mode(read=True) == "A"
+    print("✓ Signal input mode A")
+
+    li.signal_input_mode("A-B", write=True)
+    assert li.signal_input_mode(read=True) == "A-B"
+    print("✓ Signal input mode A-B")
+
+    # Test voltage input coupling functions
+    print("\n--- Testing Voltage Input Coupling ---")
+    li.voltage_input_coupling("AC", write=True)
+    assert li.voltage_input_coupling(read=True) == "AC"
+    print("✓ Voltage input coupling AC")
+
+    li.voltage_input_coupling("DC", write=True)
+    assert li.voltage_input_coupling(read=True) == "DC"
+    print("✓ Voltage input coupling DC")
+
+    # Test aux outputs
+    print("\n--- Testing Aux Outputs ---")
     li.set_aux_out(1, 1.234)
     assert abs(li.get_aux_out(1) - 1.234) < 1e-3
+    print("✓ Aux output 1 set/get")
 
+    li.set_aux_out(2, -0.567)
+    assert abs(li.get_aux_out(2) - (-0.567)) < 1e-3
+    print("✓ Aux output 2 set/get")
+
+    # Test auto functions
+    print("\n--- Testing Auto Functions ---")
     li.set_auto_range(True)
     li.set_auto_scale(True)
     li.set_auto_phase(True)
+    print("✓ Auto range/scale/phase set")
 
     # Read instantaneous signals
+    print("\n--- Testing Signal Reading ---")
     x = li.get_X()
     y = li.get_Y()
     r = li.get_R()
     th = li.get_Theta()
     print(f"X={x:.4e}  Y={y:.4e}  R={r:.4e}  θ={th:.3f}°")
 
-    # x, y, r = li.snap_output()
-    # print(f"X={x:.4e}  Y={y:.4e}  R={r:.4e}  θ={th:.3f}°")
     print(li.get_multiple_outputs("X", "Y", "R"))
-
     print(li.get_display())
 
     # Status flags
+    print("\n--- Testing Status Flags ---")
     print("Ref unlocked:", li.unlocked())
     print("Input overload:", li.input_overload())
 
-    print("All SR860 commands executed without error – test passed.")
+    print("\n✓ All SR860 functions tested successfully!")

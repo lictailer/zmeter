@@ -1,1 +1,21 @@
 https://pymeasure.readthedocs.io/en/latest/api/instruments/srs/sr860.html
+
+Difference between autorange and autoscale?
+
+
+07/08/2025
+-time constance work
+-sensitivity wrong (order wrong 1-> 27)
+-auto sense wrong
+-ref source work
+-ext resistance work
+-filter wrong
+-phase maximum wrong
+-auto wrong
+-input mode only stay at volt: A
+-input range only change volt
+-auto wrong
+-harm work
+-shield wrong
+-input coupleing work
+-nortch filter work

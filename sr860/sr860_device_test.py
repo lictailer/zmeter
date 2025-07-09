@@ -53,11 +53,11 @@ def main():
 
     # --- Basic getter tests ---
     print("\nInitial readings:")
-    logic.get_frequency()
-    logic.get_amplitude()
-    logic.get_time_constant()
-    logic.get_sensitivity()
-    logic.get_phase()
+    logic.read_frequency()
+    logic.read_amplitude()
+    logic.read_time_constant()
+    logic.read_sensitivity()
+    logic.read_phase()
 
     # Read signal outputs
     logic.get_X()
@@ -66,47 +66,49 @@ def main():
     logic.get_Theta()
 
     # Display channels
-    logic.get_display()
+    logic.read_display()
 
     # Status flags
-    logic.unlocked()
-    logic.input_overload()
+    logic.read_unlocked()
+    logic.read_input_overload()
 
     # --- Setter tests with safe values ---
     print("\nApplying new settings (safe values)...")
     logic.setpoint_frequency = 1000.0  # 1 kHz
-    logic.set_frequency()
+    logic.write_frequency()
 
     logic.setpoint_amplitude = 0.01  # 10 mVrms
-    logic.set_amplitude()
+    logic.write_amplitude()
 
     logic.setpoint_time_constant = 3  # 10 ms
-    logic.set_time_constant()
+    logic.write_time_constant()
 
     logic.setpoint_sensitivity = 10  # 100 µV FS
-    logic.set_sensitivity()
+    logic.write_sensitivity()
 
     logic.setpoint_phase = 30.0  # 30°
-    logic.set_phase()
+    logic.write_phase()
 
     # Auxiliary output: channel-1 to 0.123 V
     logic.setpoint_aux_channel = 1
     logic.setpoint_aux_voltage = 0.123
-    logic.set_aux_out()
+    logic.write_aux_out()
 
     # Read back
     time.sleep(0.2)
     print("\nRead-back after setting:")
-    logic.get_frequency()
-    logic.get_amplitude()
-    logic.get_time_constant()
-    logic.get_sensitivity()
-    logic.get_phase()
-    logic.get_aux_out(1)
+    logic.read_frequency()
+    logic.read_amplitude()
+    logic.read_time_constant()
+    logic.read_sensitivity()
+    logic.read_phase()
+    logic.read_aux_out()
 
     # Continuous polling example for 5 seconds
     print("\nStreaming X, Y, R, Theta for 5 s ...")
-    end = time.time() + 200
+    # Ensure hardware instance exists for direct hardware calls
+    assert logic.hardware is not None
+    end = time.time() + 5
     while time.time() < end:
         logic.get_X()
         logic.get_Y()
