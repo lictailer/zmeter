@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-import time
 import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
 import serial
 
 import cv2
-import os
 import scipy.io as sio
 
 class ANC_and_DAQ_xyz:
