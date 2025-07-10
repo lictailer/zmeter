@@ -1,0 +1,1018 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>772</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="groupBox">
+     <property name="title">
+      <string>connection</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>address</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="address_cb"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="connect_pushButton">
+        <property name="text">
+         <string>connect</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="disconnect_pushButton">
+        <property name="text">
+         <string>disconnect</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="resume_graph_button">
+        <property name="text">
+         <string>start graph</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pause_graph_button">
+        <property name="text">
+         <string>stop graph</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="status_label">
+        <property name="text">
+         <string>not connected</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_2">
+     <property name="title">
+      <string>config</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <layout class="QGridLayout" name="gridLayout">
+        <item row="4" column="0">
+         <widget class="QLabel" name="label_7">
+          <property name="text">
+           <string>Input Mode</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QComboBox" name="input_config_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>Current</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Voltage: A</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Voltage: A-B</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="label_8">
+          <property name="text">
+           <string>Input Shield</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QComboBox" name="filter_slope_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <property name="maxVisibleItems">
+           <number>30</number>
+          </property>
+          <item>
+           <property name="text">
+            <string>6 dB/oct</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>12 dB/oct</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>18 dB/oct</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>24 dB/oct</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="4" column="8" colspan="2">
+         <widget class="QSpinBox" name="harmonic_spinBox">
+          <property name="maximumSize">
+           <size>
+            <width>80</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="minimum">
+           <number>1</number>
+          </property>
+          <property name="maximum">
+           <number>99</number>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="8">
+         <widget class="QRadioButton" name="unlocked_radioButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="autoExclusive">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <widget class="QComboBox" name="input_shield_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>Float</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Ground</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="0" column="11">
+         <widget class="QComboBox" name="ext_ref_comboBox">
+          <item>
+           <property name="text">
+            <string>1MΩ</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>50Ω</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="1" column="3" colspan="3">
+         <widget class="QRadioButton" name="sens_ovld_radioButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="autoExclusive">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="8" colspan="2">
+         <widget class="QComboBox" name="ref_mode_comboBox">
+          <property name="maximumSize">
+           <size>
+            <width>80</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>Internal</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>External</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_2">
+          <property name="text">
+           <string>time constant</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="7">
+         <widget class="QLabel" name="label_27">
+          <property name="text">
+           <string>Freq</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="10">
+         <widget class="QLabel" name="label_15">
+          <property name="text">
+           <string>Ext Ref</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="8" colspan="2">
+         <widget class="QDoubleSpinBox" name="freq_doubleSpinBox">
+          <property name="maximumSize">
+           <size>
+            <width>80</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="suffix">
+           <string> Hz</string>
+          </property>
+          <property name="decimals">
+           <number>4</number>
+          </property>
+          <property name="maximum">
+           <double>9999999999.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="7">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Harm #</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="7">
+         <widget class="QLabel" name="label_6">
+          <property name="text">
+           <string>Ampl</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>sensitivity</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="3">
+         <widget class="QComboBox" name="voltage_range_comboBox">
+          <item>
+           <property name="text">
+            <string>1 V</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>300 mV</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 mV</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30 mV</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 mV</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="label_14">
+          <property name="text">
+           <string>filter slope</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QCheckBox" name="sync_filter_checkBox">
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="5">
+         <widget class="QPushButton" name="auto_scale_pushButton">
+          <property name="text">
+           <string>Auto Sensitivity</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="label_10">
+          <property name="text">
+           <string>Input Coupling</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QComboBox" name="time_constant_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <property name="maxVisibleItems">
+           <number>30</number>
+          </property>
+          <item>
+           <property name="text">
+            <string>1 us</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>3 us</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 us</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30 us</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 us</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>300 us</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1 ms</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>3 ms</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 ms</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30 ms</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 ms</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>300 ms</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1 s</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>3 s</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 s</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30 s</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 s</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>300 s</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1 ks</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>3 ks</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 ks</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30 ks</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="5" column="8" colspan="2">
+         <widget class="QComboBox" name="trig_comboBox">
+          <property name="maximumSize">
+           <size>
+            <width>80</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>sine</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>positive edge</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>negative edge</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <widget class="QComboBox" name="input_coupling_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>AC</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>DC</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="0" column="7">
+         <widget class="QLabel" name="label_11">
+          <property name="text">
+           <string>ref source</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="8" colspan="2">
+         <widget class="QDoubleSpinBox" name="ampl_doubleSpinBox">
+          <property name="maximumSize">
+           <size>
+            <width>80</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="suffix">
+           <string> V</string>
+          </property>
+          <property name="decimals">
+           <number>3</number>
+          </property>
+          <property name="minimum">
+           <double>0.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>5.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.010000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="7">
+         <widget class="QLabel" name="label_13">
+          <property name="text">
+           <string>Phase</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_23">
+          <property name="text">
+           <string>Sync Filter</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="2" rowspan="2">
+         <widget class="QLabel" name="label_16">
+          <property name="text">
+           <string>Input Range</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="5" rowspan="2">
+         <widget class="QPushButton" name="auto_range_pushButton">
+          <property name="text">
+           <string>Auto Range</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="label_12">
+          <property name="text">
+           <string>Reserve</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QComboBox" name="reserve_comboBox">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>High Reserve</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Normal</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Low Noise</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="0" column="3">
+         <widget class="QComboBox" name="sensitivity_comboBox">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <property name="maxVisibleItems">
+           <number>30</number>
+          </property>
+          <item>
+           <property name="text">
+            <string>1 V [uA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>500 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>200 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>50 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>20 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>5 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>2 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1 mV [nA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>500 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>200 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>50 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>20 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>5 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>2 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1 uV [pA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>500 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>200 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>50 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>20 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>5 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>2 nV [fA]</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1 nV [fA]</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QLabel" name="label_25">
+          <property name="text">
+           <string>Sens OVLD</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="10" colspan="2">
+         <widget class="QPushButton" name="auto_phase_pushButton">
+          <property name="text">
+           <string>Auto Phase</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="7">
+         <widget class="QLabel" name="label_29">
+          <property name="text">
+           <string>unlocked</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="8" colspan="2">
+         <widget class="QDoubleSpinBox" name="phase_doubleSpinBox">
+          <property name="maximumSize">
+           <size>
+            <width>80</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="suffix">
+           <string> deg</string>
+          </property>
+          <property name="maximum">
+           <double>360.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="3">
+         <widget class="QComboBox" name="current_range_comboBox">
+          <item>
+           <property name="text">
+            <string>1 uA</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10 nA</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="5" column="7">
+         <widget class="QLabel" name="label_28">
+          <property name="text">
+           <string>Trig</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="3">
+         <widget class="QComboBox" name="notch_filter_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>None</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Line</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>2 x Line</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Both</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="6" column="2">
+         <widget class="QLabel" name="label_26">
+          <property name="text">
+           <string>Input OVLD</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="3">
+         <widget class="QRadioButton" name="input_ovld_radioButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="autoExclusive">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="11">
+         <widget class="QDoubleSpinBox" name="dclevel_doubleSpinBox">
+          <property name="suffix">
+           <string> mV</string>
+          </property>
+          <property name="decimals">
+           <number>1</number>
+          </property>
+          <property name="minimum">
+           <double>-5000.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>5000.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="10" rowspan="2">
+         <widget class="QLabel" name="label_5">
+          <property name="text">
+           <string>DC level</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="11">
+         <widget class="QComboBox" name="dclevel_mode_comboBox">
+          <item>
+           <property name="text">
+            <string>common</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>difference</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QLabel" name="label_9">
+          <property name="text">
+           <string>notch filter??</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_3">
+     <property name="title">
+      <string>readings</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_2">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <property name="spacing">
+       <number>1</number>
+      </property>
+      <item row="0" column="0">
+       <layout class="QVBoxLayout" name="graph_xyrt">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="sizeConstraint">
+         <enum>QLayout::SetDefaultConstraint</enum>
+        </property>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>132</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
