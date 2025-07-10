@@ -5,17 +5,17 @@ Difference between autorange and autoscale?
 
 07/08/2025
 -time constance work
--sensitivity wrong (order wrong 1-> 27)
--auto sense wrong
+-sensitivity wrong (order wrong 1-> 27) solved
+-auto sense wrong solved
 -ref source work
 -ext resistance work
--filter wrong
--phase maximum wrong
--auto wrong
--input mode only stay at volt: A
--input range only change volt
--auto wrong
+-filter wrong solved
+-phase maximum wrong solved
+-auto wrong solve
+-input mode only stay at volt: A solved?
+-input range only change volt   Solved?
+-auto wrong Solved
 -harm work
--shield wrong
+-shield wrong solved
 -input coupleing work
--nortch filter work
+-nortch filter not work in 860

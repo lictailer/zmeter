@@ -66,33 +66,50 @@ class SR860(QtWidgets.QWidget):
         self.logic.sig_harmonic.connect(self.update_harmonic)
         # self.logic.sig_signal_input_type.connect(self.update_signal_input_type)
         # self.logic.sig_signal_input_mode.connect(self.update_signal_input_mode)
+        # self.logic.sig_signal_input_type.connect(self.update_signal_input_config)
+        # self.logic.sig_signal_input_mode.connect(self.update_signal_input_config)
+        self.logic.sig_input_config.connect(self.update_signal_input_config)
         self.logic.sig_input_config.connect(self.update_input_config)
         self.logic.sig_voltage_input_coupling.connect(self.update_voltage_input_coupling)
         self.logic.sig_voltage_input_range.connect(self.update_voltage_input_range)
+        self.logic.sig_current_input_range.connect(self.update_current_input_range)
         self.logic.sig_unlocked.connect(self.update_unlocked)
         self.logic.sig_input_overload.connect(self.update_input_overload)
+        self.logic.sig_sensitivity_overload.connect(self.update_sensitivity_overload)
         self.logic.sig_X.connect(self.update_X)
         self.logic.sig_Y.connect(self.update_Y)
         self.logic.sig_R.connect(self.update_R)
         self.logic.sig_Theta.connect(self.update_Theta)
         self.logic.sig_is_changing.connect(self.update_status)
         self.logic.sig_connected.connect(self.update_status)
+        self.logic.sig_input_shield.connect(self.update_input_shield)
+        self.logic.sig_dc_level.connect(self.update_dc_level)
+        self.logic.sig_dc_level_mode.connect(self.update_dc_level_mode)
+        self.logic.sig_filter_slope.connect(self.update_filter_slope)
 
         # ----- connect UI widgets to read/write/setup actions -----
         self.freq_doubleSpinBox.valueChanged.connect(self.write_frequency)
         self.ampl_doubleSpinBox.valueChanged.connect(self.write_amplitude)
         self.time_constant_comboBox.currentIndexChanged.connect(self.write_time_constant)
         self.sensitivity_comboBox.currentIndexChanged.connect(self.write_sensitivity)
+        self.auto_scale_pushButton.clicked.connect(self.write_auto_scale)
         self.phase_doubleSpinBox.valueChanged.connect(self.write_phase)
+        self.auto_phase_pushButton.clicked.connect(self.write_auto_phase)
         self.ref_mode_comboBox.currentIndexChanged.connect(self.write_ref_mode)
         self.trig_comboBox.currentIndexChanged.connect(self.write_ext_trigger)
         self.ext_ref_comboBox.currentIndexChanged.connect(self.setup_ref_input)
-        self.sync_200hz_checkBox.stateChanged.connect(self.setup_sync_filter)
+        self.sync_filter_checkBox.stateChanged.connect(self.setup_sync_filter)
         self.harmonic_spinBox.valueChanged.connect(self.write_harmonic)
+        self.input_shield_comboBox.currentIndexChanged.connect(self.write_input_shield)
+        self.dclevel_doubleSpinBox.valueChanged.connect(self.write_dc_level)
+        self.dclevel_mode_comboBox.currentIndexChanged.connect(self.write_dc_level_mode)
+        self.filter_slope_comboBox.currentIndexChanged.connect(self.write_filter_slope)
+
         # voltage / signal input helpers
         self.input_config_comboBox.currentIndexChanged.connect(self.write_signal_input_config)
         self.voltage_range_comboBox.currentIndexChanged.connect(self.write_signal_input_config)
         self.current_range_comboBox.currentIndexChanged.connect(self.write_signal_input_config)
+        self.auto_range_pushButton.clicked.connect(self.write_auto_range)
 
         self.input_coupling_comboBox.currentIndexChanged.connect(self.write_voltage_input_coupling)
         # self.input_range_comboBox.currentIndexChanged.connect(self.write_voltage_input_range)
@@ -100,7 +117,7 @@ class SR860(QtWidgets.QWidget):
         self.connect_pushButton.clicked.connect(self.connect_visa)
         self.pause_graph_button.clicked.connect(self.stop_timer)
         self.resume_graph_button.clicked.connect(self.start_timer)
-        self.reset_graph_button.clicked.connect(self.reset_graph)
+        self.disconnect_pushButton.clicked.connect(self.disconnect_device)
 
         # ----- periodic monitor -----
         self.timer = QtCore.QTimer(self)
@@ -137,8 +154,8 @@ class SR860(QtWidgets.QWidget):
     # ------------------------------------------------------------------
     # VISA connection
     # ------------------------------------------------------------------
-    def connect_visa(self, addr: str | None = None):
-        if addr is None or False:
+    def connect_visa(self, addr):
+        if addr == None or addr == False:
             addr = self.address_cb.currentText()
         print(f"Connecting to {addr}")
         self.logic.connect_visa(addr)
@@ -189,10 +206,9 @@ class SR860(QtWidgets.QWidget):
         self.logic.job = "read_time_constant"
         self.logic.start()
 
-    def update_time_constant(self, idx):
+    def update_time_constant(self, text):
         self.time_constant_comboBox.blockSignals(True)
-        print("idx", idx)
-        self.time_constant_comboBox.setCurrentText(idx)
+        self.time_constant_comboBox.setCurrentText(str(text))
         self.time_constant_comboBox.blockSignals(False)
 
     # -- sensitivity ---------------------------------------------------
@@ -211,8 +227,13 @@ class SR860(QtWidgets.QWidget):
 
     def update_sensitivity(self, idx):
         self.sensitivity_comboBox.blockSignals(True)
-        self.sensitivity_comboBox.setCurrentText(idx)
+        self.sensitivity_comboBox.setCurrentText(str(idx))
         self.sensitivity_comboBox.blockSignals(False)
+
+    def write_auto_scale(self):
+        self.logic.stop()
+        self.logic.job = "write_auto_scale"
+        self.logic.start()
 
     # -- phase ---------------------------------------------------------
     def write_phase(self, val: float | None = None):
@@ -223,6 +244,11 @@ class SR860(QtWidgets.QWidget):
 
     def read_phase(self):
         self.logic.job = "read_phase"
+        self.logic.start()
+    
+    def write_auto_phase(self):
+        self.logic.stop()
+        self.logic.job = "write_auto_phase"
         self.logic.start()
 
     def update_phase(self, val):
@@ -281,7 +307,7 @@ class SR860(QtWidgets.QWidget):
     # -- sync filter (boolean) ----------------------------------------
     def setup_sync_filter(self, state: int | None = None):
         self.logic.stop()
-        self.logic.setpoint_sync_filter = bool(state) if state is not None else self.sync_200hz_checkBox.isChecked()
+        self.logic.setpoint_sync_filter = bool(state) if state is not None else self.sync_filter_checkBox.isChecked()
         self.logic.job = "setup_sync_filter"
         self.logic.start()
 
@@ -290,9 +316,9 @@ class SR860(QtWidgets.QWidget):
         self.logic.start()
 
     def update_sync_filter(self, val):
-        self.sync_200hz_checkBox.blockSignals(True)
-        self.sync_200hz_checkBox.setChecked(bool(val))
-        self.sync_200hz_checkBox.blockSignals(False)
+        self.sync_filter_checkBox.blockSignals(True)
+        self.sync_filter_checkBox.setChecked(bool(val))
+        self.sync_filter_checkBox.blockSignals(False)
 
     # -- harmonic ------------------------------------------------------
     def write_harmonic(self, h: int | None = None):
@@ -322,10 +348,20 @@ class SR860(QtWidgets.QWidget):
 
     def write_signal_input_config(self, idx: int | None = None):
         self.logic.stop()
-        self.logic.setpoint_input_config = idx if idx is not None else self.input_config_comboBox.currentText()
-        self.logic.setpoint_voltage_input_range = idx if idx is not None else self.voltage_range_comboBox.currentText()
-        self.logic.setpoint_current_input_range = idx if idx is not None else self.current_range_comboBox.currentText()
+        self.logic.setpoint_input_config        = self.input_config_comboBox.currentText()
+        self.logic.setpoint_voltage_input_range = self.voltage_range_comboBox.currentText()
+        self.logic.setpoint_current_input_range = self.current_range_comboBox.currentText()
         self.logic.job = "write_signal_input_config"
+        self.logic.start()
+
+    def update_signal_input_config(self, idx):
+        self.input_config_comboBox.blockSignals(True)
+        self.input_config_comboBox.setCurrentText(idx)
+        self.input_config_comboBox.blockSignals(False)
+
+    def write_auto_range(self):
+        self.logic.stop()
+        self.logic.job = "write_auto_range"
         self.logic.start()
 
     def read_signal_input_mode(self):
@@ -368,6 +404,11 @@ class SR860(QtWidgets.QWidget):
         self.voltage_range_comboBox.setCurrentText(idx)
         self.voltage_range_comboBox.blockSignals(False)
 
+    def update_current_input_range(self, idx):
+        self.current_range_comboBox.blockSignals(True)
+        self.current_range_comboBox.setCurrentText(idx)
+        self.current_range_comboBox.blockSignals(False)
+
     # -- unlocked & overload flags ------------------------------------
     def read_unlocked(self):
         self.logic.job = "read_unlocked"
@@ -386,6 +427,15 @@ class SR860(QtWidgets.QWidget):
         self.input_ovld_radioButton.blockSignals(True)
         self.input_ovld_radioButton.setChecked(bool(val))
         self.input_ovld_radioButton.blockSignals(False)
+
+    def read_sensitivity_overload(self):
+        self.logic.job = "read_sensitivity_overload"
+        self.logic.start()
+    
+    def update_sensitivity_overload(self, val):
+        self.sens_ovld_radioButton.blockSignals(True)
+        self.sens_ovld_radioButton.setChecked(bool(val))
+        self.sens_ovld_radioButton.blockSignals(False)
 
     # -- outputs streaming --------------------------------------------
     def update_X(self, val):
@@ -436,16 +486,24 @@ class SR860(QtWidgets.QWidget):
         pass
 
     def write_input_shield(self, *_):
-        pass
+        self.logic.stop()
+        self.logic.setpoint_input_shield = self.input_shield_comboBox.currentText()
+        self.logic.job = "write_input_shield"
+        self.logic.start()
 
     def read_input_shield(self):
-        pass
+        self.logic.job = "read_input_shield"
+        self.logic.start()
 
-    def update_input_shield(self, *_):
-        pass
+    def update_input_shield(self, val):
+        self.input_shield_comboBox.blockSignals(True)
+        self.input_shield_comboBox.setCurrentText(val)
+        self.input_shield_comboBox.blockSignals(False)  
 
     def write_notch_filter(self, *_):
-        pass
+        self.logic.stop()
+        self.logic.job = "write_notch_filter"
+        self.logic.start()
 
     def read_notch_filter(self):
         pass
@@ -453,6 +511,55 @@ class SR860(QtWidgets.QWidget):
     def update_notch_filter(self, *_):
         pass
 
+    # -- dc level -----------------------------------------------------
+    def write_dc_level(self, val: float | None = None):
+        self.logic.stop()
+        self.logic.setpoint_dc_level = val if val is not None else self.dclevel_doubleSpinBox.value()
+        self.logic.job = "write_dc_level"
+        self.logic.start()
+    
+    def read_dc_level(self):
+        self.logic.job = "read_dc_level"
+        self.logic.start()
+    
+    def update_dc_level(self, val):
+        self.dclevel_doubleSpinBox.blockSignals(True)
+        self.dclevel_doubleSpinBox.setValue(float(val))
+        self.dclevel_doubleSpinBox.blockSignals(False)
+
+    def write_dc_level_mode(self, idx: int | None = None):
+        self.logic.stop()
+        print(self.dclevel_mode_comboBox.currentIndex())
+        self.logic.setpoint_dc_level_mode = idx if idx is not None else self.dclevel_mode_comboBox.currentIndex()
+        self.logic.job = "write_dc_level_mode"
+        self.logic.start()
+
+    def read_dc_level_mode(self):
+        self.logic.job = "read_dc_level_mode"
+        self.logic.start()
+
+    def update_dc_level_mode(self, idx):
+        self.dclevel_mode_comboBox.blockSignals(True)
+        self.dclevel_mode_comboBox.setCurrentText(str(idx))
+        self.dclevel_mode_comboBox.blockSignals(False)
+
+    # -- filter slope -------------------------------------------------
+    def write_filter_slope(self, idx: int | None = None):
+        self.logic.stop()
+        self.logic.setpoint_filter_slope = idx if idx is not None else self.filter_slope_comboBox.currentIndex()
+        self.logic.job = "write_filter_slope"
+        self.logic.start()
+    
+    def read_filter_slope(self):
+        self.logic.job = "read_filter_slope"
+        self.logic.start()
+    
+    def update_filter_slope(self, idx):
+        self.filter_slope_comboBox.blockSignals(True)
+        self.filter_slope_comboBox.setCurrentText(str(idx))
+        self.filter_slope_comboBox.blockSignals(False)
+
+    # -- reserve ----------------------------------------------------- 
     def write_reserve(self, *_):
         pass
 
@@ -460,15 +567,6 @@ class SR860(QtWidgets.QWidget):
         pass
 
     def update_reserve(self, *_):
-        pass
-
-    def write_filter_slope(self, *_):
-        pass
-
-    def read_filter_slope(self):
-        pass
-
-    def update_filter_slope(self, *_):
         pass
 
     def write_aux_1(self, *_):
@@ -501,6 +599,14 @@ class SR860(QtWidgets.QWidget):
     def update_output_overload(self, *_):
         pass
 
+    def disconnect_device(self):
+        """
+        Disconnect the SR860 device and update UI accordingly.
+        """
+        if hasattr(self, "logic") and self.logic is not None:
+            self.logic.disconnect()
+        # Optionally, disable UI elements here if needed
+        
 
 # ----------------------------------------------------------------------
 # Stand-alone entry-point
@@ -509,6 +615,6 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = SR860()
     # Optionally auto-connect to a default VISA address here
-    window.connect_visa("GPIB0::7::INSTR")
+    # window.connect_visa("GPIB0::7::INSTR")
     window.show()
     sys.exit(app.exec())

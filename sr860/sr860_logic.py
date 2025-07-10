@@ -33,6 +33,11 @@ class SR860_Logic(QtCore.QThread):
     sig_input_config = QtCore.pyqtSignal(object)
     sig_voltage_input_coupling = QtCore.pyqtSignal(object)
     sig_voltage_input_range = QtCore.pyqtSignal(object)
+    sig_current_input_range = QtCore.pyqtSignal(object)
+    sig_input_shield = QtCore.pyqtSignal(object)
+    sig_dc_level = QtCore.pyqtSignal(object)
+    sig_dc_level_mode = QtCore.pyqtSignal(object)
+    sig_filter_slope = QtCore.pyqtSignal(object)
 
     sig_X = QtCore.pyqtSignal(object)
     sig_Y = QtCore.pyqtSignal(object)
@@ -44,6 +49,7 @@ class SR860_Logic(QtCore.QThread):
     sig_aux_in = QtCore.pyqtSignal(object)         # (chan, value)
     sig_unlocked = QtCore.pyqtSignal(object)
     sig_input_overload = QtCore.pyqtSignal(object)
+    sig_sensitivity_overload = QtCore.pyqtSignal(object)
     sig_multiple_outputs = QtCore.pyqtSignal(object)
 
     # ---------- generic state signals ----------
@@ -68,13 +74,16 @@ class SR860_Logic(QtCore.QThread):
         self.setpoint_ref_input = 0
         self.setpoint_sync_filter = False
         self.setpoint_harmonic = 1
-        self.setpoint_input_config = "0"
+        self.setpoint_input_config = "Voltage: A"
         self.setpoint_signal_input_type = "voltage"
         self.setpoint_signal_input_mode = "A"
         self.setpoint_voltage_input_coupling = "AC"
         self.setpoint_voltage_input_range = "1 V"
         self.setpoint_current_input_range = "1 uA"
-
+        self.setpoint_input_shield = "Float"
+        self.setpoint_dc_level = 0.0
+        self.setpoint_dc_level_mode = "common"
+        self.setpoint_filter_slope = "6 dB/oct"
         self.setpoint_aux_channel = 1
         self.setpoint_aux_voltage = 0.0
 
@@ -104,7 +113,6 @@ class SR860_Logic(QtCore.QThread):
     def read_frequency(self):
         assert self.hardware is not None
         val = self.hardware.get_frequency()
-        print(f"frequency: {val}")
         self.sig_frequency.emit(val)
         return val
 
@@ -174,6 +182,19 @@ class SR860_Logic(QtCore.QThread):
         self.sig_signal_input_mode.emit(val)
         return val
 
+    def read_input_config(self):
+        assert self.hardware is not None
+        input_type = self.hardware.signal_input_type(read=True)
+        input_mode = self.hardware.signal_input_mode(read=True)
+        if input_type == "voltage":
+            val = f"Voltage: {input_mode}"
+        elif input_type == "current":
+            val = f"Current"
+        else:
+            raise ValueError(f"Invalid signal input type: {input_type}")
+        self.sig_input_config.emit(val)
+        return val
+
     def read_voltage_input_coupling(self):
         assert self.hardware is not None
         val = self.hardware.voltage_input_coupling(read=True)
@@ -184,6 +205,12 @@ class SR860_Logic(QtCore.QThread):
         assert self.hardware is not None
         val = self.hardware.voltage_input_range(read=True)
         self.sig_voltage_input_range.emit(val)
+        return val
+
+    def read_current_input_range(self):
+        assert self.hardware is not None
+        val = self.hardware.current_input_range(read=True)
+        self.sig_current_input_range.emit(val)
         return val
 
     def read_multiple_outputs(self):
@@ -214,6 +241,42 @@ class SR860_Logic(QtCore.QThread):
         assert self.hardware is not None
         val = self.hardware.input_overload()
         self.sig_input_overload.emit(val)
+        return val
+
+    def read_sensitivity_overload(self):
+        assert self.hardware is not None
+        val = self.hardware.sensitivity_overload()
+        self.sig_sensitivity_overload.emit(val)
+        return val
+
+    def read_input_shield(self):
+        assert self.hardware is not None
+        val = self.hardware.input_shield(read=True)
+        self.sig_input_shield.emit(val)
+        return val
+
+    def read_notch_filter(self):
+        assert self.hardware is not None
+        val = self.hardware.notch_filter(read=True)
+        self.sig_notch_filter.emit(val)
+        return val
+    
+    def read_dc_level(self):
+        assert self.hardware is not None
+        val = self.hardware.dc_level(read=True)
+        self.sig_dc_level.emit(val)
+        return val
+    
+    def read_dc_level_mode(self):   
+        assert self.hardware is not None
+        val = self.hardware.dc_level_mode(read=True)
+        self.sig_dc_level_mode.emit(val)
+        return val
+
+    def read_filter_slope(self):
+        assert self.hardware is not None
+        val = self.hardware.filter_slope(read=True)
+        self.sig_filter_slope.emit(val)
         return val
 
     # ----- special getters that keep original names -----
@@ -310,25 +373,29 @@ class SR860_Logic(QtCore.QThread):
 
     def write_signal_input_config(self):
         assert self.hardware is not None
-        
-        if self.setpoint_input_config == "Current" or 0:
+        if self.setpoint_input_config == "Current" or self.setpoint_input_config == 0:
             self.setpoint_signal_input_type = "current"
             self.hardware.signal_input_type(self.setpoint_signal_input_type, write=True)
-            self.hardware.current_input_range(self.setpoint_current_input_range, write=True)
-        elif self.setpoint_input_config == "Voltage: A" or 1:
+        elif self.setpoint_input_config == "Voltage: A" or self.setpoint_input_config == 1:
             self.setpoint_signal_input_type = "voltage"
             self.setpoint_signal_input_mode = "A"
+            self.hardware.signal_input_type(self.setpoint_signal_input_type, write=True)
             self.hardware.signal_input_mode(self.setpoint_signal_input_mode, write=True)
-            self.hardware.voltage_input_range(self.setpoint_voltage_input_range, write=True)
-        elif self.setpoint_input_config == "Voltage: A-B" or 2:
+        elif self.setpoint_input_config == "Voltage: A-B" or self.setpoint_input_config == 2:
             self.setpoint_signal_input_type = "voltage"
             self.setpoint_signal_input_mode = "A-B"
+            self.hardware.signal_input_type(self.setpoint_signal_input_type, write=True)
             self.hardware.signal_input_mode(self.setpoint_signal_input_mode, write=True)
-            self.hardware.voltage_input_range(self.setpoint_voltage_input_range, write=True)
         else:
             raise ValueError(f"Invalid signal input config: {self.setpoint_input_config}")
 
+        self.hardware.current_input_range(self.setpoint_current_input_range, write=True)
+        self.hardware.voltage_input_range(self.setpoint_voltage_input_range, write=True)
+
         self.sig_is_changing.emit(f"input_config set to {self.setpoint_input_config}")
+        self.sig_input_config.emit(self.setpoint_input_config)
+        self.sig_voltage_input_range.emit(self.setpoint_voltage_input_range)
+        self.sig_current_input_range.emit(self.setpoint_current_input_range)
 
     def write_voltage_input_coupling(self):
         assert self.hardware is not None
@@ -349,6 +416,30 @@ class SR860_Logic(QtCore.QThread):
             f"aux_out[{self.setpoint_aux_channel}] set to {self.setpoint_aux_voltage}")
         self.sig_aux_out.emit((self.setpoint_aux_channel, self.setpoint_aux_voltage))
 
+    def write_input_shield(self):
+        assert self.hardware is not None
+        self.hardware.input_shield(self.setpoint_input_shield, write=True)
+        self.sig_is_changing.emit(f"input_shield set to {self.setpoint_input_shield}")
+        self.sig_input_shield.emit(self.setpoint_input_shield)
+
+    def write_dc_level(self):
+        assert self.hardware is not None
+        self.hardware.dc_level(self.setpoint_dc_level, write=True)
+        self.sig_is_changing.emit(f"dc_level set to {self.setpoint_dc_level}")
+        self.sig_dc_level.emit(self.setpoint_dc_level)
+    
+    def write_dc_level_mode(self):
+        assert self.hardware is not None
+        self.hardware.dc_level_mode(self.setpoint_dc_level_mode, write=True)
+        self.sig_is_changing.emit(f"dc_level_mode set to {self.setpoint_dc_level_mode}")
+        self.sig_dc_level_mode.emit(self.setpoint_dc_level_mode)
+
+    def write_filter_slope(self):
+        assert self.hardware is not None
+        self.hardware.filter_slope(self.setpoint_filter_slope, write=True)
+        self.sig_is_changing.emit(f"filter_slope set to {self.setpoint_filter_slope}")
+        self.sig_filter_slope.emit(self.setpoint_filter_slope)
+
     # -------------- setup (boolean) wrappers ------------
     def setup_ref_input(self):
         assert self.hardware is not None
@@ -362,30 +453,41 @@ class SR860_Logic(QtCore.QThread):
         self.sig_is_changing.emit(f"sync_filter set to {self.setpoint_sync_filter}")
         self.sig_sync_filter.emit(self.setpoint_sync_filter)
 
-    def setup_auto_range(self):
+    # -------------- auto setting ------------------------
+    def write_auto_scale(self):
         assert self.hardware is not None
-        self.hardware.set_auto_range(self.setpoint_auto_range)
-        self.sig_is_changing.emit(f"auto_range set to {self.setpoint_auto_range}")
+        self.hardware.set_auto_scale()
+        self.sig_is_changing.emit(f"auto_scale set to {self.setpoint_sensitivity}")
 
-    def setup_auto_scale(self):
+    def write_auto_phase(self):
         assert self.hardware is not None
-        self.hardware.set_auto_scale(self.setpoint_auto_scale)
-        self.sig_is_changing.emit(f"auto_scale set to {self.setpoint_auto_scale}")
+        self.hardware.set_auto_phase()
+        self.sig_is_changing.emit(f"auto_phase set to {self.setpoint_phase}")
 
-    def setup_auto_phase(self):
+    def write_auto_range(self):
         assert self.hardware is not None
-        self.hardware.set_auto_phase(self.setpoint_auto_phase)
-        self.sig_is_changing.emit(f"auto_phase set to {self.setpoint_auto_phase}")
+        self.hardware.set_auto_range()
+        self.sig_is_changing.emit(f"auto_range set to {self.setpoint_time_constant}")
+
+    def write_notch_filter(self):
+        assert self.hardware is not None
+        self.hardware.notch_filter(self.setpoint_notch_filter, write=True)
+        self.sig_is_changing.emit(f"notch_filter set to {self.setpoint_notch_filter}")
+        self.sig_notch_filter.emit(self.setpoint_notch_filter)
 
     # -------------- bulk helper ------------------------
     def get_all(self):
         """Read a representative subset of parameters at once."""
 
         self.read_input_overload()
+        self.read_sensitivity_overload()
         self.get_X()
         self.get_Y()
         self.get_R()
         self.get_Theta()
+
+        # --- always refresh current input configuration and ranges ---
+
         # self.read_display()
         # self.read_unlocked()
 
@@ -401,10 +503,11 @@ class SR860_Logic(QtCore.QThread):
             self.read_ref_input()
             self.read_sync_filter()
             self.read_harmonic()
-            self.read_signal_input_type()
-            self.read_signal_input_mode()
             self.read_voltage_input_coupling()
+            self.read_input_config()
             self.read_voltage_input_range()
+            self.read_current_input_range()
+            self.read_input_shield()
             self.monitor_count = 0
         time.sleep(0.05)
 
@@ -427,6 +530,9 @@ class SR860_Logic(QtCore.QThread):
         if self.connected:
             self.connected = False
             self.sig_connected.emit("disconnected")
+
+        # allow new jobs after a future reconnect
+        self.reject_signal = False
 
     # -------------- thread main ------------------------
     def run(self):
@@ -453,4 +559,3 @@ class SR860_Logic(QtCore.QThread):
         self.quit()
         self.wait()
         self.reject_signal = False
-        print("stop")

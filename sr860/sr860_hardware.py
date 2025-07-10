@@ -19,6 +19,7 @@ class SR860_Hardware:
         self._vi = rm.open_resource(self._address)
         self._vi.write_termination = '\n'
         self._vi.read_termination = '\n'
+        self._vi.timeout = 100
 
     # -------------- low-level helpers ---------------
     def _write(self, cmd: str):
@@ -31,9 +32,7 @@ class SR860_Hardware:
         count = 0
         while count < 3:
             try:
-                read = self._vi.query(cmd).strip()
-                print(f"read: {read}")
-                return read
+                return self._vi.query(cmd).strip()
             except Exception as e:
                 count += 1
                 print(f"Error querying {cmd}, trying again {count} times")
@@ -362,6 +361,104 @@ class SR860_Hardware:
         else:
             raise ValueError("Either write or read must be True")
     
+    _input_shield_map = {
+        "Float": 0,
+        "Ground": 1
+    }
+
+    def input_shield(self, mode=None, write=False, read=False):
+        """ sets the input shield: 0=Float, 1=Ground."""
+        if write and mode is not None:
+            if mode in self._input_shield_map.keys():
+                self._write(f"IGND {self._input_shield_map[mode]}")
+            elif mode in self._input_shield_map.values() or str(mode) in self._input_shield_map.values():
+                self._write(f"IGND {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._input_shield_map.keys())}")
+        elif read:
+            input_shield = int(self._query("IGND?"))
+            for key, value in self._input_shield_map.items():
+                if value == input_shield:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+
+    _notch_filter_map = {
+        "100 Hz": 0,
+        "200 Hz": 1,
+        "300 Hz": 2,
+        "400 Hz": 3,
+    }
+    def notch_filter(self, mode=None, write=False, read=False):
+        """ sets the notch filter: 0=100Hz, 1=200Hz, 2=300Hz, 3=400Hz."""
+        if write and mode is not None:
+            if mode in self._notch_filter_map.keys():
+                self._write(f"NOTCH {self._notch_filter_map[mode]}")
+            elif mode in self._notch_filter_map.values() or str(mode) in self._notch_filter_map.values():
+                self._write(f"NOTCH {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._notch_filter_map.keys())}")
+        elif read:
+            notch_filter = int(self._query("NOTCH?"))
+            for key, value in self._notch_filter_map.items():
+                if value == notch_filter:
+                    return key  
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+
+    def dc_level(self, value=None, write=False, read=False):
+        if write and value is not None:
+            self._write(f"SOFF {value}MV")
+        elif read:
+            return float(self._query("SOFF?"))
+        else:
+            raise ValueError("Either write or read must be True")
+
+    _dc_level_mode_map = {
+        "common": 0,
+        "differential": 1
+    }
+    def dc_level_mode(self, mode=None, write=False, read=False):
+        if write and mode is not None:
+            if mode in self._dc_level_mode_map.keys():
+                self._write(f"REFM {self._dc_level_mode_map[mode]}")
+            elif mode in self._dc_level_mode_map.values() or str(mode) in self._dc_level_mode_map.values():
+                self._write(f"REFM {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._dc_level_mode_map.keys())}")
+        elif read:
+            ref_mode = int(self._query("REFM?"))
+            for key, value in self._dc_level_mode_map.items():
+                if value == ref_mode:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
+
+    _filter_slope_map = {
+        "6 dB/oct": 0,
+        "12 dB/oct": 1,
+        "18 dB/oct": 2,
+        "24 dB/oct": 3
+    }
+    def filter_slope(self, mode=None, write=False, read=False):
+        if write and mode is not None:
+            if mode in self._filter_slope_map.keys():
+                self._write(f"OFSL {self._filter_slope_map[mode]}")
+            elif mode in self._filter_slope_map.values() or str(mode) in self._filter_slope_map.values():
+                self._write(f"OFSL {mode}")
+            else:
+                raise ValueError(f"mode must be one of {list(self._filter_slope_map.keys())}")
+        elif read:
+            slope = int(self._query("OFSL?"))
+            for key, value in self._filter_slope_map.items():
+                if value == slope:
+                    return key
+            return None
+        else:
+            raise ValueError("Either write or read must be True")
 
     # -------------- outputs & readings --------------
     _ch_map = {
@@ -440,18 +537,21 @@ class SR860_Hardware:
         return bool(int(self._query("LIAS? 3")))
 
     def input_overload(self) -> bool:
-        return bool(int(self._query("LIAS? 0")))
+        return bool(int(self._query("LIAS? 4")))
+
+    def sensitivity_overload(self) -> bool:
+        return bool(int(self._query("LIAS? 8"))) or bool(int(self._query("LIAS? 9"))) or bool(int(self._query("LIAS? 10"))) or bool(int(self._query("LIAS? 11")))
 
     # etc. – the remaining LIAS bits are identical to the SR830
     # -----------------------------------------------
-    def set_auto_range(self, mode: bool):
-        self._write(f"ARNG {1 if mode else 0}")
+    def set_auto_range(self):
+        self._write(f"ARNG")
     
-    def set_auto_scale(self, mode: bool):
-        self._write(f"ASCL {1 if mode else 0}")
+    def set_auto_scale(self):
+        self._write(f"ASCL")
     
-    def set_auto_phase(self, mode: bool):
-        self._write(f"APHS {1 if mode else 0}")
+    def set_auto_phase(self):
+        self._write(f"APHS")
     
 
     # -------------- connection teardown ---------------
