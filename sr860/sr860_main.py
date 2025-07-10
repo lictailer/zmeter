@@ -5,7 +5,7 @@ import numpy as np
 import pyqtgraph as pg
 import pyvisa
 
-from sr860_logic import SR860_Logic
+from .sr860_logic import SR860_Logic
 
 
 class SR860(QtWidgets.QWidget):
@@ -183,7 +183,7 @@ class SR860(QtWidgets.QWidget):
     def write_amplitude(self, val: float | None = None):
         self.logic.stop()
         self.logic.setpoint_amplitude = val if val is not None else self.ampl_doubleSpinBox.value()
-        self.logic.job = "write_amplitude"
+        self.logic.job = "set_amplitude"
         self.logic.start()
 
     def read_amplitude(self):
@@ -470,7 +470,7 @@ class SR860(QtWidgets.QWidget):
             return
         if self.logic.isRunning():
             return
-        self.logic.job = "get_all"  # bulk helper from sr860_logic
+        self.logic.job = "read_all"  # bulk helper from sr860_logic
         self.logic.start()
 
     # ------------------------------------------------------------------
@@ -603,9 +603,10 @@ class SR860(QtWidgets.QWidget):
         """
         Disconnect the SR860 device and update UI accordingly.
         """
-        if hasattr(self, "logic") and self.logic is not None:
-            self.logic.disconnect()
-        # Optionally, disable UI elements here if needed
+        self.logic.disconnect()
+
+    def terminate_dev(self):
+        self.logic.disconnect()
         
 
 # ----------------------------------------------------------------------

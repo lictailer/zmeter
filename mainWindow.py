@@ -6,6 +6,7 @@ from PyQt6 import QtWidgets, uic, QtCore
 
 
 from sr830.sr830_main import SR830
+from sr860.sr860_main import SR860
 # from nidaq.nidaq_main import NIDAQ
 from keithley24xx.keithley24xx_main import Keithley24xx
 # from k10cr1.k10cr1_main import K10CR1
@@ -37,11 +38,12 @@ class MainWindow(QtWidgets.QWidget):
         self.equips = {
             # "lockin_1": SR830(),
             # "lockin_2": SR830(),
+            "sr860_test": SR860(),
             # "nidaq_0": NIDAQ(),
             # "HWP": K10CR1(),
             # "HWP_1": K10CR1(),
-            "Keithley_0": Keithley24xx(),
-            "Keithley_1": Keithley24xx()
+            # "Keithley_0": Keithley24xx(),
+            # "Keithley_1": Keithley24xx()
             # "tlpm_0": TLPM(),
         }
         
@@ -50,8 +52,9 @@ class MainWindow(QtWidgets.QWidget):
         # self.equips["HWP_1"].connect(serial = "55243324")
         # self.equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
         # self.equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
-        self.equips["Keithley_0"].connect_visa("GPIB2::18::INSTR")
+        # self.equips["Keithley_0"].connect_visa("GPIB2::18::INSTR")
         # self.equips["Keithley_1"].connect_visa("GPIB::18::INSTR")
+        self.equips["sr860_test"].connect_visa("GPIB0::7::INSTR")
         # self.equips["tlpm_0"].connect()
 
 

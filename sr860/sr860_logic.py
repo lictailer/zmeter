@@ -1,7 +1,7 @@
 from PyQt6 import QtCore
 import time
 
-from sr860_hardware import SR860_Hardware
+from .sr860_hardware import SR860_Hardware
 
 
 class SR860_Logic(QtCore.QThread):
@@ -310,18 +310,22 @@ class SR860_Logic(QtCore.QThread):
         self.sig_aux_in.emit((self.setpoint_aux_channel, val))
         return val
 
+    # -------------- setters ---------------------
+    def set_amplitude(self, val=None):
+        assert self.hardware is not None
+        if val is not None:
+            self.setpoint_amplitude = val
+        self.hardware.set_amplitude(self.setpoint_amplitude)
+        self.sig_is_changing.emit(f"amplitude set to {self.setpoint_amplitude}")
+        self.sig_amplitude.emit(self.setpoint_amplitude)
+
+
     # -------------- write wrappers ---------------------
     def write_frequency(self):
         assert self.hardware is not None
         self.hardware.set_frequency(self.setpoint_frequency)
         self.sig_is_changing.emit(f"frequency set to {self.setpoint_frequency}")
         self.sig_frequency.emit(self.setpoint_frequency)
-
-    def write_amplitude(self):
-        assert self.hardware is not None
-        self.hardware.set_amplitude(self.setpoint_amplitude)
-        self.sig_is_changing.emit(f"amplitude set to {self.setpoint_amplitude}")
-        self.sig_amplitude.emit(self.setpoint_amplitude)
 
     def write_time_constant(self):
         assert self.hardware is not None
@@ -476,7 +480,7 @@ class SR860_Logic(QtCore.QThread):
         self.sig_notch_filter.emit(self.setpoint_notch_filter)
 
     # -------------- bulk helper ------------------------
-    def get_all(self):
+    def read_all(self):
         """Read a representative subset of parameters at once."""
 
         self.read_input_overload()
