@@ -18,6 +18,7 @@ from keithley24xx.keithley24xx_main import Keithley24xx
 # from tlpm.tlpm_main import TLPM
 from auto_focus.autofocus_main import autofocus_main
 from auto_focus.autofocus_logic import stepper_and_galvo_xyz
+from opticool.opticool_main import Opticool
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -36,7 +37,8 @@ def create_equipment():
         "Keithley_0": Keithley24xx(),
         # "Keithley_1": Keithley24xx(),
         # "tlpm_0": TLPM(),
-        "my_autofocus": autofocus_main(),
+        #"my_autofocus": autofocus_main(),
+        #"opticool": Opticool(),
     }
 
     # ------------------------------------------------------------
