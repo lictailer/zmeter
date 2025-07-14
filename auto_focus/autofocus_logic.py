@@ -120,9 +120,11 @@ class autofocus_logic:
         self.save_dir = None  # Directory to save results, can be set later
 
     def measure_map(self) -> np.ndarray:   #
-        M = self.xyz_sys.measure_map(self.x_center, self.y_center,
-                                 self.x_range, self.y_range,
-                                 self.x_pts, self.y_pts)
+        M= None
+        if self.xyz_sys:
+            M = self.xyz_sys.measure_map(self.x_center, self.y_center,
+                                    self.x_range, self.y_range,
+                                    self.x_pts, self.y_pts)
         return M
     
     @staticmethod
@@ -184,7 +186,7 @@ class autofocus_logic:
 
         print(f"Run data saved to {mat_path}")
 
-    def get_AutoFocus(self):
+    def set_AutoFocus(self):
         """Perform autofocus by iteratively adjusting the stepper motor position."""
         #for data saving
         history_z_centers = []
@@ -256,5 +258,5 @@ if __name__ == "__main__":
     autofocus.save_dir = "./autofocus_results"  # optional path to save output
 
     print("🔍 Starting autofocus search...")
-    autofocus.get_AutoFocus()
+    autofocus.set_AutoFocus()
     print("✅ Autofocus complete.")

@@ -2,19 +2,19 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from PyQt5 import QtWidgets, uic
+from PyQt6 import QtWidgets, uic
 import serial.tools.list_ports
 import scipy.io as sio
 from nidaq.nidaq_hardware import NIDAQHardWare
 from auto_focus.autofocus_logic import ANC_and_DAQ_xyz, stepper_and_galvo_xyz, autofocus_logic
-from PyQt5 import QtWidgets, uic, QtTest
+from PyQt6 import QtWidgets, uic, QtTest
 
 class autofocus_main(QtWidgets.QWidget):
-    def __init__(self, xyz_sys):
+    def __init__(self):
         super(autofocus_main, self).__init__()
         ui_path = os.path.join(os.path.dirname(__file__), "autofocus_GUI.ui")
         uic.loadUi(ui_path, self)
-        self.xyz_sys = xyz_sys
+        self.xyz_sys = None
         self.logic = autofocus_logic(self.xyz_sys) ## that specific logic instance will be used in the scan ##
 
         # connecting to the COM
@@ -50,7 +50,7 @@ class autofocus_main(QtWidgets.QWidget):
         # self.logic.xyz_sys.ao_x = self.txtGalvoX.toPlainText().strip() # I don't have buttons for these yet
         # self.logic.xyz_sys.ao_y = self.txtGalvoY.toPlainText().strip()
         # self.logic.xyz_sys.ai = self.txtPDIn.toPlainText().strip()
-        self.logic.xyz_sys.motor_rpm = self.spinMotorRPM.value()
+        if self.xyz_sys: self.logic.xyz_sys.motor_rpm = self.spinMotorRPM.value()
         self.logic.initial_z_step = self.spinInitialStep.value()
         self.logic.threshold_z_step = self.spinThreshold.value()
         #self.logic.threshold_metric_step = self.spinThresholdMetric.value() #I have no function for this now
@@ -64,13 +64,14 @@ class autofocus_main(QtWidgets.QWidget):
 
     def start_autofocus(self): 
         self.update_settings()
-        self.logic.get_AutoFocus()
+        self.logic.set_AutoFocus()
 
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     daq = NIDAQHardWare()
     xyz = stepper_and_galvo_xyz(daq)
-    window = autofocus_main(xyz)
+    window = autofocus_main()
+    window.xyz_sys = xyz  # Set the xyz system for the autofocus logic
     window.show()
     sys.exit(app.exec_())
