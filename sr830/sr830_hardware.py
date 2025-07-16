@@ -512,6 +512,30 @@ class SR830_Hardware:
             time.sleep(0.02)  # and wait for a little while so that it can be set again
         return int(self._visainstrument.query('LIAS? 2')) == 1
 
+    def disconnect(self):
+        """Safely close the VISA resource.
+
+        Before closing we attempt to clear the device buffer so that no
+        outstanding responses remain in the queue. Any exceptions during
+        cleanup are caught and ignored to ensure the application can
+        continue shutting down gracefully.
+        """
+        if getattr(self, "_visainstrument", None) is None:
+            return  # nothing to do
+
+        try:
+            # IEEE-488.2 device clear: flush buffers on the instrument side
+            self._visainstrument.clear()  # type: ignore[attr-defined]
+        except Exception:
+            pass  # ignore issues during buffer clear
+
+        try:
+            self._visainstrument.close()  # type: ignore[attr-defined]
+        except Exception:
+            pass  # ignore errors if already closed
+
+        self._visainstrument = None
+
 
 if __name__ == "__main__":
 

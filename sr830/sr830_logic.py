@@ -277,6 +277,28 @@ class SR830_Logic(QtCore.QThread):
         self.hardware.set_aux(2,self.setpoint_aux_2)
         self.sig_is_changing.emit(f'aux_2 set to {self.setpoint_aux_2}')
 
+    def disconnect(self):
+        """Safely stop the thread and close the VISA link."""
+        self.reject_signal = True
+        self.job = ""
+
+        if self.isRunning():
+            self.wait()
+
+        if self.hardware is not None:
+            try:
+                self.hardware.disconnect()
+            except Exception as exc:
+                print("[WARN] Error during hardware.disconnect():", exc)
+            self.hardware = None
+
+        if self.connected:
+            self.connected = False
+            self.sig_connected.emit("disconnected")
+
+        # allow new jobs after a future reconnect
+        self.reject_signal = False
+        
 #####
     def run(self):
         # used for force stop

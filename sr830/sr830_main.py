@@ -87,6 +87,7 @@ class SR830(QtWidgets.QWidget):
         self.timer.start(50)  # time in milliseconds.
 
         self.stop_signal.connect(self.stop_timer)
+
     def Reset_graph(self):
         self.x_log = np.full(200, np.nan, dtype=float)
         self.y_log = np.full(200, np.nan, dtype=float)
@@ -123,7 +124,7 @@ class SR830(QtWidgets.QWidget):
         self.label_5.setText(str)
 
     def connect_visa(self, addr = None):
-        if addr == None:
+        if addr == None or addr == False:
             addr = self.address_cb.currentText()
         self.logic.connect_visa(addr)
         self.address_cb.setCurrentText(addr)
@@ -548,8 +549,16 @@ class SR830(QtWidgets.QWidget):
         self.logic.job = 'get_all'
         self.logic.start()
 
+    def disconnect_device(self):
+        """
+        Disconnect the SR860 device and update UI accordingly.
+        """
+        self.logic.disconnect()
+
     def terminate_dev(self):
-        print("SR830 terminated.")
+        self.logic.disconnect()
+        print("SR830 terminated Successfully")
+
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
