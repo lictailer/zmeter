@@ -28,6 +28,7 @@ logic end-to-end, including the Qt GUI.
 from __future__ import annotations
 
 from typing import Tuple
+import random
 
 # -----------------------------------------------------------------------------
 # Dummy VISA instrument implementation
@@ -63,7 +64,7 @@ class _DummyInstrument:
         if cmd == "MODE?":
             return str(self._mode)
         if cmd == "VOLT?":
-            return f"{self._voltage}"  # already string
+            return f"{self._voltage + random.random()*self._voltage/10}"  # already string
         # default fall-back
         return "0"
 

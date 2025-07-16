@@ -1,7 +1,10 @@
 import logging
 import time
 import pyvisa
-from .dummy_visa import patch_pyvisa
+
+
+from dummy_visa import patch_pyvisa
+patch_pyvisa() # To overwrite the pyvisa module with the dummy visa module, do not include this line in the actual code
 
 class DemoDeviceHardware:
     """
@@ -155,42 +158,42 @@ class DemoDeviceHardware:
 # Example usage – will *not* work unless you update ADDRESS/commands accordingly
 # Will only run if this file is run directly, not imported as a module
 # -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    ADDRESS = "GPIB0::1::INSTR"  # TODO: Replace with your resource string
-    dev = DemoDeviceHardware(ADDRESS)
+# if __name__ == "__main__":
+#     ADDRESS = "GPIB0::1::INSTR"  # TODO: Replace with your resource string
+#     dev = DemoDeviceHardware(ADDRESS)
 
-    print("Connected to:", dev.idn())
+#     print("Connected to:", dev.idn())
 
-    # Demonstrate the API patterns
-    dev.operating_mode("remote", write=True)
-    print("Operating mode:", dev.operating_mode(read=True))
+#     # Demonstrate the API patterns
+#     dev.operating_mode("remote", write=True)
+#     print("Operating mode:", dev.operating_mode(read=True))
 
-    dev.voltage_level(1.234, write=True)
-    print("Voltage level:", dev.voltage_level(read=True))
+#     dev.voltage_level(1.234, write=True)
+#     print("Voltage level:", dev.voltage_level(read=True))
 
-    dev.disconnect()
+#     dev.disconnect()
 
 # # -----------------------------------------------------------------------------
 # # This for running the file for dummy visa
 # # -----------------------------------------------------------------------------
 # # Stand-alone test with the dummy VISA layer
-# if __name__ == "__main__":
-#     # 1) Activate the dummy VISA backend *before* any pyvisa calls
-#     from . import dummy_visa
-#     dummy_visa.patch_pyvisa()  # type: ignore[attr-defined]
+if __name__ == "__main__":
+    # 1) Activate the dummy VISA backend *before* any pyvisa calls
+    # from . import dummy_visa
+    patch_pyvisa()  # type: ignore[attr-defined]
 
-#     # 2) Instantiate the driver (uses the patched ResourceManager)
-#     ADDRESS = "DUMMY::INSTR"  # the dummy layer accepts any address string
-#     dev = DemoDeviceHardware(ADDRESS)
+    # 2) Instantiate the driver (uses the patched ResourceManager)
+    ADDRESS = "DUMMY::INSTR"  # the dummy layer accepts any address string
+    dev = DemoDeviceHardware(ADDRESS)
 
-#     print("IDN :", dev.idn())  # → DemoDevice,Simulated,1.0
+    print("IDN :", dev.idn())  # → DemoDevice,Simulated,1.0
 
-#     # Exercise the API
-#     dev.operating_mode("remote", write=True)
-#     print("Mode:", dev.operating_mode(read=True))
+    # Exercise the API
+    dev.operating_mode("remote", write=True)
+    print("Mode:", dev.operating_mode(read=True))
 
-#     dev.voltage_level(1.234, write=True)
-#     print("Volt:", dev.voltage_level(read=True))
+    dev.voltage_level(1.234, write=True)
+    print("Volt:", dev.voltage_level(read=True))
 
-#     dev.disconnect() 
+    dev.disconnect() 
 
