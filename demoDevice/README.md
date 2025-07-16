@@ -181,7 +181,7 @@ Set Voltage Level to 1.0 by Scan Logic
     Logic-->>Scan: 
     Scan->>Scan: Move to next setter or getter
 ```
-Read Voltage Level Through UI
+Read Voltage Level Through Scan Logic
 ```mermaid
   sequenceDiagram
     autonumber
