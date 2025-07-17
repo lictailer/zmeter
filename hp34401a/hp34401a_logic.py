@@ -15,7 +15,7 @@ class HP34401A_Logic(QtCore.QThread):
 
     # ----------- value update signals ---------------
     #signals are used to update the UI with the current value of the parameter
-    #sig_operating_mode = QtCore.pyqtSignal(object)
+    sig_NPLC = QtCore.pyqtSignal(object)
     sig_dc_voltage = QtCore.pyqtSignal(object)
 
     # ----------- generic state signals --------------
@@ -31,8 +31,8 @@ class HP34401A_Logic(QtCore.QThread):
         self.job: str = ""  # name of the next action
 
         # -------- set-points (set_* / setup_*) --------
-        self.setpoint_operating_mode: str | int = "local"
-        self.setpoint_dc_voltage: float = 0.0
+        self.setpoint_NPLC = 1
+        #self.setpoint_dc_voltage: float = 0.0
 
         # runtime state
         self.connected: bool = False
@@ -47,7 +47,7 @@ class HP34401A_Logic(QtCore.QThread):
         self.hardware = HP34401A_Hardware(address)
         self.idn = self.get_idn()
         self.connected = True
-        #self.sig_connected.emit(f"connected to {address}, {self.idn}")
+        self.sig_connected.emit(f"connected to {address} \n{self.idn}")
 
 
     # -------------- disconnect helper --------------
@@ -68,7 +68,7 @@ class HP34401A_Logic(QtCore.QThread):
 
         if self.connected:
             self.connected = False
-            #self.sig_connected.emit("disconnected")
+            self.sig_connected.emit("disconnected")
 
         # allow new jobs after future reconnect
         self.reject_signal = False
@@ -86,10 +86,20 @@ class HP34401A_Logic(QtCore.QThread):
         val = self.hardware.measure_dc_voltage()
         self.sig_dc_voltage.emit(val)
         return val
+    # -------------- read wrappers -----------------
+    def read_NPLC(self):
+        assert self.hardware is not None
+        val = self.hardware.NPLC(read=True)
+        self.sig_NPLC.emit(val)
+        return val
 
     # -------------- setter wrappers -----------------
 
-#NPLC will be here : operational mode
+    def write_NPLC(self):
+        assert self.hardware is not None
+        self.hardware.NPLC(self.setpoint_NPLC, write=True)
+        self.sig_is_changing.emit(f"NPLC set to {self.setpoint_NPLC}")
+        self.sig_NPLC.emit(self.setpoint_NPLC)
 
     # -------------- bulk helper ---------------------
     def get_all(self):

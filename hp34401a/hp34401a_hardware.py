@@ -20,6 +20,10 @@ class HP34401A_Hardware():
         self._vi.write("*RST")  # Reset to known state
         self._vi.write("*CLS")  # Clear status
 
+    def _write(self, cmd: str):
+        logging.debug(f"→ {cmd}")
+        self._vi.write(cmd)
+
     def _query(self, cmd: str) -> str:
         logging.debug(f"? {cmd}")
         
@@ -33,26 +37,39 @@ class HP34401A_Hardware():
                 time.sleep(0.01)
         print(f"Error querying {cmd}")
         return None
+    
 
     def idn(self) -> str:
         return self._query("*IDN?")
 
 
+    _NPLC_map = [0.02, 0.2, 1, 10, 100]
 
-    def set_nplc(self, nplc=10):
-        self._vi.write(f"CONF:VOLT:DC")
-        self._vi.write(f"VOLT:DC:NPLC {nplc}")
-    #NPLC accesable values: 0.02, 0.2, 1, 10, 100, MINimum, MAXimum
-    
+    def NPLC(self, index=None, write=False, read=False):
+        if write and index is not None:
+            if 0<=index<len(self._NPLC_map):
+                val = self._NPLC_map[index]
+                #print('ok',val)
+                self._write(f"VOLT:DC:NPLC {val}")
+            else:
+                raise ValueError(f"value must be one of {self._NPLC_map}")
+        elif read:
+            NPLC = self._query('SENS:VOLT:DC:NPLC?')
+            return NPLC.strip()
+        else:
+            raise ValueError("Either write or read must be True")
+           
+
+
     #for sensitive optical measuremens all the displays must be turned off
     def dark_mode(self, turn_off_display: bool = False):
         if turn_off_display:
-            self._vi.write("DISPlay OFF")
+            self._write("DISPlay OFF")
         else:
-            self._vi.write("DISPlay ON")
+            self._write("DISPlay ON")
 
     def measure_dc_voltage(self):
-        return float(self._vi.query("MEAS:VOLT:DC?"))
+        return float(self._query("READ?"))
     
     def check_error(self, clear_queue: bool = False):
         """
@@ -62,7 +79,7 @@ class HP34401A_Hardware():
         """
         errors = []
         while True:
-            resp = self._vi.query("SYST:ERR?")
+            resp = self._query("SYST:ERR?")
             code_str, msg = resp.split(",", 1)
             code = int(code_str)
             msg = msg.strip().strip('"')
@@ -70,9 +87,11 @@ class HP34401A_Hardware():
                 break
             errors.append((code, msg))
         if clear_queue:
-            self._vi.write("*CLS")
+            self._write("*CLS")
         return errors
-
+    
+    
+    # -------------- connection teardown ---------------
     def disconnect(self):
         """Safely close the VISA resource.
 
@@ -105,11 +124,21 @@ if __name__=="__main__":
     addr = 'GPIB0::21::INSTR'
     dmm = HP34401A_Hardware(addr)
     print("Connected")
-    dmm.set_nplc(nplc = 1)
+    #dmm.set_nplc(nplc = 1)
     #print(dmm.check_error())
     #dmm.dark_mode(False)
     print(dmm.measure_dc_voltage())
     print(dmm.idn())
-    time.sleep(3)
+    #time.sleep(3)
     print(dmm.check_error())
+    dmm.NPLC(4, write = True)
+    print(dmm.NPLC(read = True))
+
+    for i in range(5):
+        #voltage = dmm._query('MEAS:VOLT:DC?')
+        #print(f'Measured DC voltage with _query: {voltage} V')
+        
+        voltage = dmm.measure_dc_voltage()
+        print(f'Measured DC voltage with measure_dc: {voltage} V')
+        
     dmm.disconnect()

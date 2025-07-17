@@ -40,12 +40,15 @@ class HP34401A(QtWidgets.QWidget):
         #self.voltageLevel_doubleSpinBox.valueChanged.connect(self._on_voltage_changed)  
         #self.setVoltage_pushButton.clicked.connect(self._on_set_voltage_clicked)
         self.readVoltage_pushButton.clicked.connect(self._on_read_voltage_clicked)
+        self.NPLC_comboBox.currentIndexChanged.connect(self.write_NPLC)
 
         # Logic signals
-        #self.logic.sig_operating_mode.connect(self._update_mode)
+        self.logic.sig_NPLC.connect(self.update_NPLC)
         self.logic.sig_dc_voltage.connect(self._update_dc_voltage)
         self.logic.sig_is_changing.connect(self._update_status)
         self.logic.sig_connected.connect(self._update_status)
+
+        
 
         # Periodic monitor timer
         # Periodic monitor is not used in this example
@@ -102,6 +105,22 @@ class HP34401A(QtWidgets.QWidget):
 
     def _update_status(self, txt: Any):
         self.status_label.setText(str(txt))  # type: ignore[attr-defined]
+
+        # -- time-constant -------------------------------------------------
+    def write_NPLC(self, idx: int | None = None):
+        self.logic.stop()
+        self.logic.setpoint_NPLC = idx if idx is not None else self.NPLC_comboBox.currentIndex()
+        self.logic.job = "write_NPLC"
+        self.logic.start()
+
+    def read_NPLC(self):
+        self.logic.job = "read_NPLC"
+        self.logic.start()
+
+    def update_NPLC(self, text):
+        self.NPLC_comboBox.blockSignals(True)
+        self.NPLC_comboBox.setCurrentText(str(text))
+        self.NPLC_comboBox.blockSignals(False)
 
     # -------------------------------------------------------------
     # Helper methods
