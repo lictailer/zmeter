@@ -387,6 +387,7 @@ class MainWindow(QtWidgets.QWidget):
             self.force_stop_equipments()
             self.stop_equipments_for_scanning()
             for equipment_name, equipment in self.equips.items():
+                print("Terminating", equipment_name)
                 equipment.terminate_dev()
                 equipment.close()
             print("Main Window terminated.")
