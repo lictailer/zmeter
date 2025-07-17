@@ -120,3 +120,22 @@ python start_zmeter.py
 ```
 
 You’re all set! If you encounter any issues, please check the [Troubleshooting](#troubleshooting) section or open an issue on GitHub.
+
+
+
+# Comments 
+
+You also need to install drivers for USB-GPIB cable
+
+Check if this adapter shows up in the NI-MAX app
+
+Then if driver is missing, use NI Package manager to install the driver
+
+
+# Things that need to be added:
+
+bugfix SR830
+
+add Montana
+
+add hp34401a

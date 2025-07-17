@@ -1,7 +1,7 @@
 from PyQt6 import QtCore  # type: ignore
 import time
 
-from hp34401a_hardware import HP34401A_Hardware
+from .hp34401a_hardware import HP34401A_Hardware
 
 
 class HP34401A_Logic(QtCore.QThread):

@@ -6,7 +6,7 @@ from typing import Any
 import pyvisa  # type: ignore
 
 
-from hp34401a_logic import HP34401A_Logic
+from .hp34401a_logic import HP34401A_Logic
 
 
 class HP34401A(QtWidgets.QWidget):
