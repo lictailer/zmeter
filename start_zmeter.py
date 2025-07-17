@@ -11,14 +11,15 @@ from core.mainWindow import MainWindow
 # devices that are not required in your particular setup.
 # ------------------------------------------------------------
 from sr830.sr830_main import SR830
-from sr860.sr860_main import SR860
-from nidaq.nidaq_main import NIDAQ
-from keithley24xx.keithley24xx_main import Keithley24xx
+#from sr860.sr860_main import SR860
+from hp34401a.hp34401a_main import HP34401A
+#from nidaq.nidaq_main import NIDAQ
+#from keithley24xx.keithley24xx_main import Keithley24xx
 # from k10cr1.k10cr1_main import K10CR1
 # from tlpm.tlpm_main import TLPM
-from auto_focus.autofocus_main import autofocus_main
-from auto_focus.autofocus_logic import stepper_and_galvo_xyz
-from opticool.opticool_main import Opticool
+#from auto_focus.autofocus_main import autofocus_main
+#from auto_focus.autofocus_logic import stepper_and_galvo_xyz
+#from opticool.opticool_main import Opticool
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -31,10 +32,11 @@ def create_equipment():
         "lockin_1": SR830(),
         # "lockin_2": SR830(),
         # "sr860_test": SR860(),
-        "nidaq_0": NIDAQ(),
+        #"nidaq_0": NIDAQ(),
+        "DMM_A": HP34401A(),
         # "HWP": K10CR1(),
         # "HWP_1": K10CR1(),
-        "Keithley_0": Keithley24xx(),
+        #"Keithley_0": Keithley24xx(),
         # "Keithley_1": Keithley24xx(),
         # "tlpm_0": TLPM(),
         #"my_autofocus": autofocus_main(),
@@ -55,9 +57,9 @@ def create_equipment():
     # equips["tlpm_0"].connect()
 
     # set up autofocus system: select the DAQ and create the xyz system
-    daq = equips["nidaq_0"]
-    xyz = stepper_and_galvo_xyz(daq)
-    equips["my_autofocus"].xyz_sys = xyz  # Set the xyz system for the autofocus logic
+    #daq = equips["nidaq_0"]
+    #xyz = stepper_and_galvo_xyz(daq)
+    #equips["my_autofocus"].xyz_sys = xyz  # Set the xyz system for the autofocus logic
 
     return equips
 
