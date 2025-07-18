@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>605</width>
-    <height>216</height>
+    <height>388</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -69,6 +69,9 @@
       </item>
       <item>
        <widget class="QComboBox" name="NPLC_comboBox">
+        <property name="currentIndex">
+         <number>3</number>
+        </property>
         <item>
          <property name="text">
           <string>0.02</string>
@@ -153,6 +156,53 @@
       </item>
      </layout>
     </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_1">
+     <property name="title">
+      <string>readings</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_1">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <property name="spacing">
+       <number>1</number>
+      </property>
+      <item row="0" column="0">
+       <layout class="QVBoxLayout" name="graph_dc_voltage">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="sizeConstraint">
+         <enum>QLayout::SetDefaultConstraint</enum>
+        </property>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>40</width>
+       <height>10</height>
+      </size>
+     </property>
+    </spacer>
    </item>
   </layout>
  </widget>

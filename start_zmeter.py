@@ -29,7 +29,7 @@ def create_equipment():
     """Instantiate and connect to all equipment required for the session."""
 
     equips = {
-        "lockin_1": SR830(),
+        #"lockin_1": SR830(),
         # "lockin_2": SR830(),
         # "sr860_test": SR860(),
         #"nidaq_0": NIDAQ(),

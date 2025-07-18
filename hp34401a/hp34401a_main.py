@@ -2,7 +2,8 @@ from PyQt6 import QtWidgets, QtCore, uic  # type: ignore
 import sys
 import time
 from typing import Any
-
+import numpy as np
+import pyqtgraph as pg
 import pyvisa  # type: ignore
 
 
@@ -27,8 +28,20 @@ class HP34401A(QtWidgets.QWidget):
         # ---------------- load UI from external .ui file ---------------
         uic.loadUi("hp34401a/hp34401a.ui", self)
 
+        # ----- helper plot widget (X, Y, R, Theta streams) -----
+        w = pg.GraphicsLayoutWidget(show=True)
+        w.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.plot_dc_voltage = w.addPlot(row=0, col=0)
+
+        self.plot_dc_voltage.setTitle("V")
+
+        # *graph_xyrt* is a QVBoxLayout placeholder defined in the .ui file
+        self.graph_dc_voltage.addWidget(w)
+
         # ---------------- logic layer -------------
         self.logic = HP34401A_Logic()
+        # circular buffers for live plot
+        self.dc_voltage_log = np.full(200, np.nan, dtype=float)
 
         # Populate VISA resources
         self._refresh_visa_resources()
@@ -50,14 +63,30 @@ class HP34401A(QtWidgets.QWidget):
 
         
 
-        # Periodic monitor timer
-        # Periodic monitor is not used in this example
-        # enable this following 3 lines will automatically update the UI with the current value of the parameter
-        # it is connected the the _monitor() function
+        # ----- periodic monitor -----
 
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self._monitor)
-        self.timer.start(500)
+        self.timer.start(50)
+    # ------------------------------------------------------------------
+    # UI helpers
+    # ------------------------------------------------------------------
+    def reset_graph(self):
+        self.dc_voltage_log[:] = np.nan
+        pen = pg.mkPen((255, 255, 255), width=3)
+        self.plot_dc_voltage.plot(self.dc_voltage_log, clear=True, pen=pen)
+
+    def stop_timer(self):
+        if self.timer.isActive():
+            self.timer.stop()
+
+    def start_timer(self):
+        if not self.timer.isActive():
+            self.timer.start(50)
+
+    def update_status(self, txt):
+        """Generic label updater for *sig_is_changing* & *sig_connected*."""
+        self.status_label.setText(str(txt))
 
     # -------------------------------------------------------------
     # UI event handlers
@@ -72,14 +101,6 @@ class HP34401A(QtWidgets.QWidget):
     def _on_disconnect_clicked(self):
         self.logic.disconnect()
 
-    '''def _on_mode_changed(self, idx: int):
-        if not self.logic.connected:
-            return
-        self.logic.stop()
-        self.logic.setpoint_operating_mode = idx
-        self.logic.job = "set_operating_mode"
-        self.logic.start()'''
-
 
     def _on_read_voltage_clicked(self):
         if not self.logic.connected:
@@ -87,6 +108,9 @@ class HP34401A(QtWidgets.QWidget):
         self.logic.stop()
         self.logic.job = "get_dc_voltage"
         self.logic.start()
+
+
+
 
     # -------------------------------------------------------------
     # Logic signal slots
@@ -99,6 +123,10 @@ class HP34401A(QtWidgets.QWidget):
     def _update_dc_voltage(self, val: Any):
         try:
             fval = float(val)
+            self.dc_voltage_log[:-1] = self.dc_voltage_log[1:]
+            self.dc_voltage_log[-1] = val
+            pen = pg.mkPen((255, 255, 255), width=3)
+            self.plot_dc_voltage.plot(self.dc_voltage_log, clear=True, pen=pen)
         except Exception:
             return
         self.dc_voltage_label.setText(f"{fval} V")  
@@ -121,6 +149,14 @@ class HP34401A(QtWidgets.QWidget):
         self.NPLC_comboBox.blockSignals(True)
         self.NPLC_comboBox.setCurrentText(str(text))
         self.NPLC_comboBox.blockSignals(False)
+
+    def disconnect_device(self):
+        self.logic.disconnect()
+
+    def terminate_dev(self):
+        self.logic.disconnect()
+        print("HP34401a terminated.")
+    
 
     # -------------------------------------------------------------
     # Helper methods
