@@ -53,7 +53,7 @@ class HP34401A(QtWidgets.QWidget):
         #self.voltageLevel_doubleSpinBox.valueChanged.connect(self._on_voltage_changed)  
         #self.setVoltage_pushButton.clicked.connect(self._on_set_voltage_clicked)
         self.readVoltage_pushButton.clicked.connect(self._on_read_voltage_clicked)
-        self.NPLC_comboBox.currentIndexChanged.connect(self.write_NPLC)
+        self.NPLC_comboBox.currentTextChanged.connect(self.write_NPLC)
 
         # Logic signals
         self.logic.sig_NPLC.connect(self.update_NPLC)
@@ -135,9 +135,9 @@ class HP34401A(QtWidgets.QWidget):
         self.status_label.setText(str(txt))  # type: ignore[attr-defined]
 
         # -- time-constant -------------------------------------------------
-    def write_NPLC(self, idx: int | None = None):
+    def write_NPLC(self, val: float | None = None):
         self.logic.stop()
-        self.logic.setpoint_NPLC = idx if idx is not None else self.NPLC_comboBox.currentIndex()
+        self.logic.setpoint_NPLC = float(val) if val is not None else float(self.NPLC_comboBox.currentText())
         self.logic.job = "write_NPLC"
         self.logic.start()
 

@@ -18,7 +18,7 @@ def main():
     
     
     # 5. Trigger and read one measurement
-    inst.write('SENS:VOLT:DC:NPLC 100')
+    inst.write('SENS:VOLT:DC:NPLC 1.00')
     NPLC = inst.query('SENS:VOLT:DC:NPLC?')
     print(f'NPLC: {NPLC.strip()}')
 

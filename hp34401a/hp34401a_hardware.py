@@ -45,10 +45,9 @@ class HP34401A_Hardware():
 
     _NPLC_map = [0.02, 0.2, 1, 10, 100]
 
-    def NPLC(self, index=None, write=False, read=False):
-        if write and index is not None:
-            if 0<=index<len(self._NPLC_map):
-                val = self._NPLC_map[index]
+    def NPLC(self, val=None, write=False, read=False):
+        if write and val is not None:
+            if val in self._NPLC_map:
                 #print('ok',val)
                 self._write(f"VOLT:DC:NPLC {val}")
             else:

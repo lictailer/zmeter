@@ -31,7 +31,7 @@ class HP34401A_Logic(QtCore.QThread):
         self.job: str = ""  # name of the next action
 
         # -------- set-points (set_* / setup_*) --------
-        self.setpoint_NPLC = 1
+        self.setpoint_NPLC = 10
         #self.setpoint_dc_voltage: float = 0.0
 
         # runtime state
