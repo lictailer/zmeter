@@ -51,6 +51,7 @@ def create_equipment():
     # equips["HWP_1"].connect(serial="55243324")
     # equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
     # equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
+    equips["DMM_A"].connect_visa("GPIB0::21::INSTR")
     # equips["Keithley_0"].connect_visa("GPIB2::18::INSTR")
     # equips["Keithley_1"].connect_visa("GPIB::18::INSTR")
     # equips["sr860_test"].connect_visa("GPIB0::7::INSTR")

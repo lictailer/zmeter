@@ -32,11 +32,14 @@ class HP34401A(QtWidgets.QWidget):
         w = pg.GraphicsLayoutWidget(show=True)
         w.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
         self.plot_dc_voltage = w.addPlot(row=0, col=0)
-
         self.plot_dc_voltage.setTitle("V")
 
-        # *graph_xyrt* is a QVBoxLayout placeholder defined in the .ui file
+        # *graph_dc_voltage* is a QVBoxLayout placeholder defined in the .ui file
         self.graph_dc_voltage.addWidget(w)
+
+        # ----- VISA resource list -----
+        resource_manager = pyvisa.ResourceManager()
+        self.address_comboBox.addItems(resource_manager.list_resources())
 
         # ---------------- logic layer -------------
         self.logic = HP34401A_Logic()
@@ -49,11 +52,10 @@ class HP34401A(QtWidgets.QWidget):
         # ---------------- wiring ------------------
         self.connect_pushButton.clicked.connect(self._on_connect_clicked) 
         self.disconnect_pushButton.clicked.connect(self._on_disconnect_clicked)  
-        #self.operationMode_comboBox.currentIndexChanged.connect(self._on_mode_changed)  
-        #self.voltageLevel_doubleSpinBox.valueChanged.connect(self._on_voltage_changed)  
-        #self.setVoltage_pushButton.clicked.connect(self._on_set_voltage_clicked)
-        self.readVoltage_pushButton.clicked.connect(self._on_read_voltage_clicked)
+        
         self.NPLC_comboBox.currentTextChanged.connect(self.write_NPLC)
+        self.display_on_checkBox.stateChanged.connect(self.write_display_on)
+        
 
         # Logic signals
         self.logic.sig_NPLC.connect(self.update_NPLC)
@@ -101,13 +103,14 @@ class HP34401A(QtWidgets.QWidget):
     def _on_disconnect_clicked(self):
         self.logic.disconnect()
 
-
+        '''
     def _on_read_voltage_clicked(self):
-        if not self.logic.connected:
+        if not self.logic._connected:
             return
         self.logic.stop()
         self.logic.job = "get_dc_voltage"
         self.logic.start()
+        '''
 
 
 
@@ -133,12 +136,29 @@ class HP34401A(QtWidgets.QWidget):
 
     def _update_status(self, txt: Any):
         self.status_label.setText(str(txt))  # type: ignore[attr-defined]
-
-        # -- time-constant -------------------------------------------------
+    # ------------------------------------------------------------------
+    # VISA connection
+    # ------------------------------------------------------------------
+    def connect_visa(self, addr):
+        if addr == None or addr == False:
+            addr = self.address_comboBox.currentText()
+        print(f"Connecting to {addr}")
+        self.logic.connect_visa(addr)
+        self.address_comboBox.setCurrentText(addr)
+    # ------------------------------------------------------------------
+    # read_/write_/setup_ wrappers (naming follows sr860_logic)
+    # ----------------------------------------------------------------
+        
     def write_NPLC(self, val: float | None = None):
         self.logic.stop()
         self.logic.setpoint_NPLC = float(val) if val is not None else float(self.NPLC_comboBox.currentText())
         self.logic.job = "write_NPLC"
+        self.logic.start()
+
+    def write_display_on(self, val: bool | None = None):
+        self.logic.stop()
+        self.logic.setpoint_display_on = bool(val) if val is not None else bool(self.display_on_checkBox.isChecked())
+        self.logic.job = "write_display_on"
         self.logic.start()
 
     def read_NPLC(self):
@@ -173,7 +193,7 @@ class HP34401A(QtWidgets.QWidget):
     # See sr860, sr830 or nidaq for examples
     # -------------------------------------------------------------
     def _monitor(self):
-        if not self.logic.connected:
+        if not self.logic._connected:
             return
         if self.logic.isRunning():
             return
@@ -187,6 +207,6 @@ class HP34401A(QtWidgets.QWidget):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     win = HP34401A()
-    win.resize(480, 240)
+    win.resize(480, 400)
     win.show()
     sys.exit(app.exec())

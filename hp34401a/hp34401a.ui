@@ -115,6 +115,19 @@
         </property>
        </spacer>
       </item>
+      <item>
+       <widget class="QCheckBox" name="display_on_checkBox">
+        <property name="autoFillBackground">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>DisplayOn</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -133,6 +146,19 @@
       <property name="bottomMargin">
        <number>1</number>
       </property>
+      <item row="0" column="2">
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
       <item row="0" column="0">
        <widget class="QLabel" name="label_3">
         <property name="text">
@@ -144,13 +170,6 @@
        <widget class="QLabel" name="dc_voltage_label">
         <property name="text">
          <string>0.00V</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <widget class="QPushButton" name="readVoltage_pushButton">
-        <property name="text">
-         <string>Read Voltage</string>
         </property>
        </widget>
       </item>
