@@ -18,7 +18,7 @@ from keithley24xx.keithley24xx_main import Keithley24xx
 # from tlpm.tlpm_main import TLPM
 from auto_focus.autofocus_main import autofocus_main
 from auto_focus.autofocus_logic import stepper_and_galvo_xyz
-from opticool.opticool_main import Opticool
+from opticool.opticool_main import OptiCool
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -37,8 +37,7 @@ def create_equipment():
         "Keithley_0": Keithley24xx(),
         # "Keithley_1": Keithley24xx(),
         # "tlpm_0": TLPM(),
-        #"my_autofocus": autofocus_main(),
-        #"opticool": Opticool(),
+        #"opticool": OptiCool(),
     }
 
     # ------------------------------------------------------------
@@ -53,11 +52,6 @@ def create_equipment():
     # equips["Keithley_1"].connect_visa("GPIB::18::INSTR")
     # equips["sr860_test"].connect_visa("GPIB0::7::INSTR")
     # equips["tlpm_0"].connect()
-
-    # set up autofocus system: select the DAQ and create the xyz system
-    daq = equips["nidaq_0"]
-    xyz = stepper_and_galvo_xyz(daq)
-    equips["my_autofocus"].xyz_sys = xyz  # Set the xyz system for the autofocus logic
 
     return equips
 
