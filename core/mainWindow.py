@@ -105,7 +105,7 @@ class MainWindow(QtWidgets.QWidget):
         self.getter_equipment_info["artificial_channel"] = list(
             self.artificial_channels_values.keys()
         )
-        self.setter_equipment_info["control"] = ["wait"]
+        self.setter_equipment_info["default"] = ["count", "wait"]
 
         self.simplified_equation = self.isolate_variables()
         for key, value in self.artificial_channels_values.items():
@@ -239,13 +239,20 @@ class MainWindow(QtWidgets.QWidget):
                 set_variables[var_name] = getattr(equipment.logic, method)
         return set_variables, get_variables
 
-    # execute control
-    def execute_control(self, val, master):
+    def execute_default(self, val, master):
+        """
+        Execute default functions 
+        wait - sleep for the giving second
+        count - repeat the scan
+        """
         for index, character in enumerate(master):
             if character == "_":
                 variable = master[index + 1 : :]
         if variable == "wait":
             time.sleep(val)
+        elif variable == "count":
+            time.sleep(0.01)
+
 
     # Read and write info
 
@@ -264,7 +271,10 @@ class MainWindow(QtWidgets.QWidget):
 
         for label, setters in self.setter_equipment_info_for_scanning.items():
             # exact prefix match: label followed by an underscore
-            if master.startswith(f"{label}_"):
+            if master.startswith("default_"):
+                print("here")
+                self.execute_default(val, master)
+            elif master.startswith(f"{label}_"):
                 variable = self.get_variable(master, label)
                 try:
                     setters[variable](val)

@@ -205,8 +205,6 @@ class ScanLogic(QtCore.QThread):
             for key, value in setting_dict.items():
                 if self.received_stop:
                     return
-                if 'control' in key:
-                    self.main_window.execute_control(value,key)
                 else:
                     self.main_window.write_info(value, key)
 
@@ -257,6 +255,7 @@ class ScanLogic(QtCore.QThread):
 
         self.current_target_indexs[l] = 0
 
+
     def write(self, lv, index):
         artificial_setters_and_vals = {}  # {artificial channel name ; val}
         for i, ss in enumerate(self.setters_FEL[lv]):
@@ -264,8 +263,6 @@ class ScanLogic(QtCore.QThread):
             variable = self.get_variable(ss)
             if variable in self.main_window.equations:
                 self.main_window.write_artificial_channel(val, variable)
-            elif('control' in ss):
-                self.main_window.execute_control(val,ss)
             else:
                 self.main_window.write_info(val, ss)
 
