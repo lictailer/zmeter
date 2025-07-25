@@ -281,14 +281,17 @@ class ScanLogic(QtCore.QThread):
                     self.main_window.write_info(value, key)
 
         reading_device_channels = self.group_reading_device_channels(current_level)
+        writing_device_channels = self.group_writing_device_channels(current_level)
         print("reading_device_channels", reading_device_channels)
+        print("writing_device_channels", writing_device_channels)
         # Iterate through all target points at this level
         for target_index in range(self.level_target_counts[current_level]):
             if self.received_stop:
                 return
             
             # Set parameter values for all setters at this level
-            self.set_level_values(current_level, target_index)
+            # self.set_level_values(current_level, target_index)
+            self.multi_thread_write(writing_device_channels, current_level, target_index)
             
             # Skip measurement if no getter channels defined for this level
             if self.level_getter_counts[current_level] == 0:
@@ -305,6 +308,8 @@ class ScanLogic(QtCore.QThread):
             for getter_index in range(len(self.level_getters[current_level])):
                  # Build index tuple for N-dimensional data array access
                 getter_channel = self.level_getters[current_level][getter_index]
+                if getter_channel == "none":
+                    continue
                 indices_slice = slice(self.max_level, current_level, -1)  # Outer level indices
                 indices = self.current_target_indices[indices_slice]
                 full_index_tuple = (getter_index, *indices, self.current_target_indices[current_level])
@@ -410,79 +415,6 @@ class ScanLogic(QtCore.QThread):
                 else:
                     underscore_count += 1
     
-    #### old code sequential reading ####
-    # def read_level_measurements(self, level_index):
-    #     """
-    #     Read measurement values from all getter channels for the specified level.
-        
-    #     Args:
-    #         level_index: Which scanning level to read measurements for
-            
-    #     Returns:
-    #         list: Measurement values from all getter channels at this level
-    #     """
-    #     measurements = []
-        
-    #     # Read from each getter channel configured for this level
-    #     for getter_index in range(self.level_getter_counts[level_index]):
-    #         getter_channel = self.level_getters[level_index][getter_index]
-    #         variable = self.extract_variable_from_channel(getter_channel)
-            
-    #         # Check if this is an artificial/calculated channel
-    #         if variable in self.main_window.equations:
-    #             measurements.append(self.main_window.read_artificial_channel(variable))
-    #         else:
-    #             # Read directly from hardware channel
-    #             measurements.append(self.main_window.read_info(getter_channel))
-
-    #     return measurements
-
-    # def read_level_measurements(self, level_index):
-    #     """
-    #     Read measurement values from all getter channels for the specified level.
-        
-    #     Args:
-    #         level_index: Which scanning level to read measurements for
-            
-    #     Returns:
-    #         list: Measurement values from all getter channels at this level
-    #     """
-    #     measurements = []
-        
-    #     # Group getter channels by device
-    #     # device_channels = {}
-        
-    #     # # Read from each getter channel configured for this level
-    #     # for getter_index in range(self.level_getter_counts[level_index]):
-    #     #     getter_channel = self.level_getters[level_index][getter_index]
-    #     #     print("getter_channel", getter_channel)
-            
-    #     #     # Extract device name and variable name
-    #     #     device_name = self.extract_device_from_channel(getter_channel)
-    #     #     variable = self.extract_variable_from_channel(getter_channel)
-    #     #     print("device_name", device_name)
-    #     #     print("variable", variable)
-            
-    #     #     # Group channels by device
-    #     #     if device_name not in device_channels:
-    #     #         device_channels[device_name] = []
-    #     #     device_channels[device_name].append(variable)
-            
-    #     #     print("Device channels grouped:", device_channels)
-    #     device_channels = self.Group_device_channels(level_index)
-            
-    #         # Check if this is an artificial/calculated channel
-    #         if variable in self.main_window.equations:
-    #             # measurements.append(self.main_window.read_artificial_channel(variable))
-    #             measurements.append(0)
-    #         else:
-    #             # Read directly from hardware channel
-    #             # measurements.append(self.main_window.read_info(getter_channel))
-    #             measurements.append(0)
-
-        
-    #     return measurements
-
     def group_reading_device_channels(self, level_index):
         device_channels = {}
         
@@ -497,7 +429,9 @@ class ScanLogic(QtCore.QThread):
             print("variable", variable)
             
             # Group channels by device
-            if device_name not in device_channels:
+            if device_name == None or device_name == "none" or device_name == "":
+                continue
+            elif device_name not in device_channels:
                 device_channels[device_name] = []
             device_channels[device_name].append(variable)
             
@@ -506,6 +440,8 @@ class ScanLogic(QtCore.QThread):
         
     def multi_thread_read(self, device_channels):
         start_time = time.time()
+        if len(device_channels) == 0:
+            return {}
         with ThreadPoolExecutor(max_workers=len(device_channels)) as executor:
             futures = [executor.submit(self.read_single_device_all_channels, device, channel_list) for device, channel_list in device_channels.items()]
             # Combine all dictionary results into a single dictionary
@@ -521,6 +457,9 @@ class ScanLogic(QtCore.QThread):
     def read_single_device_all_channels(self, device, channel_list):
         result = {}
         start_time = time.time()
+        print("last bug here")
+        print("channel_list", channel_list)
+        print("device", device)
         for channel in channel_list:
             if channel in self.main_window.equations:
                 result[f"{device}_{channel}"] = self.main_window.read_artificial_channel(channel)
@@ -530,6 +469,38 @@ class ScanLogic(QtCore.QThread):
         print(f"Time taken for {device}: {end_time - start_time} seconds")
         print("result", result)
         return result
+
+    def group_writing_device_channels(self, level_index):
+        device_channels = {}
+        for setter_index in range(len(self.level_setters[level_index])):
+            setter_channel = self.level_setters[level_index][setter_index]
+            device_name, variable = self.extract_device_from_channel(setter_channel)
+            print("set_device_name", device_name)
+            print("set_variable", variable)
+            if device_name not in device_channels:
+                device_channels[device_name] = {}
+            device_channels[device_name][variable] = 0
+        print("Set Device channels grouped:", device_channels)
+        return device_channels
+
+    def write_single_device_all_channels(self, device, channel_value_list):
+        for channel, value in channel_value_list.items():
+            if channel in self.main_window.equations:
+                self.main_window.write_artificial_channel(value, channel)
+            else:
+                self.main_window.write_info(value, f"{device}_{channel}")
+
+    def multi_thread_write(self, writing_device_channels, level_index, target_index):
+        set_value = self.level_target_arrays[level_index][:, target_index]
+        for device, channel_list in writing_device_channels.items():
+            for channel in channel_list:
+                channel_list_index = self.level_setters[level_index].index(f"{device}_{channel}")
+                writing_device_channels[device][channel] = set_value[channel_list_index]
+        print("writing_device_channels_before_execution", writing_device_channels)
+        with ThreadPoolExecutor(max_workers=len(writing_device_channels)) as executor:
+            futures = [executor.submit(self.write_single_device_all_channels, device, channel_value_list) for device, channel_value_list in writing_device_channels.items()]
+
+        # raise Exception("stop here")
 
     def generate_file_for_save(self):
         """
