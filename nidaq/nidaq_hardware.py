@@ -25,7 +25,9 @@ class NIDAQHardWare:
     def setup_sample_counter(self, chan="/Dev2/ctr0"):
         if self._sample_counter_task is None:
             self._sample_counter_task = Daq.TaskHandle()
-            Daq.DAQmxCreateTask("Counter", Daq.byref(self._sample_counter_task))
+            # Daq.DAQmxCreateTask("Counter", Daq.byref(self._sample_counter_task))
+            task_name = "Counter" + chan.replace("/", "_")
+            Daq.DAQmxCreateTask(task_name, Daq.byref(self._sample_counter_task))
             Daq.DAQmxCreateCICountEdgesChan(
                 self._sample_counter_task,
                 chan,
@@ -201,6 +203,7 @@ class NIDAQHardWare:
         if self._AI_dict.get(physical_channel) is None:
             task = Daq.TaskHandle()
             task_name = "AI" + physical_channel.replace("/", "_")
+            print("task_name", task_name)
             Daq.DAQmxCreateTask(task_name, Daq.byref(task))
             Daq.DAQmxCreateAIVoltageChan(
                 task,

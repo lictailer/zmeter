@@ -45,8 +45,12 @@ class TLPMLogic(QtCore.QThread):
             break
         tlPM.close()
 
+        # Create a new string buffer with the retrieved resource name
+        resource_string = c_char_p(resourceName.raw).value
+        new_resourceName = create_string_buffer(resource_string)
+
         self.hardware = TLPM_Hardware()
-        self.hardware.open(resourceName, c_bool(True), c_bool(True))
+        self.hardware.open(new_resourceName, c_bool(True), c_bool(True))
         message = create_string_buffer(1024)
         self.hardware.getCalibrationMsg(message)
         info = c_char_p(message.raw).value

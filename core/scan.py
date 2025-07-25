@@ -1,5 +1,5 @@
 from .scan_info import *
-from .scan_logic import ScanLogic
+from .scan_logic_new import ScanLogic
 from .all_level import AllLevelSetting
 from .all_plot_settings import AllPlotSetting
 from .all_plots import AllPlots
@@ -160,7 +160,7 @@ class Scan(QtWidgets.QWidget):
         self.logic.reset_flags()
         self.logic.go_scan = True
         self.update_alllevel_setting_array()
-        self.logic.initilize_data(self.info)
+        self.logic.initialize_scan_data(self.info)
         self.update_all_plots()
         self.logic.start()
 
