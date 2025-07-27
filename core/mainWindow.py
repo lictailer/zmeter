@@ -93,6 +93,7 @@ class MainWindow(QtWidgets.QWidget):
     def set_artificial_channel_info(self, artificial_channels):
         self.equations = artificial_channels
 
+        self.artificial_channels_values = {}
         for key in artificial_channels.keys():
             self.artificial_channels_values[key] = 0
 
