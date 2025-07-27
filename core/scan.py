@@ -161,6 +161,7 @@ class Scan(QtWidgets.QWidget):
         self.logic.go_scan = True
         self.update_alllevel_setting_array()
         self.logic.initialize_scan_data(self.info)
+        # self.logic.initilize_data(self.info)        #for old version
         self.update_all_plots()
         self.logic.start()
 

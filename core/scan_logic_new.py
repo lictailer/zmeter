@@ -175,7 +175,6 @@ class ScanLogic(QtCore.QThread):
         # Calculate total number of measurement points across all levels
         self.total_points = 1
         for level_index in range(len(scan_config['levels'])):
-            print(scan_config['levels'][f'level{level_index}']['setting_array'])
             self.total_points *= scan_config['levels'][f'level{level_index}']['setting_array'].shape[1]
         
         # Initialize data structure arrays for each scanning level
@@ -282,27 +281,24 @@ class ScanLogic(QtCore.QThread):
 
         reading_device_channels = self.group_reading_device_channels(current_level)
         writing_device_channels = self.group_writing_device_channels(current_level)
-        print("reading_device_channels", reading_device_channels)
-        print("writing_device_channels", writing_device_channels)
+        
         # Iterate through all target points at this level
         for target_index in range(self.level_target_counts[current_level]):
             if self.received_stop:
                 return
             
             # Set parameter values for all setters at this level
-            # self.set_level_values(current_level, target_index)
             self.multi_thread_write(writing_device_channels, current_level, target_index)
             
             # Skip measurement if no getter channels defined for this level
             if self.level_getter_counts[current_level] == 0:
                 break
             
+            if self.received_stop:
+                return
             # Read measurements from all getter channels at this level
             # measurements = self.read_level_measurements(current_level)
             measurements = self.multi_thread_read(reading_device_channels)
-
-            print("measurements", measurements)
-            # raise Exception("stop here")
 
             # Store measurements in the appropriate data array location
             for getter_index in range(len(self.level_getters[current_level])):
@@ -338,34 +334,6 @@ class ScanLogic(QtCore.QThread):
 
         # Reset this level's index counter for next iteration of outer level
         self.current_target_indices[current_level] = 0
-
-    def set_level_values(self, level_index, target_index):
-        """
-        Set all parameter values for the specified level and target index.
-        
-        This method writes values to hardware channels or artificial channels
-        based on the setter configuration for the current level.
-        
-        Args:
-            level_index: Which scanning level to set values for
-            target_index: Which point within that level's parameter array
-        """
-        artificial_setters_and_vals = {}  # For calculated/artificial channels
-        
-        # Set each setter channel for this level
-        for setter_index, setter_channel in enumerate(self.level_setters[level_index]):
-            # Get the value from the 2D parameter array [setter][point]
-            value = self.level_target_arrays[level_index][setter_index, target_index]
-            
-            # Extract variable name from channel identifier (e.g., "device_0_variable" -> "variable")
-            variable = self.extract_variable_from_channel(setter_channel)
-            
-            # Check if this is an artificial/calculated channel
-            if variable in self.main_window.equations:
-                self.main_window.write_artificial_channel(value, variable)
-            else:
-                # Write directly to hardware channel
-                self.main_window.write_info(value, setter_channel)
 
     def extract_device_from_channel(self, channel_name):
         """
@@ -421,12 +389,9 @@ class ScanLogic(QtCore.QThread):
         # Read from each getter channel configured for this level
         for getter_index in range(self.level_getter_counts[level_index]):
             getter_channel = self.level_getters[level_index][getter_index]
-            print("getter_channel", getter_channel)
             
             # Extract device name and variable name
             device_name, variable = self.extract_device_from_channel(getter_channel)
-            print("device_name", device_name)
-            print("variable", variable)
             
             # Group channels by device
             if device_name == None or device_name == "none" or device_name == "":
@@ -435,7 +400,6 @@ class ScanLogic(QtCore.QThread):
                 device_channels[device_name] = []
             device_channels[device_name].append(variable)
             
-        print("Device channels grouped:", device_channels)
         return device_channels
         
     def multi_thread_read(self, device_channels):
@@ -450,24 +414,18 @@ class ScanLogic(QtCore.QThread):
                 result_dict = future.result()
                 combined_results.update(result_dict)
         end_time = time.time()
-        print(f"Time taken for multi_thread_read: {end_time - start_time} seconds")
         return combined_results
 
 
     def read_single_device_all_channels(self, device, channel_list):
         result = {}
         start_time = time.time()
-        print("last bug here")
-        print("channel_list", channel_list)
-        print("device", device)
         for channel in channel_list:
             if channel in self.main_window.equations:
                 result[f"{device}_{channel}"] = self.main_window.read_artificial_channel(channel)
             else:
                 result[f"{device}_{channel}"] = self.main_window.read_info(f"{device}_{channel}")
         end_time = time.time()
-        print(f"Time taken for {device}: {end_time - start_time} seconds")
-        print("result", result)
         return result
 
     def group_writing_device_channels(self, level_index):
@@ -475,12 +433,9 @@ class ScanLogic(QtCore.QThread):
         for setter_index in range(len(self.level_setters[level_index])):
             setter_channel = self.level_setters[level_index][setter_index]
             device_name, variable = self.extract_device_from_channel(setter_channel)
-            print("set_device_name", device_name)
-            print("set_variable", variable)
             if device_name not in device_channels:
                 device_channels[device_name] = {}
             device_channels[device_name][variable] = 0
-        print("Set Device channels grouped:", device_channels)
         return device_channels
 
     def write_single_device_all_channels(self, device, channel_value_list):
@@ -496,11 +451,8 @@ class ScanLogic(QtCore.QThread):
             for channel in channel_list:
                 channel_list_index = self.level_setters[level_index].index(f"{device}_{channel}")
                 writing_device_channels[device][channel] = set_value[channel_list_index]
-        print("writing_device_channels_before_execution", writing_device_channels)
         with ThreadPoolExecutor(max_workers=len(writing_device_channels)) as executor:
             futures = [executor.submit(self.write_single_device_all_channels, device, channel_value_list) for device, channel_value_list in writing_device_channels.items()]
-
-        # raise Exception("stop here")
 
     def generate_file_for_save(self):
         """
@@ -582,9 +534,9 @@ class ScanLogic(QtCore.QThread):
             
         # Calculate timing statistics
         avg_time_per_point = self.elapsed_time / self.completed_points
-        remaining_points = self.total_points - self.completed_points
-        completed_percentage = round(self.completed_points / self.total_points * 100)
-        remaining_seconds = remaining_points * avg_time_per_point
+        remaining_points = max(0, self.total_points - self.completed_points)  # Ensure non-negative
+        completed_percentage = round(min(100, self.completed_points / self.total_points * 100))  # Cap at 100%
+        remaining_seconds = max(0, remaining_points * avg_time_per_point)  # Ensure non-negative
         total_time = self.total_points * avg_time_per_point
         
         # Format time strings as HH:MM:SS

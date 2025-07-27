@@ -75,7 +75,7 @@ class IndividualImagePlotSetting(QtWidgets.QWidget):
             self.comboBox_x.setCurrentText(previous_x)
         if previous_y in y_values:
             self.comboBox_y.setCurrentText(previous_y)
-        if previous_y in z_values:
+        if previous_z in z_values:
             self.comboBox_z.setCurrentText(previous_z)
         self.is_setting_info=False
     def emit_signal(self):
