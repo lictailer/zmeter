@@ -19,7 +19,7 @@ from .scanlist import ScanList
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):
     print("Initiating the Program")
-    def __init__(self, info=None, save_path=None, backup_main_path=None, equips=None):
+    def __init__(self, info=None, save_path=None, backup_main_path=None, equips=None, artificial_channels=None):
         super().__init__()
         print("Loading the Main Window")
         uic.loadUi(r"core/ui/mainwindow.ui", self)
@@ -65,7 +65,7 @@ class MainWindow(QtWidgets.QWidget):
         self.artificial_channels = {}
 
         self.make_equipment_info()
-        self.set_artificial_channel_info()
+        self.set_artificial_channel_info(artificial_channels)
 
         self.scanlist = ScanList(
             info=self.info,
@@ -90,14 +90,11 @@ class MainWindow(QtWidgets.QWidget):
 
     # artificial channels
 
-    def set_artificial_channel_info(self):
-        self.equations = {
-            # "A": "A=lockin_0_aux_1+lockin_0_aux_2",
-            # "B": "B=lockin_0_aux_1-lockin_0_aux_2",
-            "n": "n=Keithley_0_sour_volt_to+Keithley_1_sour_volt_to",
-            "E": "E=Keithley_0_sour_volt_to-Keithley_1_sour_volt_to"
-        }
-        self.artificial_channels_values = {"n": 0, "E": 0}
+    def set_artificial_channel_info(self, artificial_channels):
+        self.equations = artificial_channels
+
+        for key in artificial_channels.keys():
+            self.artificial_channels_values[key] = 0
 
         self.setter_equipment_info["artificial_channel"] = list(
             self.artificial_channels_values.keys()

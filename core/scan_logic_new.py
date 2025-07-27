@@ -358,6 +358,10 @@ class ScanLogic(QtCore.QThread):
                     # Extract the remaining part after device_name_
                     variable = channel_name[len(device_name) + 1:]
                     return device_name, variable
+            if channel_name.startswith("artificial_channel_"):
+                return "artificial_channel", channel_name[len("artificial_channel_"):]
+            elif channel_name.startswith("default_channel_"):
+                return "default", channel_name[len("default_")+1:]
         
         # If no pattern matches, return the whole string as device name with empty remaining part
         return channel_name, ""
