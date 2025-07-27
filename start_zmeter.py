@@ -61,6 +61,11 @@ def create_equipment():
     return equips
 
 
+artificial_channels = {
+    "A": "A=nidaq_0_AO0+nidaq_0_AO1",
+    "B": "B=nidaq_0_AO0-nidaq_0_AO1"
+}
+
 def main():
     """Application entry point.  Edit this function to customise paths and devices."""
 
@@ -80,6 +85,7 @@ def main():
         save_path=save_path,
         backup_main_path=backup_main_path,
         equips=equips,
+        artificial_channels=artificial_channels,
     )
     window.show()
     window.setWindowTitle("Main Window")
