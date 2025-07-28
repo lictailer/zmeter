@@ -72,8 +72,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>730</width>
-            <height>626</height>
+            <width>745</width>
+            <height>636</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_4"/>
@@ -172,27 +172,41 @@
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
+           <property name="minimumSize">
+            <size>
+             <width>50</width>
+             <height>0</height>
+            </size>
+           </property>
            <property name="currentText">
-            <string>4</string>
+            <string>2x2</string>
+           </property>
+           <property name="currentIndex">
+            <number>1</number>
            </property>
            <item>
             <property name="text">
-             <string>2</string>
+             <string>2x1</string>
             </property>
            </item>
            <item>
             <property name="text">
-             <string>4</string>
+             <string>2x2</string>
             </property>
            </item>
            <item>
             <property name="text">
-             <string>8</string>
+             <string>2x4</string>
             </property>
            </item>
            <item>
             <property name="text">
-             <string>9</string>
+             <string>3x3</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>3x4</string>
             </property>
            </item>
           </widget>

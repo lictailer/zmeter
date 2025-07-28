@@ -197,7 +197,7 @@ class Scan(QtWidgets.QWidget):
                     if(current_target_index[w.setter_level_number]==0):
                         w.y_coordinates=np.full(w.setting_info_length, np.nan)
                     w.data=new_data                
-                    w.plot.clear()
+                    # plot_line method now handles clearing and preserves v_line position
                     w.plot_line(current_target_index)
                 if isinstance(w,ImagePlot):
                     w.update_image(new_data,current_target_index)
@@ -427,7 +427,7 @@ class Scan(QtWidgets.QWidget):
                 return super().default(obj)
 
         ppp_box = self.PlotsPerPage                      # QComboBox
-        self.info['plots_per_page'] = int(ppp_box.currentText())
+        self.info['plots_per_page'] = ppp_box.currentText()
 
         # Get user input and prepare base file name
         text = self.main_window.save_info_path.toPlainText().strip()
