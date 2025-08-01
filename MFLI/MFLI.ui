@@ -1,0 +1,1991 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>720</width>
+    <height>640</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MFLI Lock-in Amplifier Control (MF-MD)</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="groupBox_connection">
+     <property name="title">
+      <string>Connection</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_connection">
+      <item>
+       <widget class="QLabel" name="label_device_id">
+        <property name="text">
+         <string>Device ID</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="address_comboBox"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="connect_pushButton">
+        <property name="text">
+         <string>Connect</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="disconnect_pushButton">
+        <property name="text">
+         <string>Disconnect</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="start_acquisition_button">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Start Acquisition</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="stop_acquisition_button">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Stop Acquisition</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_connection">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QLabel" name="status_label">
+        <property name="text">
+         <string>Disconnected</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="horizontalGroupBox_3">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>30</height>
+      </size>
+     </property>
+     <property name="title">
+      <string>Source_config</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_5">
+      <item>
+       <layout class="QGridLayout" name="gridLayout_13">
+        <item row="4" column="2">
+         <widget class="QCheckBox" name="osc4_output_enable_checkBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="6" rowspan="3">
+         <widget class="QGroupBox" name="verticalGroupBox_11">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_22">
+           <item>
+            <widget class="QRadioButton" name="demod_off_radioButton">
+             <property name="text">
+              <string>off</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="demod1_radioButton">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>1</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="demod2_radioButton">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>2</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QDoubleSpinBox" name="amplitude4_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="amplitude3_label">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Ampl3</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QCheckBox" name="osc1_output_enable_checkBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QDoubleSpinBox" name="amplitude2_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QDoubleSpinBox" name="amplitude3_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="6" rowspan="3" alignment="Qt::AlignLeft">
+         <widget class="QGroupBox" name="verticalGroupBox_12">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_25">
+           <item>
+            <widget class="QRadioButton" name="harmonic3_radioButton">
+             <property name="text">
+              <string>3</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="harmonic4_radioButton">
+             <property name="text">
+              <string>4</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="harmonic_off_radioButton">
+             <property name="text">
+              <string>off</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="4" column="5">
+         <widget class="QDoubleSpinBox" name="frequency4_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="decimals">
+           <number>4</number>
+          </property>
+          <property name="maximum">
+           <double>500000.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>1000.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="5">
+         <widget class="QDoubleSpinBox" name="frequency3_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="decimals">
+           <number>4</number>
+          </property>
+          <property name="maximum">
+           <double>500000.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>1000.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QCheckBox" name="differential_output_checkBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="text">
+           <string>Differential</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <widget class="QDoubleSpinBox" name="dc_offset_spinBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="minimum">
+           <double>-10.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>10.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="4">
+         <widget class="QLabel" name="f3_label">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>f3</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QDoubleSpinBox" name="amplitude1_spinBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="keyboardTracking">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="3">
+         <widget class="QDoubleSpinBox" name="phase4_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="minimum">
+           <double>-360.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>360.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="3">
+         <widget class="QLabel" name="phase_label">
+          <property name="text">
+           <string>Phase</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="3">
+         <widget class="QDoubleSpinBox" name="phase2_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="minimum">
+           <double>-360.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>360.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="3">
+         <widget class="QDoubleSpinBox" name="phase3_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="minimum">
+           <double>-360.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>360.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="4">
+         <widget class="QLabel" name="range_label">
+          <property name="text">
+           <string>Range</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="5">
+         <layout class="QHBoxLayout" name="range_layout">
+          <item>
+           <widget class="QComboBox" name="output_range_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="currentText">
+             <string>10V</string>
+            </property>
+            <property name="currentIndex">
+             <number>3</number>
+            </property>
+            <item>
+             <property name="text">
+              <string>10mV</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>100mV</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>1V</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>10V</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="output_autorange_checkBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="2" column="4">
+         <widget class="QLabel" name="f2_label">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>f2</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="2">
+         <widget class="QCheckBox" name="osc3_output_enable_checkBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="amplitude1_label">
+          <property name="text">
+           <string>Ampl1</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="5">
+         <widget class="QDoubleSpinBox" name="frequency1_spinBox">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="decimals">
+           <number>4</number>
+          </property>
+          <property name="maximum">
+           <double>500000.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>17.777999999999999</double>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="5">
+         <widget class="QDoubleSpinBox" name="frequency2_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="decimals">
+           <number>4</number>
+          </property>
+          <property name="maximum">
+           <double>500000.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>1000.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QCheckBox" name="osc2_output_enable_checkBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="amplitude2_label">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Ampl2</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="4">
+         <widget class="QLabel" name="f1_label">
+          <property name="text">
+           <string>f1</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="dc_offset_label">
+          <property name="text">
+           <string>DC</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="7" rowspan="3">
+         <widget class="QLabel" name="ext_ref2_label">
+          <property name="text">
+           <string>Ext Ref 2</string>
+          </property>
+          <property name="openExternalLinks">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QCheckBox" name="output_enable_checkBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Output </string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="4">
+         <widget class="QLabel" name="f4_label">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>f4</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QDoubleSpinBox" name="phase1_spinBox">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="tabletTracking">
+           <bool>true</bool>
+          </property>
+          <property name="minimum">
+           <double>-360.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>360.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="amplitude4_label">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Ampl4</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="status_label">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>24</width>
+            <height>24</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>24</width>
+            <height>24</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>border-radius: 12px; background-color: gray; border: 1px solid #888;</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="7" rowspan="3">
+         <widget class="QLabel" name="ext_ref1_label">
+          <property name="text">
+           <string>Ext Ref 1</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout_21">
+        <item>
+         <widget class="QPushButton" name="preset_pushButton">
+          <property name="enabled">
+           <bool>true</bool>
+          </property>
+          <property name="text">
+           <string>Reset to defaults</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="demod_tabWidget">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="demod1_tab">
+      <attribute name="title">
+       <string>Demodulator 1</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_demod1">
+       <item>
+        <widget class="QGroupBox" name="groupBox_demod1_config">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="title">
+          <string>Demodulator 1 Configuration</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_demod1">
+          <item row="1" column="0">
+           <widget class="QLabel" name="oscillator_1_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Oscillator</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="time_constant_1_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Time Constant</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="harmonic_1_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Harmonic</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="filter_order_1_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Filter Order</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="adc_1_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="currentText">
+             <string>Current input</string>
+            </property>
+            <property name="currentIndex">
+             <number>1</number>
+            </property>
+            <item>
+             <property name="text">
+              <string>Voltage input</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Current input</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="enable_1_checkBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Enable</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QCheckBox" name="sinc_filter_1_checkBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Sinc filter</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="filter_order_1_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1 (6 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>2 (12 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3 (18 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>4 (24 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>5 (30 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6 (36 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>7 (42 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>8 (48 dB/oct)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QPushButton" name="auto_phase_1_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="sampling_rate1_label">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Sampling Rate</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="phase_1_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="harmonic_1_spinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>1023</number>
+            </property>
+            <property name="value">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QComboBox" name="sampling_rate_1_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1.69 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3.39 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6.78 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>13.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>27.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>54.3 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>108.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>217.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>434.2 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>868.4 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>1.74 MHz</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QDoubleSpinBox" name="phase_1_doubleSpinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-180.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="oscillator_1_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>Osc 1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 3</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 4</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="auto_range_1_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Range</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="2">
+           <widget class="QPushButton" name="zero_phase_1_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Zero Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QDoubleSpinBox" name="time_constant_1_doubleSpinBox"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_1">
+         <property name="title">
+          <string>plot</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_1">
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <property name="spacing">
+           <number>1</number>
+          </property>
+          <item row="0" column="0">
+           <layout class="QVBoxLayout" name="graph_xyrt">
+            <property name="spacing">
+             <number>0</number>
+            </property>
+            <property name="sizeConstraint">
+             <enum>QLayout::SetDefaultConstraint</enum>
+            </property>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <spacer name="verticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="demod2_tab">
+      <attribute name="title">
+       <string>Demodulator 2</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_demod2">
+       <item>
+        <widget class="QGroupBox" name="groupBox_demod2_config">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="title">
+          <string>Demodulator 2 Configuration</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_demod2">
+          <item row="1" column="0">
+           <widget class="QLabel" name="oscillator_2_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Oscillator</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="time_constant_2_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Time Constant</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="harmonic_2_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Harmonic</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="filter_order_2_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Filter Order</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="adc_2_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="currentText">
+             <string>Voltage input</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Voltage input</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Current input</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="enable_2_checkBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Enable</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QCheckBox" name="sinc_filter_2_checkBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Sinc filter</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="filter_order_2_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1 (6 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>2 (12 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3 (18 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>4 (24 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>5 (30 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6 (36 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>7 (42 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>8 (48 dB/oct)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QPushButton" name="auto_phase_2_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="sampling_rate2_label">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Sampling Rate</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="phase_2_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="harmonic_2_spinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>1023</number>
+            </property>
+            <property name="value">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QComboBox" name="sampling_rate_2_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1.69 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3.39 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6.78 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>13.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>27.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>54.3 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>108.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>217.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>434.2 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>868.4 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>1.74 MHz</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QDoubleSpinBox" name="phase_2_doubleSpinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-180.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="oscillator_2_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>Osc 1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 3</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 4</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="auto_range_2_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Range</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="2">
+           <widget class="QPushButton" name="zero_phase_2_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Zero Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QDoubleSpinBox" name="time_constant_2_doubleSpinBox"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="demod3_tab">
+      <attribute name="title">
+       <string>Demodulator 3</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_demod3">
+       <item>
+        <widget class="QGroupBox" name="groupBox_demod3_config">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="title">
+          <string>Demodulator 3 Configuration</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_demod3">
+          <item row="1" column="0">
+           <widget class="QLabel" name="oscillator_3_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Oscillator</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="time_constant_3_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Time Constant</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="harmonic_3_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Harmonic</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="filter_order_3_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Filter Order</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="adc_3_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="currentText">
+             <string>Voltage input</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Voltage input</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Current input</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="enable_3_checkBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Enable</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QCheckBox" name="sinc_filter_3_checkBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Sinc filter</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="filter_order_3_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1 (6 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>2 (12 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3 (18 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>4 (24 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>5 (30 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6 (36 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>7 (42 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>8 (48 dB/oct)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QPushButton" name="auto_phase_3_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="sampling_rate3_label">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Sampling Rate</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="phase_3_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="harmonic_3_spinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>1023</number>
+            </property>
+            <property name="value">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QComboBox" name="sampling_rate_3_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1.69 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3.39 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6.78 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>13.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>27.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>54.3 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>108.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>217.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>434.2 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>868.4 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>1.74 MHz</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QDoubleSpinBox" name="phase_3_doubleSpinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-180.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="oscillator_3_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>Osc 1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 3</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 4</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="auto_range_3_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Range</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="2">
+           <widget class="QPushButton" name="zero_phase_3_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Zero Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QDoubleSpinBox" name="time_constant_3_doubleSpinBox"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="demod4_tab">
+      <attribute name="title">
+       <string>Demodulator 4</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_demod4">
+       <item>
+        <widget class="QGroupBox" name="groupBox_demod4_config">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="title">
+          <string>Demodulator 4 Configuration</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_demod4">
+          <item row="1" column="0">
+           <widget class="QLabel" name="oscillator_4_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Oscillator</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="time_constant_4_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Time Constant</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="harmonic_4_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Harmonic</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="filter_order_4_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Filter Order</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="adc_4_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="currentText">
+             <string>Voltage input</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Voltage input</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Current input</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="enable_4_checkBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Enable</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QCheckBox" name="sinc_filter_4_checkBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Sinc filter</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="filter_order_4_comboBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1 (6 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>2 (12 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3 (18 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>4 (24 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>5 (30 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6 (36 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>7 (42 dB/oct)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>8 (48 dB/oct)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QPushButton" name="auto_phase_4_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="sampling_rate4_label">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="text">
+             <string>Sampling Rate</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="phase_4_label">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QSpinBox" name="harmonic_4_spinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="minimum">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <number>1023</number>
+            </property>
+            <property name="value">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <widget class="QComboBox" name="sampling_rate_4_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>1.69 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>3.39 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>6.78 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>13.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>27.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>54.3 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>108.6 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>217.1 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>434.2 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>868.4 kHz</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>1.74 MHz</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QDoubleSpinBox" name="phase_4_doubleSpinBox">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="suffix">
+             <string> °</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-180.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>180.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="oscillator_4_comboBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <item>
+             <property name="text">
+              <string>Osc 1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 3</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Osc 4</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="auto_range_4_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Auto Range</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="2">
+           <widget class="QPushButton" name="zero_phase_4_pushButton">
+            <property name="enabled">
+             <bool>true</bool>
+            </property>
+            <property name="text">
+             <string>Zero Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QDoubleSpinBox" name="time_constant_4_doubleSpinBox"/>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

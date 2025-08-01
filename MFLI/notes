@@ -1,0 +1,36 @@
+https://pymeasure.readthedocs.io/en/latest/api/instruments/srs/sr860.html
+
+Difference between autorange and autoscale?
+
+
+07/08/2025
+-time constance work
+-sensitivity wrong (order wrong 1-> 27) solved
+-auto sense wrong solved
+-ref source work
+-ext resistance work
+-filter wrong solved
+-phase maximum wrong solved
+-auto wrong solve
+-input mode only stay at volt: A solved?
+-input range only change volt   Solved?
+-auto wrong Solved
+-harm work
+-shield wrong solved
+-input coupleing work
+-nortch filter not work in 860
+
+
+
+Problems to report to Zurich:
+1. USB interface is called 1GbE
+2. Signal output:
+- enable autorange
+- turn on Generator 1
+- set amplitude to 1V
+Now, I would expect that after turning generator off and on it will go back to the previous state. But here is what actually happens:
+- turn OFF Generator 1
+-- Autorange is triggered and set to 10mV
+-- Amplitude of Generator 1 automatically jumps to 10mV
+- Turn ON Generator 1
+-- Amplitude is 10mV
