@@ -146,12 +146,14 @@ class K10CR1Logic(QtCore.QThread):
         pos = int(ism.ISC_GetPosition(self.serial_no))
         sleep(0.2)
         self.pass_info(f"Current pos: {pos}")
-        while not pos == move_to:
-            sleep(0.05)
+        n = 0
+        while not pos == move_to and n < 1000:
+            sleep(0.1)
             pos = int(ism.ISC_GetPosition(self.serial_no))
             self.last_deg = pos / 49152000 * 360
             self.pass_info(f"Current pos: {pos}")
             self.sig_last_pos.emit(pos)
+            n += 1
 
         self.pass_info(f"Stopping polling {ism.ISC_StopPolling(self.serial_no)}")
 
