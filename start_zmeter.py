@@ -6,6 +6,7 @@ from PyQt6 import QtWidgets
 from core.scan_info import ScanInfo
 from core.mainWindow import MainWindow
 
+
 # ------------------------------------------------------------
 # Import the equipment modules you plan to use below.  Comment out any
 # devices that are not required in your particular setup.
@@ -20,6 +21,7 @@ from core.mainWindow import MainWindow
 #from auto_focus.autofocus_main import autofocus_main
 #from auto_focus.autofocus_logic import stepper_and_galvo_xyz
 #from opticool.opticool_main import OptiCool
+from synthHD.synthHD_main import SynthHD
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -40,6 +42,7 @@ def create_equipment():
         # "Keithley_1": Keithley24xx(),
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
+        "synthHD": SynthHD(),
     }
 
     # ------------------------------------------------------------
