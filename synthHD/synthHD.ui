@@ -1,53 +1,50 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
+ <class>SynthHD</class>
+ <widget class="QWidget" name="SynthHD">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>523</width>
-    <height>133</height>
+    <width>400</width>
+    <height>500</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>SynthHD V2 Control</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QGroupBox" name="groupBox">
+    <widget class="QGroupBox" name="connectionGroup">
      <property name="title">
-      <string>connection</string>
+      <string>Connection</string>
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <widget class="QLabel" name="label_4">
+       <widget class="QLabel" name="label">
         <property name="text">
-         <string>address</string>
+         <string>Device Path:</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QComboBox" name="address_cb"/>
-      </item>
-      <item>
-       <widget class="QPushButton" name="connect_pushButton">
+       <widget class="QLineEdit" name="devicePathEdit">
         <property name="text">
-         <string>connect</string>
+         <string>COM9</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="disconnect_pushButton">
+       <widget class="QPushButton" name="connectButton">
         <property name="text">
-         <string>disconnect</string>
+         <string>Connect</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="label_6">
+       <widget class="QPushButton" name="disconnectButton">
         <property name="text">
-         <string>TextLabel</string>
+         <string>Disconnect</string>
         </property>
        </widget>
       </item>
@@ -55,75 +52,163 @@
     </widget>
    </item>
    <item>
-    <layout class="QGridLayout" name="gridLayout">
-     <item row="0" column="1">
-      <widget class="QComboBox" name="operationMode_comboBox">
-       <item>
+    <widget class="QGroupBox" name="channelGroup">
+     <property name="title">
+      <string>Channel Selection</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <item>
+       <widget class="QRadioButton" name="channelARadio">
         <property name="text">
-         <string>local</string>
+         <string>Channel A</string>
         </property>
-       </item>
-       <item>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="channelBRadio">
         <property name="text">
-         <string>remote</string>
+         <string>Channel B</string>
         </property>
-       </item>
-       <item>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="controlGroup">
+     <property name="title">
+      <string>Channel Control</string>
+     </property>
+     <layout class="QFormLayout" name="formLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_2">
         <property name="text">
-         <string>lockout</string>
+         <string>Frequency (Hz):</string>
         </property>
-       </item>
-      </widget>
-     </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="label">
-       <property name="text">
-        <string>Operation Mode</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_2">
-       <property name="text">
-        <string>Voltage Level</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QDoubleSpinBox" name="voltageLevel_doubleSpinBox"/>
-     </item>
-     <item row="1" column="2">
-      <widget class="QPushButton" name="setVoltage_pushButton">
-       <property name="text">
-        <string>Set Voltage</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="label_3">
-       <property name="text">
-        <string>Voltage Level Read</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLabel" name="voltageLevel_label">
-       <property name="text">
-        <string>0.00V</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="2">
-      <widget class="QPushButton" name="readVoltage_pushButton">
-       <property name="text">
-        <string>Read Voltage</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QDoubleSpinBox" name="frequencySpinBox">
+        <property name="suffix">
+         <string> Hz</string>
+        </property>
+        <property name="minimum">
+         <double>1000000.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>20000000000.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>1000000.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Power (dBm):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QDoubleSpinBox" name="powerSpinBox">
+        <property name="suffix">
+         <string> dBm</string>
+        </property>
+        <property name="minimum">
+         <double>-60.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>20.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>0.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>Output:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QCheckBox" name="outputCheckBox">
+        <property name="text">
+         <string>Enable Output</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="monitorGroup">
+     <property name="title">
+      <string>Monitor</string>
+     </property>
+     <layout class="QFormLayout" name="formLayout_2">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>Current Frequency:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="currentFreqLabel">
+        <property name="text">
+         <string>0 Hz</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>Current Power:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="currentPowerLabel">
+        <property name="text">
+         <string>0 dBm</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_7">
+        <property name="text">
+         <string>Output Status:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="outputStatusLabel">
+        <property name="text">
+         <string>Disabled</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTextEdit" name="logTextEdit">
+     <property name="maximumHeight">
+      <number>100</number>
+     </property>
+     <property name="placeholderText">
+      <string>Log messages will appear here...</string>
+     </property>
+    </widget>
    </item>
   </layout>
  </widget>
  <resources/>
  <connections/>
-</ui>
+</ui> 
