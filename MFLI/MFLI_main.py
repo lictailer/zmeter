@@ -7,7 +7,20 @@ import pyqtgraph as pg
 from typing import Dict, Any, Optional, Callable
 import logging
 
-from MFLI_logic import MFLI_Logic
+from .MFLI_logic import MFLI_Logic
+
+"""
+function that need to be added:
+    recommendation to disable sinc filter if frequency is above 100Hz
+    Monitor of all overranges
+    Pause data acquisition if input overrange
+    add a button to reset the demodulator parameters to default
+    add another osc field with RMS value
+    change time constant units to ms
+    add input range combobox
+    update phase spinbox when auto_phase is pressed
+"""
+
 
 
 class MFLIController:
@@ -16,11 +29,11 @@ class MFLIController:
         self.ui = ui_widget
         self.logic = logic
     
-    def safe_logic_operation(self, job: str, setpoint_updates = None):
+    def safe_logic_operation(self, job: str, setpoint_updates: Optional[Dict[str, Any]] = None):
         """Safely execute logic operations with proper threading"""
         try:
             if self.logic.isRunning():
-                self.logic.wait(1000)  # Wait up to 1 second for completion
+                self.logic.wait(2000)  # Wait up to 2 seconds for completion
             
             if setpoint_updates:
                 for attr, value in setpoint_updates.items():
@@ -30,17 +43,47 @@ class MFLIController:
             self.logic.start()
             
         except Exception as e:
-            logging.error(f"Logic operation failed: {e}")
+            self.logger.error(f"Logic operation failed: {e}")
             self.ui.show_error("Operation failed", str(e))
-
 
 class MFLI(QtWidgets.QWidget):
     """Qt GUI wrapper for MFLI lock-in amplifier"""
 
+
+    WidgetRules: dict[str, tuple[str, Callable[[QtWidgets.QWidget], Any]]] = {  #type: ignore
+        # Spin boxes emit no args on editingFinished; we call .value()
+        'spinBox':       ("editingFinished", lambda w: w.value()),
+        'doubleSpinBox': ("editingFinished", lambda w: w.value()),
+        # Combo box: use currentIndex() if you want an int, or currentText() for string
+        'comboBox':      ("currentIndexChanged", lambda w: w.currentIndex()),
+        # Check box: stateChanged emits int (0/2), we convert to bool
+        'checkBox':      ("stateChanged", lambda w: w.isChecked()),
+        # Push button: clicked emits bool (checked), usually we just treat it as a command
+        'pushButton':    ("clicked", lambda w: True)
+        }
+
+
     # Constants
     TIMER_INTERVAL = 50
-    PARAMETERS = ['frequency', 'amplitude', 'phase']
-    OSCILLATORS = [1, 2, 3, 4]
+    OSC_PARAMETERS = ['frequency', 'amplitude', 'phase']
+    OSCILLATORS = [1] #later will be increased to [1, 2, 3, 4]
+
+    DEMODS = [1, 2] #later will be increased to [1, 2, 3, 4]
+    """Demod 1 is reserved for current measurement, 
+    Demod 2 is reserved for voltage measurement"""
+
+    DEMOD_PARAMETERS = ['auto_range', 'harmonic', 'phase', 'auto_phase','zero_phase','sinc_filter', 'time_constant', 'filter_order'] # 'adc', 'rate', 'osc', 'enable'
+    
+    DEMOD_WIDGET_TYPES = {
+    'harmonic': 'spinBox',
+    'phase': 'doubleSpinBox', 
+    'time_constant': 'doubleSpinBox',
+    'auto_range': 'pushButton',
+    'zero_phase': 'pushButton',
+    'auto_phase': 'pushButton',
+    'filter_order': 'comboBox',
+    'sinc_filter': 'checkBox'
+    }
     # Signals
     stop_signal = QtCore.pyqtSignal()
     start_signal = QtCore.pyqtSignal()
@@ -56,7 +99,7 @@ class MFLI(QtWidgets.QWidget):
         self._initialize_logic()
         self._setup_connections()
         self._setup_timer()
-        self._create_dynamic_methods()
+        #self._create_dynamic_methods() #will be used later
         
     def _initialize_ui(self):
         """Initialize the UI components"""
@@ -72,6 +115,16 @@ class MFLI(QtWidgets.QWidget):
         """Initialize the logic layer and controller"""
         self.logic = MFLI_Logic()
         self.controller = MFLIController(self, self.logic)
+
+        self.get_methods = [method for method in dir(self.logic) if callable(getattr(self.logic, method)) and method.startswith("get_")]
+        self.set_methods = [
+            method
+            for method in dir(self.logic)
+            if callable(getattr(self.logic, method)) and method.startswith("set_")
+        ]
+        print("get_methods")
+        print(self.get_methods)
+        print(self.set_methods)
         
         # Populate available devices
         try:
@@ -85,9 +138,11 @@ class MFLI(QtWidgets.QWidget):
         # Device connection
         self.connect_pushButton.clicked.connect(self.connect_device) #type: ignore
         self.disconnect_pushButton.clicked.connect(self.disconnect_device) #type: ignore
-        
+        self.stop_acquisition_button.clicked.connect(self.stop_timer)
+        self.start_acquisition_button.clicked.connect(self.start_timer)
+
         # Basic output controls
-        self.output_enable_checkBox.stateChanged.connect(self.set_output_enable) #type: ignore
+        #self.output_enable_checkBox.stateChanged.connect(self.set_output_enable) #type: ignore
         self.differential_output_checkBox.stateChanged.connect(self.set_differential_output) #type: ignore
         self.dc_offset_spinBox.editingFinished.connect(self.set_dc_offset) #type: ignore
         self.preset_pushButton.clicked.connect(self.preset) #type: ignore
@@ -95,14 +150,16 @@ class MFLI(QtWidgets.QWidget):
         # Output range controls
         self.output_autorange_checkBox.stateChanged.connect(self.set_output_autorange) #type: ignore
         self.output_range_comboBox.currentTextChanged.connect(self.set_output_range) #type: ignore
+        #self.filter_order_1_comboBox.currentIndexChanged.connect(self.set_filter_order_1) #type: ignore
         
         # Dynamic connections for oscillators and parameters
-        self._setup_dynamic_connections()
+        self._setup_dynamic_osc_connections()
         
         # Logic signals
         self._setup_logic_connections()
-
-    def _setup_dynamic_connections(self):
+        self._setup_dynamic_demod_connections()
+        #self.filter_order_1_comboBox.currentIndexChanged.connect(lambda value: self.set_filter_order(1, value))
+    def _setup_dynamic_osc_connections(self):
         """Setup connections for oscillators and parameters dynamically"""
         # Oscillator enable checkboxes
         for i in self.OSCILLATORS:
@@ -110,7 +167,7 @@ class MFLI(QtWidgets.QWidget):
             checkbox.stateChanged.connect(lambda state, osc=i: self.set_osc_output_enable(osc, state)) #type: ignore
         
         # Parameter spin boxes
-        for param in self.PARAMETERS:
+        for param in self.OSC_PARAMETERS:
             for i in self.OSCILLATORS:
                 spinbox = getattr(self, f'{param}{i}_spinBox') #type: ignore
                 spinbox.editingFinished.connect(lambda p=param, num=i: self.set_parameter(p, num)) #type: ignore
@@ -118,7 +175,32 @@ class MFLI(QtWidgets.QWidget):
                 # Disable keyboard tracking for smoother performance
                 if hasattr(spinbox, 'setKeyboardTracking'): #type: ignore
                     spinbox.setKeyboardTracking(False) #type: ignore
+    
+    def _setup_dynamic_demod_connections(self):
+        # Add demodulator connections
+        for param in self.DEMOD_PARAMETERS:
+            for demod_num in self.DEMODS:
+                if param in ['auto_range', 'auto_phase', 'zero_phase']:
+                    getattr(self, f"{param}_{demod_num}_pushButton").clicked.connect(getattr(self, f"set_{param}_{demod_num}")) #type: ignore
+                else: #param in ['phase','sinc_filter', 'time_constant', 'filter_order']'
+                    widget_type = self.DEMOD_WIDGET_TYPES[param]        #'comboBox'
+                    widget_name = f'{param}_{demod_num}_{widget_type}'  #'filter_order_1_comboBox'
+                    widget = getattr(self, widget_name)                 #self.filter_order_1_comboBox
+                    signal_name, getter = self.WidgetRules[widget_type] #('currentIndexChanged', lambda w: w.currentIndex())
+                    signal = getattr(widget, signal_name)              #self.filter_order_1_comboBox.currentIndexChanged
+                    
+                    function_to_call = getattr(self, f"set_{param}_{demod_num}")  #self.set_filter_order_1
+                    signal.connect(lambda *args, f=function_to_call, g=getter, w=widget: f(g(w)))  #self.filter_order_1_comboBox.currentIndexChanged.connect()
+                    
+                    
 
+                    """this need to be checked if it is needed"""
+                    # Optional: disable keyboard tracking for spin boxes
+                    if hasattr(widget, "setKeyboardTracking"): #type: ignore
+                        widget.setKeyboardTracking(False) #type: ignore
+                
+    
+    
     def _setup_logic_connections(self):
         """Setup connections to logic layer signals"""
         signal_mappings = {
@@ -130,11 +212,29 @@ class MFLI(QtWidgets.QWidget):
             'sig_preset_basic': self.preset,
             'sig_output_autorange': self.update_output_autorange,
             'sig_output_range': self.update_output_range,
-            'sig_X': self.update_X,
-            'sig_Y': self.update_Y,
-            'sig_R': self.update_R,
-            'sig_Theta': self.update_Theta,
-        }
+            'sig_X1': self.update_X1,
+            'sig_Y1': self.update_Y1,
+            'sig_R1': self.update_R1,
+            'sig_Theta1': self.update_Theta1,
+            'sig_X2': self.update_X2,
+            'sig_Y2': self.update_Y2,
+            'sig_R2': self.update_R2,
+            'sig_Theta2': self.update_Theta2,
+            #demod 1
+            #sig_auto_range_1': self.auto_range_1, 
+            'sig_sinc_filter_1': self.update_sinc_filter_1,
+            'sig_filter_order_1': self.update_filter_order_1,
+            'sig_time_constant_1': self.update_time_constant_1,
+            'sig_harmonic_1': self.update_harmonic_1,
+            'sig_phase_1': self.update_phase_1,
+
+            #demod 2
+            'sig_sinc_filter_2': self.update_sinc_filter_2,
+            'sig_filter_order_2': self.update_filter_order_2,
+            'sig_time_constant_2': self.update_time_constant_2,
+            'sig_harmonic_2': self.update_harmonic_2,
+            'sig_phase_2': self.update_phase_2,
+            }
         
         for signal_name, slot in signal_mappings.items():
             if hasattr(self.logic, signal_name):
@@ -144,17 +244,21 @@ class MFLI(QtWidgets.QWidget):
         for i in self.OSCILLATORS:
             osc_signal = f'sig_osc{i}_output_enable'
             if hasattr(self.logic, osc_signal):
-                getattr(self.logic, osc_signal).connect(
-                    lambda state, osc=i: self.update_osc_output_enable(osc, state)
-                )
+                getattr(self.logic, osc_signal).connect(lambda state, osc=i: self.update_osc_output_enable(osc, state))
         
-        for param in self.PARAMETERS:
+        for param in self.OSC_PARAMETERS:
             for i in self.OSCILLATORS:
                 signal_name = f'sig_{param}{i}'
                 if hasattr(self.logic, signal_name):
                     getattr(self.logic, signal_name).connect(
                         lambda value, p=param, num=i: self.update_parameter(p, num, value)
                     )
+
+        for param in self.DEMOD_PARAMETERS:
+            for demod_num in self.DEMODS:
+                signal_name = f'sig_{param}_{demod_num}'
+                if hasattr(self.logic, signal_name):
+                    getattr(self.logic, signal_name).connect(lambda value, p=param, num=demod_num: self.update_demod_parameter(p, num, value))
 
     def _setup_timer(self):
         """Setup the monitoring timer"""
@@ -201,7 +305,10 @@ class MFLI(QtWidgets.QWidget):
     
     def _is_widget_focused(self, widget) -> bool:
         """Check if widget's line edit has focus"""
-        return hasattr(widget, 'lineEdit') and widget.lineEdit().hasFocus()
+        if hasattr(widget, 'lineEdit'):
+            if hasattr(widget.lineEdit(), 'hasFocus'):
+                return True
+        return False
     
     def _validate_parameter(self, param: str, value: float) -> bool:
         """Validate parameter values"""
@@ -220,24 +327,40 @@ class MFLI(QtWidgets.QWidget):
     # ============================================================================
     def _add_plot(self):
         # ----- helper plot widget (X, Y, R, Theta streams) -----
-        w = pg.GraphicsLayoutWidget(show=True)
-        w.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
-        self.plot_x = w.addPlot(row=0, col=0)
-        self.plot_y = w.addPlot(row=1, col=0)
-        self.plot_r = w.addPlot(row=0, col=1)
-        self.plot_t = w.addPlot(row=1, col=1)
+        w1 = pg.GraphicsLayoutWidget(show=True)
+        w1.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.plot_x = w1.addPlot(row=0, col=0)
+        self.plot_y = w1.addPlot(row=0, col=1)
+        self.plot_r = w1.addPlot(row=0, col=2)
+        self.plot_t = w1.addPlot(row=0, col=3)
         self.plot_x.setTitle("X")
         self.plot_y.setTitle("Y")
         self.plot_r.setTitle("R")
         self.plot_t.setTitle("Theta")
         # *graph_xyrt* is a QVBoxLayout placeholder defined in the .ui file
-        self.graph_xyrt.addWidget(w)
+        self.graph_1_xyrt.addWidget(w1) #type: ignore
+
+        w2 = pg.GraphicsLayoutWidget(show=True)
+        w2.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.plot_x2 = w2.addPlot(row=0, col=0)
+        self.plot_y2 = w2.addPlot(row=0, col=1)
+        self.plot_r2 = w2.addPlot(row=0, col=2)
+        self.plot_t2 = w2.addPlot(row=0, col=3)
+        self.plot_x2.setTitle("X")
+        self.plot_y2.setTitle("Y")
+        self.plot_r2.setTitle("R")
+        self.plot_t2.setTitle("Theta")
+        self.graph_2_xyrt.addWidget(w2) #type: ignore
 
     def _initialize_plot_buffers(self):
-        self.x_log = np.full(200, np.nan, dtype=float)
-        self.y_log = np.full(200, np.nan, dtype=float)
-        self.r_log = np.full(200, np.nan, dtype=float)
-        self.t_log = np.full(200, np.nan, dtype=float)
+        self.x1_log = np.full(200, np.nan, dtype=float)
+        self.y1_log = np.full(200, np.nan, dtype=float)
+        self.r1_log = np.full(200, np.nan, dtype=float)
+        self.t1_log = np.full(200, np.nan, dtype=float)
+        self.x2_log = np.full(200, np.nan, dtype=float)
+        self.y2_log = np.full(200, np.nan, dtype=float)
+        self.r2_log = np.full(200, np.nan, dtype=float)
+        self.t2_log = np.full(200, np.nan, dtype=float)
 
     def stop_timer(self):
         """Stop the monitoring timer"""
@@ -297,6 +420,10 @@ class MFLI(QtWidgets.QWidget):
             self.logger.error(f"Disconnection failed: {e}")
             self.show_error("Disconnection Error", f"Failed to disconnect: {str(e)}")
 
+    def terminate_dev(self):
+        self.logic.disconnect_device()
+        print("MFLI terminated.")
+    
     # ============================================================================
     # Generic Parameter Methods
     # ============================================================================
@@ -333,6 +460,60 @@ class MFLI(QtWidgets.QWidget):
             
         except AttributeError as e:
             self.logger.error(f"Parameter update failed: {e}")
+
+
+    def set_demod_parameter(self, param: str, demod_num: int):
+        """Generic method to set demodulator parameters
+        dynamic method to set demodulator parameters:
+        """
+        try:
+            widget_type = self.DEMOD_WIDGET_TYPES[param]        #'spinbox'
+            widget_name = f'{param}_{demod_num}_{widget_type}'  #'filter_order_1_spinBox'
+            widget = getattr(self, widget_name)                 #self.filter_order_1_spinBox
+
+            # Get current value using WidgetRules
+            _, getter = self.WidgetRules[widget_type]        
+            value = getter(widget)                           
+
+            setpoint_attr = f'setpoint_demod_{param}_{demod_num}' #'setpoint_demod_filter_order_1'
+            job = f'set_demod_{param}_{demod_num}'              #'set_demod_filter_order_1'
+
+            self.controller.safe_logic_operation(job, {setpoint_attr: value})
+
+        except AttributeError as e:
+            self.logger.error(f"Demod parameter setting failed: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error in set_demod_parameter: {e}")
+
+    def update_demod_parameter(self, param: str, demod_num: int, value):
+        """Generic method to update demodulator parameter display"""
+        try:
+            widget_type = self.DEMOD_WIDGET_TYPES[param]
+            widget_name = f'{param}_{demod_num}_{widget_type}'
+            widget = getattr(self, widget_name)
+
+            _, getter = self.WidgetRules[widget_type]
+            value = getter(widget)
+
+            if widget_type == 'checkBox':
+                self._safely_update_widget(widget, bool(value), bool)
+            elif widget_type == 'pushButton':       
+                pass
+            elif self._is_widget_focused(widget):
+                return
+            elif widget_type in ('spinBox', 'doubleSpinBox'):
+                self._safely_update_widget(widget, value, float)
+            elif widget_type == 'comboBox':
+                self._safely_update_widget(widget, int(value), int)
+            
+        except AttributeError as e:
+            self.logger.error(f"Demod parameter update failed: {e}")
+
+    def trigger_demod_action(self, param: str, demod_num: int):
+        """Handle pushButton actions for demodulators"""
+        job = f'trigger_{param}_{demod_num}'
+        self.controller.safe_logic_operation(job)
+
 
     # ============================================================================
     # Oscillator Control Methods
@@ -439,34 +620,191 @@ class MFLI(QtWidgets.QWidget):
         self.controller.safe_logic_operation('preset_basic')
 
 
-    def update_X(self, val):
-        self.x_log[:-1] = self.x_log[1:]
-        self.x_log[-1] = val
+    def update_X1(self, val):
+        self.x1_log[:-1] = self.x1_log[1:]
+        self.x1_log[-1] = val
         pen = pg.mkPen((255, 255, 255), width=3)
-        self.plot_x.plot(self.x_log, clear=True, pen=pen)
+        self.plot_x.plot(self.x1_log, clear=True, pen=pen)
 
-    def update_Y(self, val):
-        self.y_log[:-1] = self.y_log[1:]
-        self.y_log[-1] = val
+    def update_Y1(self, val):
+        self.y1_log[:-1] = self.y1_log[1:]
+        self.y1_log[-1] = val
         pen = pg.mkPen((255, 255, 255), width=3)
-        self.plot_y.plot(self.y_log, clear=True, pen=pen)
+        self.plot_y.plot(self.y1_log, clear=True, pen=pen)
 
-    def update_R(self, val):
-        self.r_log[:-1] = self.r_log[1:]
-        self.r_log[-1] = val
+    def update_R1(self, val):
+        self.r1_log[:-1] = self.r1_log[1:]
+        self.r1_log[-1] = val
         pen = pg.mkPen((255, 255, 255), width=3)
-        self.plot_r.plot(self.r_log, clear=True, pen=pen)
+        self.plot_r.plot(self.r1_log, clear=True, pen=pen)
 
-    def update_Theta(self, val):
-        self.t_log[:-1] = self.t_log[1:]
-        self.t_log[-1] = val
+    def update_Theta1(self, val):
+        self.t1_log[:-1] = self.t1_log[1:]
+        self.t1_log[-1] = val
         pen = pg.mkPen((255, 255, 255), width=3)
-        self.plot_t.plot(self.t_log, clear=True, pen=pen)
+        self.plot_t.plot(self.t1_log, clear=True, pen=pen)
+
+    def update_X2(self, val):
+        self.x2_log[:-1] = self.x2_log[1:]
+        self.x2_log[-1] = val
+        pen = pg.mkPen((255, 255, 255), width=3)
+        self.plot_x2.plot(self.x2_log, clear=True, pen=pen)
+
+    def update_Y2(self, val):
+        self.y2_log[:-1] = self.y2_log[1:]
+        self.y2_log[-1] = val
+        pen = pg.mkPen((255, 255, 255), width=3)
+        self.plot_y2.plot(self.y2_log, clear=True, pen=pen)
+
+    def update_R2(self, val):
+        self.r2_log[:-1] = self.r2_log[1:]
+        self.r2_log[-1] = val
+        pen = pg.mkPen((255, 255, 255), width=3)
+        self.plot_r2.plot(self.r2_log, clear=True, pen=pen)
+        
+    def update_Theta2(self, val):
+        self.t2_log[:-1] = self.t2_log[1:]
+        self.t2_log[-1] = val
+        pen = pg.mkPen((255, 255, 255), width=3)
+        self.plot_t2.plot(self.t2_log, clear=True, pen=pen)
+
+    #demodulators
+    def set_auto_range_1(self):
+        """Set auto range for demodulator 1"""
+        print("set_auto_range_1")
+        self.controller.safe_logic_operation('set_auto_range_1')
+
+    def set_auto_range_2(self):
+        """Set auto range for demodulator 2"""
+        self.controller.safe_logic_operation('set_auto_range_2')
+
+    def set_auto_phase_1(self):
+        """Set auto phase for demodulator 1"""
+        self.controller.safe_logic_operation('set_auto_phase_1')
+    
+    def set_auto_phase_2(self):
+        """Set auto phase for demodulator 2"""
+        self.controller.safe_logic_operation('set_auto_phase_2')
+    
+    def set_zero_phase_1(self):
+        """Set zero phase for demodulator 1"""  
+        self.controller.safe_logic_operation('set_zero_phase_1')
+    
+    def set_zero_phase_2(self):
+        """Set zero phase for demodulator 2"""
+        self.controller.safe_logic_operation('set_zero_phase_2')
+        
+
+    def set_sinc_filter_1(self, state: Optional[bool] = None):
+        """Set sinc filter for demodulator 1"""
+        val = bool(state) if state is not None else self.sinc_filter_1_checkBox.isChecked() #type: ignore
+        
+        self.controller.safe_logic_operation('set_sinc_filter_1', {'setpoint_sinc_filter_1': val})
+
+    def update_sinc_filter_1(self, val: bool):
+        """Update sinc filter display"""
+        self._safely_update_widget(self.sinc_filter_1_checkBox, val) #type: ignore
+
+    def set_sinc_filter_2(self, state: Optional[bool] = None):
+        """Set sinc filter for demodulator 2"""
+        val = bool(state) if state is not None else self.sinc_filter_2_checkBox.isChecked() #type: ignore
+        self.controller.safe_logic_operation('set_sinc_filter_2', {'setpoint_sinc_filter_2': val})
+
+    def update_sinc_filter_2(self, val: bool):
+        """Update sinc filter display"""
+        self._safely_update_widget(self.sinc_filter_2_checkBox, val) #type: ignore
+
+    def set_filter_order_1(self, value: int):
+        """Set filter order for demodulator 1"""
+        val = int(value) + 1 if value is not None else self.filter_order_1_comboBox.currentIndex() + 1
+        self.controller.safe_logic_operation('set_filter_order_1', {'setpoint_filter_order_1': val})
+
+    def update_filter_order_1(self, val: int):
+        """Update filter order display"""
+        self._safely_update_widget(self.filter_order_1_comboBox, val) #type: ignore
+    
+    def set_filter_order_2(self, value: int):
+        """Set filter order for demodulator 2"""
+        val = int(value) + 1 if value is not None else self.filter_order_2_comboBox.currentIndex() + 1
+        self.controller.safe_logic_operation('set_filter_order_2', {'setpoint_filter_order_2': val})
+    
+    def update_filter_order_2(self, val: int):
+        """Update filter order display"""
+        self._safely_update_widget(self.filter_order_2_comboBox, val) #type: ignore
+        
+    def set_phase_1(self, value: float):
+        """Set phase for demodulator 1"""
+        value = float(value) if value is not None else self.phase_1_doubleSpinBox.value() #type: ignore
+        self.controller.safe_logic_operation('set_phase_1', {'setpoint_phase_1': value})
+    
+    def update_phase_1(self, val: float):
+        """Update DC offset display"""
+        if self._is_widget_focused(self.phase_1_doubleSpinBox): #type: ignore
+            return
+        self._safely_update_widget(self.phase_1_doubleSpinBox, val, float) #type: ignore
+
+    def set_phase_2(self, value: float):
+        """Set phase for demodulator 2"""
+        value = float(value) if value is not None else self.phase_2_doubleSpinBox.value() #type: ignore
+        self.controller.safe_logic_operation('set_phase_2', {'setpoint_phase_2': value})
+    
+    def update_phase_2(self, val: float):
+        """Update phase display"""  
+        if self._is_widget_focused(self.phase_2_doubleSpinBox): #type: ignore
+            return
+        self._safely_update_widget(self.phase_2_doubleSpinBox, val, float) #type: ignore
+
+
+    def set_time_constant_1(self, value: float):
+        """Set time constant for demodulator 1"""
+        val = float(value) if value is not None else self.time_constant_1_doubleSpinBox.value() #type: ignore
+        self.controller.safe_logic_operation('set_time_constant_1', {'setpoint_time_constant_1': val})
+    
+    def update_time_constant_1(self, val: float):
+        """Update time constant display"""
+        if self._is_widget_focused(self.time_constant_1_doubleSpinBox): #type: ignore
+            return
+        self._safely_update_widget(self.time_constant_1_doubleSpinBox, val, float) #type: ignore
+
+    def set_time_constant_2(self, value: float):
+        """Set time constant for demodulator 2"""
+        val = float(value) if value is not None else self.time_constant_2_doubleSpinBox.value() #type: ignore
+        self.controller.safe_logic_operation('set_time_constant_2', {'setpoint_time_constant_2': val})
+    
+    def update_time_constant_2(self, val: float):
+        """Update time constant display"""
+        if self._is_widget_focused(self.time_constant_2_doubleSpinBox): #type: ignore
+            return
+        self._safely_update_widget(self.time_constant_2_doubleSpinBox, val, float) #type: ignore
+    
+
+    def set_harmonic_1(self, value: int):
+        """Set harmonic for demodulator 1"""
+        val = int(value) if value is not None else self.harmonic_1_spinBox.value() #type: ignore
+        self.controller.safe_logic_operation('set_harmonic_1', {'setpoint_harmonic_1': val})
+    
+    def update_harmonic_1(self, val: int):
+        """Update harmonic display"""
+        if self._is_widget_focused(self.harmonic_1_spinBox): #type: ignore
+            return
+        self._safely_update_widget(self.harmonic_1_spinBox, val) #type: ignore
+
+    def set_harmonic_2(self, value: int):
+        """Set harmonic for demodulator 2"""
+        val = int(value) if value is not None else self.harmonic_2_spinBox.value() #type: ignore
+        self.controller.safe_logic_operation('set_harmonic_2', {'setpoint_harmonic_2': val})
+
+    def update_harmonic_2(self, val: int):
+        """Update harmonic display"""
+        if self._is_widget_focused(self.harmonic_2_spinBox): #type: ignore
+            return
+        self._safely_update_widget(self.harmonic_2_spinBox, val) #type: ignore
+
     # ============================================================================
     # Cleanup and Event Handling
     # ============================================================================
     
-    def closeEvent(self, a0):
+    '''def closeEvent(self, a0):
         """Properly cleanup resources on close"""
         self.logger.info("Closing MFLI application...")
         
@@ -491,7 +829,7 @@ class MFLI(QtWidgets.QWidget):
             self.logger.error(f"Error during cleanup: {e}")
         finally:
             a0.accept() #type: ignore
-
+    '''
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
@@ -501,5 +839,5 @@ if __name__ == "__main__":
         window.show()
         sys.exit(app.exec())
     except Exception as e:
-        logging.error(f"Application failed to start: {e}")
+        self.logger.error(f"Application failed to start: {e}")
         sys.exit(1)

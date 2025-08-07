@@ -890,7 +890,7 @@ class MFLI_Hardware:
             logging.error(f"Failed to get demodulator frequency: {e}")
             raise MFLIHardwareError(f"get_demod_frequency failed: {e}")
 
-    def set_demod_phase_adjust(self, demod_index=0):
+    def set_demod_auto_phase(self, demod_index=0):
         """Automatically adjust the demodulator phase to read 0 degrees.
         This is a trigger action, not a setting.
         
@@ -906,7 +906,7 @@ class MFLI_Hardware:
             logging.info(f"Triggered phase auto-adjustment for demodulator {demod_index}")
         except Exception as e:
             logging.error(f"Failed to trigger phase adjustment: {e}")
-            raise MFLIHardwareError(f"set_demod_phase_adjust failed: {e}")
+            raise MFLIHardwareError(f"set_demod_auto_phase failed: {e}")
 
     def set_demod_sinc_filter(self, demod_index=0, enable=True):
         """Enable/disable the sinc filter for the demodulator.
@@ -1050,6 +1050,8 @@ class MFLI_Hardware:
             self.daq.subscribe(sample_path)
             time.sleep(0.01)
             data = self.daq.poll(recording_time_s=poll_length, timeout_ms=int(timeout * 1000), flags=0, flat=True)
+            self.daq.unsubscribe('*')  # Fallback cleanup
+
             if sample_path not in data:
                 logging.warning(f"No data path found for demodulator {demod_index}")
                 return None
@@ -1087,34 +1089,22 @@ class MFLI_Hardware:
             except (ValueError, TypeError) as e:
                 logging.error(f"Data type conversion failed: {e}")
                 return None
-            
-            
+
             x_avg = np.mean(x_samples)
             y_avg = np.mean(y_samples)
             r_avg = np.sqrt(x_avg**2 + y_avg**2)
         
             frequency_latest = frequency_samples[-1]
             phase_latest = phase_samples[-1]
-            
-            
             return {'x': x_avg, 'y': y_avg, 'r': r_avg, 'phase': phase_latest, 'frequency': frequency_latest}
             
         except Exception as e:
             logging.error(f"Failed to get demodulator sample: {e}")
             raise MFLIHardwareError(f"get_demod_sample failed: {e}")
             
-        finally:  #safe unsubscribe
-            try:
-                self.daq.unsubscribe(sample_path)
-                logging.debug(f"Unsubscribed from {sample_path}")
-            except Exception as cleanup_error:
-                logging.warning(f"Error during cleanup: {cleanup_error}")
-                try:
-                    self.daq.unsubscribe('*')  # Fallback cleanup
-                except:
-                    pass
-
-
+        
+                    
+        
     # -------------- EXTREFS (External References) --------------
     
     def set_osc_to_external_ref(self, demod_index=0):

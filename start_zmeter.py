@@ -10,16 +10,17 @@ from core.mainWindow import MainWindow
 # Import the equipment modules you plan to use below.  Comment out any
 # devices that are not required in your particular setup.
 # ------------------------------------------------------------
-from sr830.sr830_main import SR830
+#from sr830.sr830_main import SR830
 #from sr860.sr860_main import SR860
 from hp34401a.hp34401a_main import HP34401A
+from MFLI.MFLI_main import MFLI
 #from nidaq.nidaq_main import NIDAQ
 #from keithley24xx.keithley24xx_main import Keithley24xx
 # from k10cr1.k10cr1_main import K10CR1
 # from tlpm.tlpm_main import TLPM
-from auto_focus.autofocus_main import autofocus_main
-from auto_focus.autofocus_logic import stepper_and_galvo_xyz
-from opticool.opticool_main import OptiCool
+#from auto_focus.autofocus_main import autofocus_main
+#from auto_focus.autofocus_logic import stepper_and_galvo_xyz
+#from opticool.opticool_main import OptiCool
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -33,7 +34,8 @@ def create_equipment():
         # "lockin_2": SR830(),
         # "sr860_test": SR860(),
         #"nidaq_0": NIDAQ(),
-        "DMM_A": HP34401A(),
+        #"DMM_A": HP34401A(),
+        "MFLI": MFLI(),
         # "HWP": K10CR1(),
         # "HWP_1": K10CR1(),
         #"Keithley_0": Keithley24xx(),
@@ -50,7 +52,8 @@ def create_equipment():
     # equips["HWP_1"].connect(serial="55243324")
     # equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
     # equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
-    equips["DMM_A"].connect_visa("GPIB0::21::INSTR")
+    #equips["DMM_A"].connect_visa("GPIB0::21::INSTR")
+    equips["MFLI"].connect_device("dev30037")
     # equips["Keithley_0"].connect_visa("GPIB2::18::INSTR")
     # equips["Keithley_1"].connect_visa("GPIB::18::INSTR")
     # equips["sr860_test"].connect_visa("GPIB0::7::INSTR")
