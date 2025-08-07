@@ -209,12 +209,12 @@ class MFLI_Logic(QtCore.QThread):
             self.sig_is_changing.emit(f"Error getting frequency: {e}")
             raise
     
-    def set_frequency1(self, osc_index=0):
+    def set_frequency1(self, f_hz = None, osc_index=0):
         if self.hardware is None:
             raise RuntimeError("Hardware not connected")
         try:
-            freq  = float(self.setpoint_frequency1)
-            self.hardware.set_osc_frequency(osc_index = int(osc_index), f_hz = freq)
+            freq = float(f_hz) if f_hz is not None else float(self.setpoint_frequency1)
+            self.hardware.set_osc_frequency(osc_index = osc_index, f_hz = freq)
             self.sig_is_changing.emit(f"frequency set to {freq} (osc {int(osc_index)})")
             self.sig_frequency1.emit(freq)
         except (MFLIHardwareError, Exception) as e:
@@ -233,12 +233,12 @@ class MFLI_Logic(QtCore.QThread):
         except (MFLIHardwareError, Exception) as e:
             self.sig_is_changing.emit(f"Error getting amplitude: {e}")
             raise
-    def set_amplitude1(self, osc_index=0):
+    def set_amplitude1(self, amp = None, osc_index=0):
         if self.hardware is None:
             raise RuntimeError("Hardware not connected")
         try:
-            amp = self.setpoint_amplitude1
-            self.hardware.set_osc_amplitude(osc_index = int(osc_index), amplitude = amp)
+            amp = float(amp) if amp is not None else float(self.setpoint_amplitude1)
+            self.hardware.set_osc_amplitude(osc_index = osc_index, amplitude = amp)
             self.sig_is_changing.emit(f"amplitude set to {amp} (osc {int(osc_index)})")
             self.sig_amplitude1.emit(amp)
         except (MFLIHardwareError, Exception) as e:
