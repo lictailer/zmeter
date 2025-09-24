@@ -46,16 +46,16 @@ def create_equipment():
     # ------------------------------------------------------------
     # Connection commands – adjust to match your instrument addresses.
     # ------------------------------------------------------------
-    equips["nidaq_0"].connect("Dev1")
-    equips["nidaq_1"].connect("Dev2")
+    # equips["nidaq_0"].connect("Dev1")
+    # equips["nidaq_1"].connect("Dev2")
     # equips["HWP"].connect(serial="55369504")
     # equips["HWP_1"].connect(serial="55243324")
     # equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
     # equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
     # equips["DMM_A"].connect_visa("GPIB0::21::INSTR")
-    equips["Keithley_0"].connect_visa("GPIB0::1::INSTR")
+    # equips["Keithley_0"].connect_visa("GPIB0::1::INSTR")
     # equips["Keithley_1"].connect_visa("GPIB::18::INSTR")
-    equips["sr860_test"].connect_visa("GPIB0::2::INSTR")
+    # equips["sr860_test"].connect_visa("GPIB0::2::INSTR")
     # equips["tlpm_0"].connect()
 
     return equips
