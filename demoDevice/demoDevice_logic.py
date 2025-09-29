@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PyQt6 import QtCore  # type: ignore
 import time
-from .demoDevice_hardware import DemoDeviceHardware
+from demoDevice_hardware import DemoDeviceHardware
 
 
 class DemoDeviceLogic(QtCore.QThread):
@@ -113,7 +113,8 @@ class DemoDeviceLogic(QtCore.QThread):
         self.sig_is_changing.emit(
             f"voltage_level set to {self.setpoint_voltage_level} V"
         )
-        self.sig_voltage_level.emit(self.setpoint_voltage_level)
+        # Enable this will automatically update the voltage level, but this is only the setpoint voltage level
+        self.sig_voltage_level.emit(self.setpoint_voltage_level) 
 
     # -------------- bulk helper ---------------------
     def get_all(self):
@@ -153,7 +154,8 @@ class DemoDeviceLogic(QtCore.QThread):
 # Example usage – runs only when file is executed directly
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    ADDRESS = "GPIB0::1::INSTR"  # TODO: change to your VISA resource
+    # ADDRESS = "GPIB0::1::INSTR"  # TODO: change to your VISA resource
+    ADDRESS = "DUMMY::INSTR"
     logic = DemoDeviceLogic()
     logic.connect_visa(ADDRESS)
 
