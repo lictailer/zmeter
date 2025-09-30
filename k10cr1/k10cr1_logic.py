@@ -7,6 +7,7 @@ from ctypes import (
     c_int,
 )
 from PyQt6 import QtCore
+from collections import deque
 
 
 class K10CR1Logic(QtCore.QThread):
@@ -146,12 +147,35 @@ class K10CR1Logic(QtCore.QThread):
         pos = int(ism.ISC_GetPosition(self.serial_no))
         sleep(0.2)
         self.pass_info(f"Current pos: {pos}")
-        while not pos == move_to:
-            sleep(0.05)
+        n = 0
+
+        last5 = deque(maxlen=5)
+
+        while True:
+            sleep(0.1)
             pos = int(ism.ISC_GetPosition(self.serial_no))
+            last5.append(pos)
+
             self.last_deg = pos / 49152000 * 360
             self.pass_info(f"Current pos: {pos}")
             self.sig_last_pos.emit(pos)
+
+            # 1) Reached target modulo full turns: pos == move_to ± wrap*n
+            if (pos - move_to) % 49152000 == 0:
+                self.pass_info("Reached target (mod one full turn).")
+                break
+
+            # 2) Last five positions are identical -> stuck, break
+            if len(last5) == last5.maxlen and len(set(last5)) == 1:
+                self.pass_info(f"Position unchanged for {last5.maxlen} reads (stuck at {pos}). Stopping.")
+                break
+
+            # 3) Iteration cap
+            n += 1
+            if n > 1000:
+                self.pass_info("Iteration limit exceeded (n > 1000). Stopping.")
+                break
+
 
         self.pass_info(f"Stopping polling {ism.ISC_StopPolling(self.serial_no)}")
 
