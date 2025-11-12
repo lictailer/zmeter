@@ -14,13 +14,20 @@ A Python-based toolkit for precision electro-optical measurements.
 - Lock-in amplifier SR860
 - Source-meter Keithley 2400
 - Source-meter Keithley 2450
+- National Instrument Data Aquaistion Nidaq
+- Thorlabs power meter PM100x series
   
 **Upcoming updates:**
+
+https://docs.google.com/spreadsheets/d/1Z7CwgLiQfW-cj0vrgtMSLtcA21VU4lwzqTvWpBX69pw/edit?usp=sharing
 - Montana instruments cryostat
+- Attodry crystat
+- Four9 Cryostat
 - Digital Multimeter 34401A (Agilent)
 - Lock-in amplifier MFLI (Zurich Instruments)
 - RF generator SynthHD (Windfreak Technologies)
 - Spectrum Analyzer N9324C (Keysight)
+- Insight X3
 ---
 
 ## Features
