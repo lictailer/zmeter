@@ -64,9 +64,6 @@ class SR860(QtWidgets.QWidget):
             for method in dir(self.logic)
             if callable(getattr(self.logic, method)) and method.startswith("set_")
         ]
-        print("get_methods")
-        print(self.get_methods)
-        print(self.set_methods)
 
         # ----- connect logic signals to update-slots -----
         self.logic.sig_frequency.connect(self.update_frequency)

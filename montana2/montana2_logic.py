@@ -1,6 +1,6 @@
 from PyQt6 import QtCore
 import time
-from montana2_hardware import Montana2Hardware
+from .montana2_hardware import Montana2Hardware
 
 
 class Montana2Logic(QtCore.QThread):
@@ -22,6 +22,7 @@ class Montana2Logic(QtCore.QThread):
 
         self.is_connected: bool = False
         self.reject_signal: bool = False
+        self.stable_wait_stop: bool = False
 
         self.hardware = Montana2Hardware()
 
@@ -107,11 +108,14 @@ class Montana2Logic(QtCore.QThread):
         start_time = time.time()
         stable_reached = False
 
+        QtCore.QThread.msleep(1000)
+
         while True:
             # check stability
             stable = self.get_platform_temperature_stable()
             if stable:
                 stable_reached = True
+                self.sig_status.emit(f"Temperature is now stable at {target}K.")
                 break
 
             # emit intermediate updates
@@ -134,6 +138,7 @@ class Montana2Logic(QtCore.QThread):
             QtCore.QThread.msleep(1000)
 
         if stable_reached:
+            minutes = int((time.time() - start_time) / 60)
             self.sig_status.emit(f"Target temperature {target} reached and stable. {minutes} minutes waited.")
             self.sig_status.emit(f"Waiting additional {self.set_temperature_buffer_time_s} seconds for buffer time.")
             QtCore.QThread.msleep(self.set_temperature_buffer_time_s * 1000)
@@ -173,9 +178,8 @@ class Montana2Logic(QtCore.QThread):
 
 if __name__ == "__main__":
     logic = Montana2Logic()
-    logic.connect("1.1.1.1")
-    logic.connect("136.167.55.165")
+    logic.ipaddress = "136.167.55.165"
+    logic.connect()
     logic.get_platform_temperature()
     logic.get_platform_temperature_stable()
-    logic.set_platform_target_temperature(4.0)
-    logic.get_platform_target_temperature()
+    logic.set_platform_target_temperature_to_stable(4.0)

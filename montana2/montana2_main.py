@@ -4,7 +4,7 @@ from typing import Any
 
 from PyQt6 import QtWidgets, QtCore, uic  # type: ignore
 
-from montana2_logic import Montana2Logic
+from .montana2_logic import Montana2Logic
 
 
 class Montana2(QtWidgets.QWidget):

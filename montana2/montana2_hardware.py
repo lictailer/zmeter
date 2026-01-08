@@ -1,7 +1,7 @@
 import ipaddress
 import time
-from montana_libs.cryocore import CryoCore
-from montana_libs import instrument
+from .montana_libs.cryocore import CryoCore
+from .montana_libs import instrument
 
 Ports = instrument.Rest_Ports
 
