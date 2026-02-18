@@ -22,12 +22,15 @@ class Scan(QtWidgets.QWidget):
         self.logic.sig_new_data.connect(self.new_data)
         self.logic.sig_update_remaining_time.connect(self.update_remaining_time_label)
         self.logic.sig_update_remaining_points.connect(self.update_remaining_points_label)
+        self.logic.sig_auto_backup.connect(self.auto_backup)
 
         
         self.main_window=main_window
         self.finished = False
         self.setter_equipment_info = setter_equipment_info
         self.getter_equipment_info = getter_equipment_info
+
+        self._start_new_scan_after_stop = False
 
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
@@ -41,6 +44,8 @@ class Scan(QtWidgets.QWidget):
         self.update_plots_button_2.clicked.connect(self.update_all_plots)
         self.scan_button_3.clicked.connect(self.when_scan_clicked)
         self.stop_button_3.clicked.connect(self.when_stop_clicked)
+        self.pause_button_3.clicked.connect(self.when_pause_clicked)
+        self.resume_button_3.clicked.connect(self.when_resume_clicked)
         self.save_plots_button_3.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_3.clicked.connect(self.update_all_plots)
 
@@ -82,7 +87,12 @@ class Scan(QtWidgets.QWidget):
         self.when_save_plots_clicked()
         self.when_save_clicked()
         current_serial = self.main_window.scanlist.serial.value()
-        self.main_window.scanlist.serial.setValue(current_serial+1)
+        self.main_window.scanlist.serial.setValue(current_serial + 1)
+
+        # If user clicked "Scan" while paused, we queued a fresh scan start
+        if getattr(self, "_start_new_scan_after_stop", False):
+            self._start_new_scan_after_stop = False
+            self._start_scan_now()
 
     def set_setter_equipment_info(self,info):
         self.setter_equipment_info=info
@@ -148,22 +158,75 @@ class Scan(QtWidgets.QWidget):
         self.main_window = mainwindow
         self.logic.main_window = mainwindow
 
+    def _start_scan_now(self):
+        """Start a fresh scan using current self.info settings."""
+        if hasattr(self, "unique_data_name"):
+            del self.unique_data_name
+
+        self.main_window.stop_equipments_for_scanning()
+        self.logic.reset_flags()
+        self.logic.go_scan = True
+
+        self.update_alllevel_setting_array()
+        self.logic.initialize_scan_data(self.info)
+
+        self.update_all_plots()
+        self.logic.start()
+
     def when_stop_clicked(self):
         self.main_window.force_stop_equipments()
         self.logic.received_stop = True
         self.logic.stop_scan = True
 
     def when_scan_clicked(self):
-        if hasattr(self, "unique_data_name"):
-            del self.unique_data_name
-        self.main_window.stop_equipments_for_scanning()
-        self.logic.reset_flags()
-        self.logic.go_scan = True
-        self.update_alllevel_setting_array()
-        self.logic.initialize_scan_data(self.info)
-        # self.logic.initilize_data(self.info)        #for old version
-        self.update_all_plots()
-        self.logic.start()
+        # If a scan is running AND paused, stop it first (so it will auto-save),
+        # then start the new scan when scan_finished() fires.
+        is_paused = bool(getattr(self.logic, "received_pause", False) or getattr(self.logic, "receieve_pause", False))
+
+        if self.logic.isRunning() and is_paused:
+            # Request a stop so the current scan ends cleanly and triggers scan_finished() (which saves)
+            self.main_window.force_stop_equipments()
+
+            if hasattr(self.logic, "request_stop"):
+                self.logic.request_stop()
+            else:
+                self.logic.received_stop = True
+                # Make sure pause is released so the thread can actually exit
+                if hasattr(self.logic, "received_pause"):
+                    self.logic.received_pause = False
+
+            self.logic.stop_scan = True
+
+            # After stop completes, scan_finished() will auto-save; then we start the new scan
+            self._start_new_scan_after_stop = True
+            return
+
+        # Normal start (not paused)
+        self._start_scan_now()
+
+    def when_pause_clicked(self):
+        """Pause the running scan thread (no-op if not running)."""
+        if not self.logic.isRunning():
+            return
+
+        # Preferred: use ScanLogic pause API if you added it
+        if hasattr(self.logic, "request_pause"):
+            self.logic.request_pause()
+        else:
+            # Fallback: direct flag
+            self.logic.received_pause = True
+
+    def when_resume_clicked(self):
+        """Resume a paused scan (no-op if not running)."""
+        if not self.logic.isRunning():
+            return
+
+        if hasattr(self.logic, "request_resume"):
+            self.logic.request_resume()
+        else:
+            self.logic.received_pause = False
+            # If you used a QWaitCondition in ScanLogic, you'd also need wakeAll()
+            # but without that infrastructure, this fallback only works if your loop polls the flag.
 
     def start_scan(self):
         if hasattr(self, "unique_data_name"):
@@ -604,6 +667,44 @@ class Scan(QtWidgets.QWidget):
         self.ui.scan_point_info_2.setText(f"Finished / Total Points: {point_str}")
         self.ui.scan_point_info_3.setText(f"Finished / Total Points: {point_str}")
     
+    def auto_backup(self, trigger: bool):
+        """Handle auto-backup signal from ScanLogic."""
+        if not trigger:
+            return
+            
+        class CustomEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, float) and np.isnan(obj):
+                    return "NaN"
+                return super().default(obj)
+
+        ppp_box = self.PlotsPerPage                      # QComboBox
+        self.info['plots_per_page'] = ppp_box.currentText()
+
+        # Get user input and prepare base file name
+        text = self.main_window.save_info_path.toPlainText().strip()
+        base_name = self._next_unique_data_name()
+        
+        # Determine folder and file path
+        if not text:
+            return  # No folder specified, skip auto-backup
+        else:
+            folder = os.path.normpath(text.strip('"'))
+            os.makedirs(folder, exist_ok=True)
+
+        # Create backup filename with _backup suffix (always overwrites)
+        backup_name = f"{base_name}_backup.json"
+        fileName = os.path.join(folder, backup_name)
+
+        # Save the JSON file (overwrites existing backup)
+        try:
+            with open(fileName, 'w') as json_file:
+                json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
+            print(f"Auto-backup saved to {fileName}")
+
+            
 
 
 
