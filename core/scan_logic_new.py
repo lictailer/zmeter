@@ -173,6 +173,7 @@ class ScanLogic(QtCore.QThread):
         self.scan_start_time = None
         self.elapsed_time = None
         self.completed_points = 0
+        self.last_auto_hour_triggered = 0
         
         # Calculate total number of measurement points across all levels
         self.total_points = 1
@@ -345,6 +346,7 @@ class ScanLogic(QtCore.QThread):
             self.elapsed_time = point_end_time - self.scan_start_time
             self.completed_points += 1
             self.update_remaining_time_estimate()
+            self.check_auto_backup_trigger()
 
         # Manual set AFTER
         for setting_dict in self.level_manual_settings[current_level][1]:
@@ -541,6 +543,18 @@ class ScanLogic(QtCore.QThread):
         # Reset flags when thread execution completes
         self.reset_flags()
 
+    def check_auto_backup_trigger(self):
+        """
+        Trigger auto-backup once when crossing each elapsed whole-hour mark.
+        """
+        if self.scan_start_time is None:
+            return
+
+        elapsed_hours = int((time.time() - self.scan_start_time) // 3600)
+        if elapsed_hours >= 1 and elapsed_hours > self.last_auto_hour_triggered:
+            self.last_auto_hour_triggered = elapsed_hours
+            self.sig_auto_backup.emit(True)
+
     def update_remaining_time_estimate(self):
         """
         Calculate and emit time/progress estimates for user feedback.
@@ -570,14 +584,6 @@ class ScanLogic(QtCore.QThread):
         # Emit signals for GUI updates
         self.sig_update_remaining_time.emit(remaining_time_str)
         self.sig_update_remaining_points.emit(remaining_points_str)
-
-        elapsed_hours = self.elapsed_time // 3600
-        if elapsed_hours >= 1 and elapsed_hours > self.last_auto_hour_triggered:
-            # trigger backup once for this hour
-            self.last_auto_hour_triggered = elapsed_hours
-            # emit signal to request an autosave/backup
-            self.sig_auto_backup.emit(True)
-
 
 # Test/demo code for standalone execution
 if __name__ == "__main__":

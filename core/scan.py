@@ -692,28 +692,24 @@ class Scan(QtWidgets.QWidget):
         ppp_box = self.PlotsPerPage                      # QComboBox
         self.info['plots_per_page'] = ppp_box.currentText()
 
-        # Get user input and prepare base file name
+        # Same data folder as normal save flow; always overwrite autosave.json.
         text = self.main_window.save_info_path.toPlainText().strip()
-        base_name = self._next_unique_data_name()
-        
-        # Determine folder and file path
-        if not text:
-            return  # No folder specified, skip auto-backup
-        else:
+        if text:
             folder = os.path.normpath(text.strip('"'))
-            os.makedirs(folder, exist_ok=True)
+        elif hasattr(self.main_window, "save_path"):
+            folder = os.path.normpath(str(self.main_window.save_path))
+        else:
+            folder = os.getcwd()
 
-        # Create backup filename with _backup suffix (always overwrites)
-        backup_name = f"{base_name}_backup.json"
-        fileName = os.path.join(folder, backup_name)
+        os.makedirs(folder, exist_ok=True)
+        fileName = os.path.join(folder, "autosave.json")
 
-        # Save the JSON file (overwrites existing backup)
         try:
             with open(fileName, 'w') as json_file:
                 json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
-            print(f"Auto-backup saved to {fileName}")
+            print(f"Autosave updated: {fileName}")
         except Exception as e:
-            print(f"Auto-backup failed: {e}")
+            print(f"Autosave failed: {e}")
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
