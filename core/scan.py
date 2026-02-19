@@ -34,14 +34,23 @@ class Scan(QtWidgets.QWidget):
 
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
+        self.load_button.clicked.connect(self.when_load_clicked)
+        self.save_button.clicked.connect(self.when_save_clicked)
+
         self.scan_button_1.clicked.connect(self.when_scan_clicked)
         self.stop_button_1.clicked.connect(self.when_stop_clicked)
+        self.pause_button_1.clicked.connect(self.when_pause_clicked)
+        self.resume_button_1.clicked.connect(self.when_resume_clicked)
         self.save_plots_button_1.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_1.clicked.connect(self.update_all_plots)
+
         self.scan_button_2.clicked.connect(self.when_scan_clicked)
         self.stop_button_2.clicked.connect(self.when_stop_clicked)
+        self.pause_button_2.clicked.connect(self.when_pause_clicked)
+        self.resume_button_2.clicked.connect(self.when_resume_clicked)
         self.save_plots_button_2.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_2.clicked.connect(self.update_all_plots)
+
         self.scan_button_3.clicked.connect(self.when_scan_clicked)
         self.stop_button_3.clicked.connect(self.when_stop_clicked)
         self.pause_button_3.clicked.connect(self.when_pause_clicked)
@@ -49,8 +58,6 @@ class Scan(QtWidgets.QWidget):
         self.save_plots_button_3.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_3.clicked.connect(self.update_all_plots)
 
-        self.load_button.clicked.connect(self.when_load_clicked)
-        self.save_button.clicked.connect(self.when_save_clicked)
         self.all_level_setting = AllLevelSetting(all_level_info=info['levels'],setter_equipment_info=setter_equipment_info,getter_equipment_info=getter_equipment_info)
         # print(equipment_info)
         self.all_plot_setting = AllPlotSetting(level_info=info['levels'])
@@ -173,35 +180,37 @@ class Scan(QtWidgets.QWidget):
         self.update_all_plots()
         self.logic.start()
 
-    def when_stop_clicked(self):
+    def _request_logic_stop(self):
+        """Request a clean stop from ScanLogic, including paused state."""
         self.main_window.force_stop_equipments()
-        self.logic.received_stop = True
+
+        if hasattr(self.logic, "request_stop"):
+            self.logic.request_stop()
+        else:
+            self.logic.received_stop = True
+            if hasattr(self.logic, "received_pause"):
+                self.logic.received_pause = False
+
         self.logic.stop_scan = True
 
+    def when_stop_clicked(self):
+        self._start_new_scan_after_stop = False
+
+        # Do nothing when no scan thread is active; this avoids accidental save flows.
+        if not self.logic.isRunning():
+            return
+
+        self._request_logic_stop()
+
     def when_scan_clicked(self):
-        # If a scan is running AND paused, stop it first (so it will auto-save),
-        # then start the new scan when scan_finished() fires.
-        is_paused = bool(getattr(self.logic, "received_pause", False) or getattr(self.logic, "receieve_pause", False))
-
-        if self.logic.isRunning() and is_paused:
-            # Request a stop so the current scan ends cleanly and triggers scan_finished() (which saves)
-            self.main_window.force_stop_equipments()
-
-            if hasattr(self.logic, "request_stop"):
-                self.logic.request_stop()
-            else:
-                self.logic.received_stop = True
-                # Make sure pause is released so the thread can actually exit
-                if hasattr(self.logic, "received_pause"):
-                    self.logic.received_pause = False
-
-            self.logic.stop_scan = True
-
-            # After stop completes, scan_finished() will auto-save; then we start the new scan
+        # If a scan is already running (paused or not), stop it first.
+        # scan_finished() will save current data, then we start a fresh scan.
+        if self.logic.isRunning():
+            self._request_logic_stop()
             self._start_new_scan_after_stop = True
             return
 
-        # Normal start (not paused)
+        self._start_new_scan_after_stop = False
         self._start_scan_now()
 
     def when_pause_clicked(self):
@@ -703,10 +712,8 @@ class Scan(QtWidgets.QWidget):
             with open(fileName, 'w') as json_file:
                 json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
             print(f"Auto-backup saved to {fileName}")
-
-            
-
-
+        except Exception as e:
+            print(f"Auto-backup failed: {e}")
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
