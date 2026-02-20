@@ -256,6 +256,8 @@ class Scan(QtWidgets.QWidget):
         """Call AllPlots.update_plots() for every page."""
         self.update_alllevel_setting_array()
         for gp in self.graphing_plots:
+
+            
             gp.update_plots()
 
     def new_data(self,info):

@@ -1,6 +1,7 @@
 import sys
 import copy
 import typing
+import traceback
 from PyQt6.QtCore import QObject
 import PyQt6.QtWidgets as QtWidgets
 import PyQt6.QtCore as QtCore
@@ -66,8 +67,11 @@ class ScanItem(QtWidgets.QLabel):
         self.stop.emit(self)
 
     def start_queue(self):
-        self.scan.start_scan()
-        # while
+        # Use the same flow as pressing the Scan button, then block until done
+        # so queue execution remains strictly sequential.
+        self.scan.when_scan_clicked()
+        while self.scan.logic.isRunning():
+            QtCore.QThread.sleep(1)
 
 
 class DeleteItem(QtWidgets.QLabel):
@@ -245,8 +249,19 @@ class ScanListLogic(QtCore.QThread):
         while len(self.workers):
             w = self.workers[0]
             self.workers.remove(w)
-            w.start_queue()
-            self.sig_scan_done.emit(w)
+            try:
+                w.start_queue()
+            except Exception as exc:
+                name = getattr(w, "name", None)
+                if name is None and hasattr(w, "text"):
+                    name = w.text()
+                print(f"[Queue] Skipping failed item ({type(w).__name__}): {name}. Error: {exc}")
+                traceback.print_exc()
+            finally:
+                # Keep existing behavior: completed/processed item moves to past.
+                self.sig_scan_done.emit(w)
+
+            QtCore.QThread.sleep(5)
 
 
 class ScanList(QtWidgets.QWidget):
