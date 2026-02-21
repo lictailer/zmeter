@@ -451,7 +451,9 @@ class ScanLogic(QtCore.QThread):
 
     def multi_thread_write(self, writing_device_channels, level_index, target_index):
         set_value = self.level_target_arrays[level_index][:, target_index]
+        print("writing_device_channels.items(): ",writing_device_channels.items())
         for device, channel_list in writing_device_channels.items():
+            print("channel_list:", channel_list)
             for channel in channel_list:
                 channel_list_index = self.level_setters[level_index].index(f"{device}_{channel}")
                 writing_device_channels[device][channel] = set_value[channel_list_index]

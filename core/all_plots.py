@@ -1,4 +1,4 @@
-from re import T
+# from re import T
 from .scan_info import *
 # import random
 # import warnings

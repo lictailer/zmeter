@@ -85,6 +85,7 @@ ScanInfo = {
 
 
 class ScanLogic(QtCore.QThread):
+    sig_capture_ui = QtCore.pyqtSignal() ######April 25
     sig_new_data = QtCore.pyqtSignal(object)
     sig_new_pos = QtCore.pyqtSignal(object)
     sig_update_line = QtCore.pyqtSignal()
@@ -97,6 +98,7 @@ class ScanLogic(QtCore.QThread):
     AO = ['AO0', 'AO1', 'AO2', 'AO3']
 
     def __init__(self, main_window=None):
+        super().__init__() ######April 25 #importnat in April 25 edits
         QtCore.QThread.__init__(self)
         self.main_window = main_window
         self.reset_flags()
