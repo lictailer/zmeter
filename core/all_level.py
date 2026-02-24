@@ -58,6 +58,10 @@ class IndividualLevel(QtWidgets.QWidget):
             item = self.verticalLayout.itemAt(i).widget()
             if type(item) == IndividualSetter:
                 item.set_setter_equipment_info(setter_equipment_info)
+
+    def set_getter_equipment_info(self, getter_equipment_info):
+        self.getter_equipment_info = getter_equipment_info
+        self.nested_menu.set_choices(self.getter_equipment_info)
         
 
 
@@ -237,6 +241,13 @@ class AllLevelSetting(QtWidgets.QWidget):
             item = self.verticalLayout.itemAt(i).widget()
             if type(item) == IndividualLevel:
                 item.set_setter_equipment_info(self.setter_equipment_info)
+
+    def set_getter_equipment_info(self, getter_equipment_info):
+        self.getter_equipment_info = getter_equipment_info
+        for i in range(self.verticalLayout.count()):
+            item = self.verticalLayout.itemAt(i).widget()
+            if type(item) == IndividualLevel:
+                item.set_getter_equipment_info(self.getter_equipment_info)
         
 
     def update_ui(self):

@@ -148,6 +148,7 @@ class K10CR1Logic(QtCore.QThread):
         sleep(0.2)
         self.pass_info(f"Current pos: {pos}")
         n = 0
+        m = 0
 
         last5 = deque(maxlen=5)
 
@@ -161,9 +162,11 @@ class K10CR1Logic(QtCore.QThread):
             self.sig_last_pos.emit(pos)
 
             # 1) Reached target modulo full turns: pos == move_to ± wrap*n
-            if (pos - move_to) % 49152000 == 0:
-                self.pass_info("Reached target (mod one full turn).")
-                break
+            if min((pos - move_to) % 49152000, (move_to - pos) % 49152000) < 10:
+                m += 1
+                if m > 3:
+                    self.pass_info("Reached target (mod one full turn).")
+                    break
 
             # 2) Last five positions are identical -> stuck, break
             if len(last5) == last5.maxlen and len(set(last5)) == 1:

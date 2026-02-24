@@ -20,10 +20,12 @@ from keithley24xx.keithley24xx_main import Keithley24xx
 # from auto_focus.autofocus_main import autofocus_main
 # from auto_focus.autofocus_logic import stepper_and_galvo_xyz
 # from opticool.opticool_main import OptiCool
+from montana2.montana2_main import Montana2
 
 
 save_path = os.path.join(os.getcwd(), "data")
-backup_main_path = r"Z:\\Xuguo\\SHG Desktop Backup"
+# backup_main_path = r"Z:\\Xuguo\\SHG Desktop Backup"
+backup_main_path = None
 
 def create_equipment():
     """Instantiate and connect to all equipment required for the session."""
@@ -31,40 +33,36 @@ def create_equipment():
     equips = {
         #"lockin_1": SR830(),
         # "lockin_2": SR830(),
-        "sr860_test": SR860(),
+        # "sr860_test": SR860(),
         "nidaq_0": NIDAQ(),
-        "nidaq_1": NIDAQ(),
+        # "nidaq_1": NIDAQ(),
         # "DMM_A": HP34401A(),
         # "HWP": K10CR1(),
         # "HWP_1": K10CR1(),
         "Keithley_0": Keithley24xx(),
-        # "Keithley_1": Keithley24xx(),
+        "Keithley_1": Keithley24xx(),
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
+        # "montana2": Montana2(),
     }
 
     # ------------------------------------------------------------
     # Connection commands – adjust to match your instrument addresses.
     # ------------------------------------------------------------
     equips["nidaq_0"].connect("Dev1")
-    equips["nidaq_1"].connect("Dev2")
+    # equips["nidaq_1"].connect("Dev2")
     # equips["HWP"].connect(serial="55369504")
     # equips["HWP_1"].connect(serial="55243324")
     # equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
     # equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
     # equips["DMM_A"].connect_visa("GPIB0::21::INSTR")
-    equips["Keithley_0"].connect_visa("GPIB0::1::INSTR")
-    # equips["Keithley_1"].connect_visa("GPIB::18::INSTR")
-    equips["sr860_test"].connect_visa("GPIB0::2::INSTR")
+    equips["Keithley_0"].connect_visa("GPIB2::17::INSTR")
+    equips["Keithley_1"].connect_visa("GPIB2::18::INSTR")
+    # equips["sr860_test"].connect_visa("GPIB0::2::INSTR")
     # equips["tlpm_0"].connect()
 
     return equips
 
-
-artificial_channels = {
-    "A": "A=nidaq_0_AO0+nidaq_0_AO1",
-    "B": "B=nidaq_0_AO0-nidaq_0_AO1"
-}
 
 def main():
     """Application entry point.  Edit this function to customise paths and devices."""
@@ -85,7 +83,6 @@ def main():
         save_path=save_path,
         backup_main_path=backup_main_path,
         equips=equips,
-        artificial_channels=artificial_channels,
     )
     window.show()
     window.setWindowTitle("Main Window")

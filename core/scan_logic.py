@@ -263,8 +263,8 @@ class ScanLogic(QtCore.QThread):
         for i, ss in enumerate(self.setters_FEL[lv]):
             val = self.targets_array_FEL[lv][i, index]
             variable = self.get_variable(ss)
-            if variable in self.main_window.equations:
-                self.main_window.write_artificial_channel(val, variable)
+            if self.main_window.artificial_channel_logic.has_channel(variable):
+                self.main_window.artificial_channel_logic.set_channel(variable, val)
             else:
                 self.main_window.write_info(val, ss)
 
@@ -282,8 +282,8 @@ class ScanLogic(QtCore.QThread):
         for j in range(self.getter_number_FEL[lv]):
             slave = self.getters_FEL[lv][j]
             variable = self.get_variable(slave)
-            if variable in self.main_window.equations:
-                r.append(self.main_window.read_artificial_channel(variable))
+            if self.main_window.artificial_channel_logic.has_channel(variable):
+                r.append(self.main_window.artificial_channel_logic.read_channel(variable))
             else:
                 r.append(self.main_window.read_info(slave))
 

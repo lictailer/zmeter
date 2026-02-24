@@ -1,6 +1,7 @@
 import sys
 import copy
 import typing
+import traceback
 from PyQt6.QtCore import QObject
 import PyQt6.QtWidgets as QtWidgets
 import PyQt6.QtCore as QtCore
@@ -66,8 +67,11 @@ class ScanItem(QtWidgets.QLabel):
         self.stop.emit(self)
 
     def start_queue(self):
-        self.scan.start_scan()
-        # while
+        # Use the same flow as pressing the Scan button, then block until done
+        # so queue execution remains strictly sequential.
+        self.scan.when_scan_clicked()
+        while self.scan.logic.isRunning():
+            QtCore.QThread.sleep(1)
 
 
 class DeleteItem(QtWidgets.QLabel):
@@ -153,6 +157,12 @@ class ScanListWidget(QtWidgets.QWidget):
             if type(item) == ScanItem:
                 print("hellow")
                 item.scan.when_setter_equipment_info_change(info)
+
+    def getter_equipment_info_updated(self, info):
+        for i in range(self.layout.count()):
+            item = self.layout.itemAt(i).widget()
+            if type(item) == ScanItem:
+                item.scan.when_getter_equipment_info_change(info)
 
     def dragEnterEvent(self, e):
         e.accept()
@@ -245,8 +255,19 @@ class ScanListLogic(QtCore.QThread):
         while len(self.workers):
             w = self.workers[0]
             self.workers.remove(w)
-            w.start_queue()
-            self.sig_scan_done.emit(w)
+            try:
+                w.start_queue()
+            except Exception as exc:
+                name = getattr(w, "name", None)
+                if name is None and hasattr(w, "text"):
+                    name = w.text()
+                print(f"[Queue] Skipping failed item ({type(w).__name__}): {name}. Error: {exc}")
+                traceback.print_exc()
+            finally:
+                # Keep existing behavior: completed/processed item moves to past.
+                self.sig_scan_done.emit(w)
+
+            QtCore.QThread.sleep(5)
 
 
 class ScanList(QtWidgets.QWidget):
@@ -339,6 +360,11 @@ class ScanList(QtWidgets.QWidget):
         self.setter_equipment_info = info
         self.list_available.setter_equipment_info_updated(self.setter_equipment_info)
         self.list_queue.setter_equipment_info_updated(self.setter_equipment_info)
+
+    def getter_equipment_info_updated(self, info):
+        self.getter_equipment_info = info
+        self.list_available.getter_equipment_info_updated(self.getter_equipment_info)
+        self.list_queue.getter_equipment_info_updated(self.getter_equipment_info)
 
     def start_queue(self):
         queues = []
