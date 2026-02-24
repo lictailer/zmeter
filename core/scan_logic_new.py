@@ -319,7 +319,8 @@ class ScanLogic(QtCore.QThread):
                 break
 
             # read
-            if self.main_window.artificial_channel_logic.consume_skip_read_for_scan():
+            skip_lower_level = self.main_window.artificial_channel_logic.consume_skip_read_for_scan()
+            if skip_lower_level:
                 measurements = self.build_nan_measurements(reading_device_channels)
             else:
                 measurements = self.multi_thread_read(reading_device_channels)
@@ -340,8 +341,9 @@ class ScanLogic(QtCore.QThread):
             current_target_indices_copy = deepcopy(self.current_target_indices)
             self.sig_new_data.emit([self.level_data_arrays, current_target_indices_copy])
 
-            # recurse
-            self.looping(current_level - 1)
+            # Skip lower/faster levels when an artificial-channel write was skipped.
+            if not skip_lower_level:
+                self.looping(current_level - 1)
 
             # progress updates
             self.current_target_indices[current_level] += 1
