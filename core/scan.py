@@ -105,6 +105,10 @@ class Scan(QtWidgets.QWidget):
         self.setter_equipment_info=info
         self.all_level_setting.set_setter_equipment_info(self.setter_equipment_info)
 
+    def set_getter_equipment_info(self, info):
+        self.getter_equipment_info = info
+        self.all_level_setting.set_getter_equipment_info(self.getter_equipment_info)
+
     def populate(self):
         self.lineEdit.setText(self.info['name'])
         self.setWindowTitle(self.info['name'])
@@ -643,6 +647,10 @@ class Scan(QtWidgets.QWidget):
         print(setter_equipment_info)
         self.setter_equipment_info=setter_equipment_info
         self.all_level_setting.set_setter_equipment_info(self.setter_equipment_info)
+
+    def when_getter_equipment_info_change(self, getter_equipment_info):
+        self.getter_equipment_info = getter_equipment_info
+        self.all_level_setting.set_getter_equipment_info(self.getter_equipment_info)
 
     def scan_setters(self):
         destination=self.destinations[self.current_destinations_index]

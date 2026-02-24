@@ -158,6 +158,12 @@ class ScanListWidget(QtWidgets.QWidget):
                 print("hellow")
                 item.scan.when_setter_equipment_info_change(info)
 
+    def getter_equipment_info_updated(self, info):
+        for i in range(self.layout.count()):
+            item = self.layout.itemAt(i).widget()
+            if type(item) == ScanItem:
+                item.scan.when_getter_equipment_info_change(info)
+
     def dragEnterEvent(self, e):
         e.accept()
 
@@ -354,6 +360,11 @@ class ScanList(QtWidgets.QWidget):
         self.setter_equipment_info = info
         self.list_available.setter_equipment_info_updated(self.setter_equipment_info)
         self.list_queue.setter_equipment_info_updated(self.setter_equipment_info)
+
+    def getter_equipment_info_updated(self, info):
+        self.getter_equipment_info = info
+        self.list_available.getter_equipment_info_updated(self.getter_equipment_info)
+        self.list_queue.getter_equipment_info_updated(self.getter_equipment_info)
 
     def start_queue(self):
         queues = []

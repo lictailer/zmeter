@@ -319,7 +319,10 @@ class ScanLogic(QtCore.QThread):
                 break
 
             # read
-            measurements = self.multi_thread_read(reading_device_channels)
+            if self.main_window.artificial_channel_logic.consume_skip_read_for_scan():
+                measurements = self.build_nan_measurements(reading_device_channels)
+            else:
+                measurements = self.multi_thread_read(reading_device_channels)
 
             if self._pause_gate() or self.received_stop:
                 return
@@ -442,13 +445,19 @@ class ScanLogic(QtCore.QThread):
         end_time = time.time()
         return combined_results
 
+    def build_nan_measurements(self, device_channels):
+        skipped_measurements = {}
+        for device, channel_list in device_channels.items():
+            for channel in channel_list:
+                skipped_measurements[f"{device}_{channel}"] = np.nan
+        return skipped_measurements
 
     def read_single_device_all_channels(self, device, channel_list):
         result = {}
         start_time = time.time()
         for channel in channel_list:
-            if channel in self.main_window.equations:
-                result[f"{device}_{channel}"] = self.main_window.read_artificial_channel(channel)
+            if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
+                result[f"{device}_{channel}"] = self.main_window.artificial_channel_logic.read_channel_value(channel)
             else:
                 result[f"{device}_{channel}"] = self.main_window.read_info(f"{device}_{channel}")
         end_time = time.time()
@@ -466,8 +475,12 @@ class ScanLogic(QtCore.QThread):
 
     def write_single_device_all_channels(self, device, channel_value_list):
         for channel, value in channel_value_list.items():
-            if channel in self.main_window.equations:
-                self.main_window.write_artificial_channel(value, channel)
+            if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
+                self.main_window.artificial_channel_logic.set_channel_value(
+                    channel,
+                    value,
+                    is_scan_write=True,
+                )
             else:
                 self.main_window.write_info(value, f"{device}_{channel}")
 
