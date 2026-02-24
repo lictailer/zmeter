@@ -1,3 +1,4 @@
+import datetime as _dt
 from .scan_info import *
 from .scan_logic_new import ScanLogic
 from .all_level import AllLevelSetting
@@ -92,37 +93,68 @@ class Scan(QtWidgets.QWidget):
         self.logic.sig_scan_finished.connect(self.scan_finished)
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
-        import datetime as _dt
-
-        # Capture screenshots
-        screenshot1 = self.settingTab.grab()
-        screenshot2 = self.Plots1Tab.grab()
-        screenshot3 = self.main_window.grab()
-
-        # PowerPoint path from UI
-        ppt_path = self.main_window.ppt_path.toPlainText().strip()
-
-        # Make title = saved filename (matches JSON naming logic)
         base = self._next_unique_data_name()
-        slide_title = f"{base}.json"
+        ppt_text = self.main_window.ppt_path.toPlainText().strip()
 
-        # Make slide text = date and time
-        slide_text = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if ppt_text == "":
+            file_name, _ = QFileDialog.getSaveFileName(
+                self, "Select PPT", f"{base}.pptx", "PPT Files (*.pptx)"
+            )
+            if not file_name:
+                return
+        else:
+            file_name = os.path.normpath(ppt_text.strip('"'))
 
-        image_positions = [
-                            (10, 75, 550, 450),
-                            (555, 155, 450, 400),
-                            (650, 5, 200, 150)
-                            ]
+        if not file_name.lower().endswith(".pptx"):
+            file_name = f"{file_name}.pptx"
+
+        folder = os.path.dirname(file_name)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder, exist_ok=True)
+
+        comments_text = self.comments_textEdit.toPlainText().strip()
+        save_time = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # First slide: always save settings + main window overview.
+        overview_title = f"{base}.json - Settings and Main Window"
+        overview_text = f"Saved: {save_time}"
+        setting_shot = self.settingTab.grab()
+        main_window_shot = self.main_window.grab()
+        overview_positions = [
+            (20, 70, 300, 440),   # settingTab
+            (330, 70, 610, 440),  # main_window
+        ]
 
         add_slide_with_qpixmap(
-            ppt_path=ppt_path,
-            slide_title=slide_title,
-            slide_text=slide_text,
-            pixmap_images=[screenshot2, screenshot1, screenshot3],
-            image_positions=image_positions
+            ppt_path=file_name,
+            slide_title=overview_title,
+            slide_text=overview_text,
+            pixmap_images=[setting_shot, main_window_shot],
+            image_positions=overview_positions,
+            comments_text=comments_text,
         )
-        print("UI screenshot captured and saved.")
+
+        non_empty_tabs = []
+        for tab_index, tab in enumerate([self.Plots1Tab, self.Plots2Tab, self.Plots3Tab], start=1):
+            if tab.findChildren((LinePlot, ImagePlot)):
+                non_empty_tabs.append((tab_index, tab))
+
+        for tab_index, tab in non_empty_tabs:
+            slide_title = f"{base}.json - Plots Tab {tab_index}"
+            slide_text = f"Saved: {save_time}"
+            screenshot = tab.grab()
+
+            add_slide_with_qpixmap(
+                ppt_path=file_name,
+                slide_title=slide_title,
+                slide_text=slide_text,
+                pixmap_images=[screenshot],
+                comments_text=comments_text,
+            )
+
+        print(
+            f"Saved 1 overview slide and {len(non_empty_tabs)} plot slide(s) to {file_name}"
+        )
 
 
     def scan_finished(self):
