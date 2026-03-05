@@ -289,6 +289,7 @@ class ArtificialChannelLogic(QtCore.QObject):
             original_channel_x_value,
             original_channel_y_value,
         )
+        self._skip_next_scan_read = False
         self.sig_state_changed.emit(self.state)
         return {
             "skipped": False,
@@ -328,6 +329,7 @@ class ArtificialChannelLogic(QtCore.QObject):
                 raise RuntimeError(
                     f"Failed to write original channel '{channel_name}': {exc}"
                 ) from exc
+            self._skip_next_scan_read = False
             updated = self.read_all_channel_values()
             return {
                 "skipped": False,
@@ -384,9 +386,10 @@ class ArtificialChannelLogic(QtCore.QObject):
         return dict(self.state)
 
     def consume_skip_read_for_scan(self) -> bool:
-        should_skip = self._skip_next_scan_read
+        return self._skip_next_scan_read
+
+    def reset_skip_next_scan_read(self) -> None:
         self._skip_next_scan_read = False
-        return should_skip
 
     def _make_state(
         self,

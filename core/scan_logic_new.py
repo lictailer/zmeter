@@ -319,8 +319,7 @@ class ScanLogic(QtCore.QThread):
                 break
 
             # read
-            skip_lower_level = self.main_window.artificial_channel_logic.consume_skip_read_for_scan()
-            if skip_lower_level:
+            if self.main_window.artificial_channel_logic.consume_skip_read_for_scan():
                 measurements = self.build_nan_measurements(reading_device_channels)
             else:
                 measurements = self.multi_thread_read(reading_device_channels)
@@ -342,8 +341,9 @@ class ScanLogic(QtCore.QThread):
             self.sig_new_data.emit([self.level_data_arrays, current_target_indices_copy])
 
             # Skip lower/faster levels when an artificial-channel write was skipped.
-            if not skip_lower_level:
-                self.looping(current_level - 1)
+            # if not skip_lower_level:
+                # self.looping(current_level - 1)
+            self.looping(current_level - 1)
 
             # progress updates
             self.current_target_indices[current_level] += 1
@@ -387,8 +387,8 @@ class ScanLogic(QtCore.QThread):
                     return device_name, variable
             if channel_name.startswith("artificial_channel_"):
                 return "artificial_channel", channel_name[len("artificial_channel_"):]
-            elif channel_name.startswith("default_channel_"):
-                return "default", channel_name[len("default_")+1:]
+            elif channel_name.startswith("default_"):
+                return "default", channel_name[len("default_"):]
         
         # If no pattern matches, return the whole string as device name with empty remaining part
         return channel_name, ""
@@ -534,10 +534,12 @@ class ScanLogic(QtCore.QThread):
         """
         try:
             # Start recursive scanning from the outermost level
+            self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
             self.looping(self.max_level)
         finally:
             # Ensure proper cleanup regardless of how scan ends
             self.reset_flags()
+            self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
             print("scan finished here")
             
             # Re-enable equipment that was stopped for scanning

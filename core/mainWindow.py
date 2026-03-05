@@ -66,6 +66,7 @@ class MainWindow(QtWidgets.QWidget):
         self.getter_equipment_info = {}
 
         self.make_equipment_info()
+        self.setup_default_channel_info()
         self.setup_artificial_channel_info()
 
         self.scanlist = ScanList(
@@ -129,7 +130,19 @@ class MainWindow(QtWidgets.QWidget):
         self.getter_equipment_info["artificial_channel"] = list(
             self.artificial_channel_logic.artificial_channels
         )
-        # self.setter_equipment_info["default"] = ["count", "wait"] #Mohamed change
+
+    def setup_default_channel_info(self):
+        self.setter_equipment_info_for_scanning["default"] = {
+            "wait": self._set_default_wait,
+            "count": self._set_default_count,
+        }
+        self.setter_equipment_info["default"] = ["wait", "count"]
+
+    def _set_default_wait(self, val):
+        time.sleep(float(val))
+
+    def _set_default_count(self, _val):
+        time.sleep(0.01)
 
     def on_artificial_channel_config_applied(self):
         self.update_artificial_channel_scan_info()
@@ -211,9 +224,6 @@ class MainWindow(QtWidgets.QWidget):
 
         for label, setters in self.setter_equipment_info_for_scanning.items():
             # exact prefix match: label followed by an underscore
-            # if master.startswith("default_"): #Mohamed Change
-            #     print("here")
-            #     self.execute_default(val, master)
             if master.startswith(f"{label}_"): #elif
                 variable = self.get_variable(master, label)
                 try:
