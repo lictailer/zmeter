@@ -11,6 +11,7 @@ from core.mainWindow import MainWindow
 # devices that are not required in your particular setup.
 # ------------------------------------------------------------
 # from sr830.sr830_main import SR830
+from ni6432.ni6432_main import NI6432
 from sr860.sr860_main import SR860
 # from hp34401a.hp34401a_main import HP34401A
 from nidaq.nidaq_main import NIDAQ
@@ -27,6 +28,7 @@ save_path = os.path.join(os.getcwd(), "data")
 # backup_main_path = r"Z:\\Xuguo\\SHG Desktop Backup"
 backup_main_path = None
 
+
 def create_equipment():
     """Instantiate and connect to all equipment required for the session."""
 
@@ -34,13 +36,14 @@ def create_equipment():
         #"lockin_1": SR830(),
         # "lockin_2": SR830(),
         # "sr860_test": SR860(),
-        "nidaq_0": NIDAQ(),
+        # "nidaq_0": NIDAQ(),
+        "ni6432_0": NI6432(),
         # "nidaq_1": NIDAQ(),
         # "DMM_A": HP34401A(),
         # "HWP": K10CR1(),
         # "HWP_1": K10CR1(),
-        "Keithley_0": Keithley24xx(),
-        "Keithley_1": Keithley24xx(),
+        # "Keithley_0": Keithley24xx(),
+        # "Keithley_1": Keithley24xx(),
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
         # "montana2": Montana2(),
@@ -49,19 +52,30 @@ def create_equipment():
     # ------------------------------------------------------------
     # Connection commands – adjust to match your instrument addresses.
     # ------------------------------------------------------------
-    equips["nidaq_0"].connect("Dev1")
+    # equips["nidaq_0"].connect("Dev1")
+    equips["ni6432_0"].connect("Dev7")
     # equips["nidaq_1"].connect("Dev2")
     # equips["HWP"].connect(serial="55369504")
     # equips["HWP_1"].connect(serial="55243324")
     # equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
     # equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
     # equips["DMM_A"].connect_visa("GPIB0::21::INSTR")
-    equips["Keithley_0"].connect_visa("GPIB2::17::INSTR")
-    equips["Keithley_1"].connect_visa("GPIB2::18::INSTR")
+    # equips["Keithley_0"].connect_visa("GPIB2::17::INSTR")
+    # equips["Keithley_1"].connect_visa("GPIB2::18::INSTR")
     # equips["sr860_test"].connect_visa("GPIB0::2::INSTR")
     # equips["tlpm_0"].connect()
 
-    return equips
+    # Optional scan-channel filters by equipment label.
+    # If a label is missing, all get_/set_ channels from that device logic are exposed.
+    # Unknown channel names are silently skipped.
+    equips_set_channels = {
+        "ni6432_0": ["AO0", "AO1"],
+    }
+    equips_get_channels = {
+        "ni6432_0": ["AI0", "AI1", "AI4", "counter3", "counter5"],
+    }
+
+    return equips, equips_set_channels, equips_get_channels
 
 
 def main():
@@ -76,13 +90,15 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
 
     # Hardware setup (widgets can be created safely now)
-    equips = create_equipment()
+    equips, equips_set_channels, equips_get_channels = create_equipment()
 
     window = MainWindow(
         info=ScanInfo,
         save_path=save_path,
         backup_main_path=backup_main_path,
         equips=equips,
+        equips_set_channels=equips_set_channels,
+        equips_get_channels=equips_get_channels,
     )
     window.show()
     window.setWindowTitle("Main Window")

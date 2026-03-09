@@ -18,7 +18,15 @@ from .artificial_channel_2d_main import ArtificialChannel2D
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):
     print("Initiating the Program")
-    def __init__(self, info=None, save_path=None, backup_main_path=None, equips=None):
+    def __init__(
+        self,
+        info=None,
+        save_path=None,
+        backup_main_path=None,
+        equips=None,
+        equips_set_channels=None,
+        equips_get_channels=None,
+    ):
         super().__init__()
         print("Loading the Main Window")
         uic.loadUi(r"core/ui/mainwindow.ui", self)
@@ -54,6 +62,12 @@ class MainWindow(QtWidgets.QWidget):
         # Equipment instances (already connected) provided by caller.
         # Fall back to an empty dict for headless usage/testing.
         self.equips = equips if equips is not None else {}
+        self.equips_set_channels = (
+            equips_set_channels if equips_set_channels is not None else {}
+        )
+        self.equips_get_channels = (
+            equips_get_channels if equips_get_channels is not None else {}
+        )
         # ------------------------------------------------------------
 
         # {equipment name (e.g. lockin_0) : {variable name : set method},....}
@@ -161,7 +175,7 @@ class MainWindow(QtWidgets.QWidget):
     def make_equipment_info(self):
         for key, equipment in self.equips.items():
 
-            set_variable, get_variable = self.make_variables_dictionary(equipment)
+            set_variable, get_variable = self.make_variables_dictionary(equipment, key)
 
             self.setter_equipment_info_for_scanning[key] = set_variable
             self.getter_equipment_info_for_scanning[key] = get_variable
@@ -169,7 +183,7 @@ class MainWindow(QtWidgets.QWidget):
             self.setter_equipment_info[key] = list(set_variable.keys())
             self.getter_equipment_info[key] = list(get_variable.keys())
 
-    def make_variables_dictionary(self, equipment):
+    def make_variables_dictionary(self, equipment, equipment_label):
         get_variables = {}
         set_variables = {}
         get_methods = [
@@ -190,7 +204,37 @@ class MainWindow(QtWidgets.QWidget):
             if method.startswith("set_"):
                 var_name = method[4:]
                 set_variables[var_name] = getattr(equipment.logic, method)
+
+        requested_set_channels = self.equips_set_channels.get(equipment_label)
+        requested_get_channels = self.equips_get_channels.get(equipment_label)
+
+        set_variables = self.filter_scan_channels(set_variables, requested_set_channels)
+        get_variables = self.filter_scan_channels(get_variables, requested_get_channels)
         return set_variables, get_variables
+
+    def filter_scan_channels(self, variables, requested_channels):
+        """
+        Keep only requested scan channels for one equipment label.
+
+        - If requested_channels is None: keep all channels.
+        - Unknown channels are silently skipped.
+        - Accepts both plain names ("AO0") and prefixed names ("set_AO0"/"get_AO0").
+        """
+        if requested_channels is None:
+            return variables
+
+        normalized = set()
+        for channel in requested_channels:
+            if not isinstance(channel, str):
+                continue
+            name = channel.strip()
+            if not name:
+                continue
+            if name.startswith("set_") or name.startswith("get_"):
+                name = name[4:]
+            normalized.add(name)
+
+        return {key: value for key, value in variables.items() if key in normalized}
 
     # def execute_default(self, val, master): #Mohamed Chamge
     #     """
