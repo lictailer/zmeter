@@ -1,4 +1,11 @@
+import inspect
 import os
+import re
+import sys
+import time
+from copy import deepcopy
+
+import numpy as np
 from PyQt6 import QtWidgets, uic, QtCore, QtGui
 
 
@@ -13,6 +20,7 @@ from .scan_info import *
 from .scanlist import ScanList
 from .artificial_channel_logic import ArtificialChannelLogic
 from .artificial_channel_2d_main import ArtificialChannel2D
+from .device_command_router import DeviceCommandRouter
 
 
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
@@ -64,10 +72,14 @@ class MainWindow(QtWidgets.QWidget):
         self.setter_equipment_info = {}
         # {equipment : [list of variable name]}
         self.getter_equipment_info = {}
+        self.device_channel_catalog = {}
 
         self.make_equipment_info()
         self.setup_default_channel_info()
         self.setup_artificial_channel_info()
+        self.command_router = DeviceCommandRouter(main_window=self, parent=self)
+        self.inject_command_router_metadata()
+        self.refresh_device_catalog()
 
         self.scanlist = ScanList(
             info=self.info,
@@ -124,6 +136,14 @@ class MainWindow(QtWidgets.QWidget):
 
     def update_artificial_channel_scan_info(self):
         self.equations = dict(self.artificial_channel_logic.equations)
+        self.setter_equipment_info_for_scanning["artificial_channel"] = {
+            channel: self._make_artificial_channel_writer(channel)
+            for channel in self.artificial_channel_logic.artificial_channels
+        }
+        self.getter_equipment_info_for_scanning["artificial_channel"] = {
+            channel: self._make_artificial_channel_reader(channel)
+            for channel in self.artificial_channel_logic.artificial_channels
+        }
         self.setter_equipment_info["artificial_channel"] = list(
             self.artificial_channel_logic.artificial_channels
         )
@@ -136,7 +156,9 @@ class MainWindow(QtWidgets.QWidget):
             "wait": self._set_default_wait,
             "count": self._set_default_count,
         }
+        self.getter_equipment_info_for_scanning["default"] = {}
         self.setter_equipment_info["default"] = ["wait", "count"]
+        self.getter_equipment_info["default"] = []
 
     def _set_default_wait(self, val):
         time.sleep(float(val))
@@ -146,6 +168,7 @@ class MainWindow(QtWidgets.QWidget):
 
     def on_artificial_channel_config_applied(self):
         self.update_artificial_channel_scan_info()
+        self.refresh_device_catalog()
         if hasattr(self, "scanlist"):
             self.scanlist.setter_equipment_info_updated(self.setter_equipment_info)
             self.scanlist.getter_equipment_info_updated(self.getter_equipment_info)
@@ -155,6 +178,16 @@ class MainWindow(QtWidgets.QWidget):
 
     def read_artificial_channel(self, variable):
         return self.artificial_channel_logic.read_channel_value(variable)
+
+    def _make_artificial_channel_writer(self, channel_name):
+        return lambda val, channel_name=channel_name: self.write_artificial_channel(
+            val, channel_name
+        )
+
+    def _make_artificial_channel_reader(self, channel_name):
+        return lambda channel_name=channel_name: self.read_artificial_channel(
+            channel_name
+        )
 
     ## Adding devices and make equipment info
 
@@ -172,25 +205,97 @@ class MainWindow(QtWidgets.QWidget):
     def make_variables_dictionary(self, equipment):
         get_variables = {}
         set_variables = {}
-        get_methods = [
-            method
-            for method in dir(equipment.logic)
-            if callable(getattr(equipment.logic, method))
-        ]  ###################################
-        set_methods = [
-            method
-            for method in dir(equipment.logic)
-            if callable(getattr(equipment.logic, method))
-        ]
-        for method in get_methods:
-            if method.startswith("get_"):
-                var_name = method[4:]
-                get_variables[var_name] = getattr(equipment.logic, method)
-        for method in set_methods:
-            if method.startswith("set_"):
-                var_name = method[4:]
-                set_variables[var_name] = getattr(equipment.logic, method)
+        logic = getattr(equipment, "logic", None)
+        if logic is None:
+            return set_variables, get_variables
+
+        for method_name in dir(logic):
+            method = getattr(logic, method_name)
+            if not callable(method):
+                continue
+            if method_name.startswith("get_") and self._is_valid_getter(method):
+                get_variables[method_name[4:]] = method
+            elif method_name.startswith("set_") and self._is_valid_setter(method):
+                set_variables[method_name[4:]] = method
         return set_variables, get_variables
+
+    def _is_valid_getter(self, method) -> bool:
+        signature = self._safe_signature(method)
+        if signature is None:
+            return False
+
+        positional_params = [
+            parameter
+            for parameter in signature.parameters.values()
+            if parameter.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        has_varargs = any(
+            parameter.kind == inspect.Parameter.VAR_POSITIONAL
+            for parameter in signature.parameters.values()
+        )
+        return (not has_varargs) and len(positional_params) == 0
+
+    def _is_valid_setter(self, method) -> bool:
+        signature = self._safe_signature(method)
+        if signature is None:
+            return False
+
+        positional_params = [
+            parameter
+            for parameter in signature.parameters.values()
+            if parameter.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        has_varargs = any(
+            parameter.kind == inspect.Parameter.VAR_POSITIONAL
+            for parameter in signature.parameters.values()
+        )
+        return (not has_varargs) and len(positional_params) == 1
+
+    def _safe_signature(self, method):
+        try:
+            return inspect.signature(method)
+        except (TypeError, ValueError):
+            return None
+
+    def build_device_channel_catalog(self):
+        device_names = set(self.setter_equipment_info) | set(self.getter_equipment_info)
+        catalog = {}
+        for device_name in sorted(device_names):
+            catalog[device_name] = {
+                "readable": list(self.getter_equipment_info.get(device_name, [])),
+                "writable": list(self.setter_equipment_info.get(device_name, [])),
+            }
+        return catalog
+
+    def refresh_device_catalog(self):
+        self.device_channel_catalog = self.build_device_channel_catalog()
+        if hasattr(self, "command_router"):
+            self.command_router.publish_catalog(self.device_channel_catalog)
+        return self.device_channel_catalog
+
+    def get_device_channel_catalog(self):
+        return deepcopy(self.device_channel_catalog)
+
+    def inject_command_router_metadata(self):
+        for device_label, equipment in self.equips.items():
+            equipment.device_label = device_label
+            equipment.command_router = self.command_router
+            logic = getattr(equipment, "logic", None)
+            if logic is not None:
+                logic.device_label = device_label
+                logic.command_router = self.command_router
+
+        if hasattr(self, "artificial_channel_logic"):
+            self.artificial_channel_logic.device_label = "artificial_channel"
+            self.artificial_channel_logic.command_router = self.command_router
 
     # def execute_default(self, val, master): #Mohamed Chamge
     #     """
@@ -219,7 +324,7 @@ class MainWindow(QtWidgets.QWidget):
     #             equipment[variable](val)
 
     def write_info(self, val, master):
-        if np.isnan(val):
+        if self._is_nan_value(val):
             return
 
         for label, setters in self.setter_equipment_info_for_scanning.items():
@@ -233,7 +338,15 @@ class MainWindow(QtWidgets.QWidget):
                         f"Variable '{variable}' not found in equipment '{label}'. "
                         f"Check your channel name '{master}'."
                     )
-                break
+                return
+
+        raise KeyError(f"No equipment found that matches channel '{master}'.")
+
+    def _is_nan_value(self, value) -> bool:
+        try:
+            return bool(np.isnan(value))
+        except (TypeError, ValueError):
+            return False
 
     # def get_variable(self, name):
     #     counter = False
@@ -273,7 +386,13 @@ class MainWindow(QtWidgets.QWidget):
         for label, getters in self.getter_equipment_info_for_scanning.items():
             if slave.startswith(f"{label}_"):
                 variable = self.get_variable(slave, label)
-                return getters[variable]()        # return the read value
+                try:
+                    return getters[variable]()        # return the read value
+                except KeyError:
+                    raise KeyError(
+                        f"Variable '{variable}' not found in equipment '{label}'. "
+                        f"Check your channel name '{slave}'."
+                    ) from None
 
         raise KeyError(f"No equipment found that matches channel '{slave}'.")
     
