@@ -26,7 +26,15 @@ from .device_command_router import DeviceCommandRouter
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):
     print("Initiating the Program")
-    def __init__(self, info=None, save_path=None, backup_main_path=None, equips=None):
+    def __init__(
+        self,
+        info=None,
+        save_path=None,
+        backup_main_path=None,
+        equips=None,
+        equips_set_channels=None,
+        equips_get_channels=None,
+    ):
         super().__init__()
         print("Loading the Main Window")
         uic.loadUi(r"core/ui/mainwindow.ui", self)
@@ -62,6 +70,12 @@ class MainWindow(QtWidgets.QWidget):
         # Equipment instances (already connected) provided by caller.
         # Fall back to an empty dict for headless usage/testing.
         self.equips = equips if equips is not None else {}
+        self.equips_set_channels = (
+            equips_set_channels if equips_set_channels is not None else {}
+        )
+        self.equips_get_channels = (
+            equips_get_channels if equips_get_channels is not None else {}
+        )
         # ------------------------------------------------------------
 
         # {equipment name (e.g. lockin_0) : {variable name : set method},....}
@@ -194,7 +208,7 @@ class MainWindow(QtWidgets.QWidget):
     def make_equipment_info(self):
         for key, equipment in self.equips.items():
 
-            set_variable, get_variable = self.make_variables_dictionary(equipment)
+            set_variable, get_variable = self.make_variables_dictionary(equipment, key)
 
             self.setter_equipment_info_for_scanning[key] = set_variable
             self.getter_equipment_info_for_scanning[key] = get_variable
@@ -202,7 +216,7 @@ class MainWindow(QtWidgets.QWidget):
             self.setter_equipment_info[key] = list(set_variable.keys())
             self.getter_equipment_info[key] = list(get_variable.keys())
 
-    def make_variables_dictionary(self, equipment):
+    def make_variables_dictionary(self, equipment, equipment_label):
         get_variables = {}
         set_variables = {}
         logic = getattr(equipment, "logic", None)
@@ -217,6 +231,12 @@ class MainWindow(QtWidgets.QWidget):
                 get_variables[method_name[4:]] = method
             elif method_name.startswith("set_") and self._is_valid_setter(method):
                 set_variables[method_name[4:]] = method
+        
+        requested_set_channels = self.equips_set_channels.get(equipment_label)
+        requested_get_channels = self.equips_get_channels.get(equipment_label)
+
+        set_variables = self.filter_scan_channels(set_variables, requested_set_channels)
+        get_variables = self.filter_scan_channels(get_variables, requested_get_channels)
         return set_variables, get_variables
 
     def _is_valid_getter(self, method) -> bool:
@@ -264,6 +284,30 @@ class MainWindow(QtWidgets.QWidget):
             return inspect.signature(method)
         except (TypeError, ValueError):
             return None
+
+    def filter_scan_channels(self, variables, requested_channels):
+        """
+        Keep only requested scan channels for one equipment label.
+
+        - If requested_channels is None: keep all channels.
+        - Unknown channels are silently skipped.
+        - Accepts both plain names ("AO0") and prefixed names ("set_AO0"/"get_AO0").
+        """
+        if requested_channels is None:
+            return variables
+
+        normalized = set()
+        for channel in requested_channels:
+            if not isinstance(channel, str):
+                continue
+            name = channel.strip()
+            if not name:
+                continue
+            if name.startswith("set_") or name.startswith("get_"):
+                name = name[4:]
+            normalized.add(name)
+
+        return {key: value for key, value in variables.items() if key in normalized}
 
     def build_device_channel_catalog(self):
         device_names = set(self.setter_equipment_info) | set(self.getter_equipment_info)
