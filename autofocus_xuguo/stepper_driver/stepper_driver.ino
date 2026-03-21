@@ -1,84 +1,60 @@
-// Simple Arduino Nano control for CL42T stepper driver
+// Arduino Nano stepper bridge for the autofocus Z motor.
 // STEP -> PUL+
 // DIR  -> DIR+
 // PUL-, DIR- -> Arduino GND
 //
-// Serial commands:
-//   AS <steps>   -> move to absolute position in steps
-//   RS <steps>   -> move relative steps
-//   AD <deg>     -> move to absolute position in degrees
-//   RD <deg>     -> move relative degrees
-//   V <us>       -> set delayMicroseconds between steps
-//   P            -> print status
-//   Z            -> zero current position
+// Command protocol used by autofocusXZ_hardware.py:
+//   PING
+//   MOVE_ABS <deg>
+//   MOVE_REL <deg>
+//   GET_POS
+//   ZERO
+//   HOME
 //
-// Example:
-//   AS 1600
-//   RS -800
-//   AD 90
-//   RD -180
-//   V 300
-//   P
-//   Z
+// Responses:
+//   READY
+//   OK PONG
+//   OK <current_position_deg>
+//   POS <current_position_deg>
+//   ERR <message>
+//
+// CW is hard-coded as the positive angle direction.
+
+#include <ctype.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 const int STEP_PIN = 2;
-const int DIR_PIN  = 3;
+const int DIR_PIN = 3;
 
-const long STEPS_PER_REV = 6400;   // change to match your microstep setting
+const long STEPS_PER_REV = 6400;      // Set this to your driver microstep value.
+const unsigned int STEP_DELAY_US = 500;
+const uint8_t CW_POSITIVE_DIR_LEVEL = HIGH;
+const uint8_t CCW_NEGATIVE_DIR_LEVEL = LOW;
 
-unsigned int stepDelayUs = 500;    // can be changed from Serial
-
-long currentPositionSteps = 0;     // commanded position
-bool currentDirectionCW = true;    // last commanded direction
+long currentPositionSteps = 0;
 
 void pulseStep()
 {
   digitalWrite(STEP_PIN, HIGH);
-  delayMicroseconds(stepDelayUs);
+  delayMicroseconds(STEP_DELAY_US);
   digitalWrite(STEP_PIN, LOW);
-  delayMicroseconds(stepDelayUs);
+  delayMicroseconds(STEP_DELAY_US);
 }
 
-void setDirection(bool cw)
+void setPositiveDirection(bool positiveDirection)
 {
-  currentDirectionCW = cw;
-  digitalWrite(DIR_PIN, cw ? HIGH : LOW);
-  delayMicroseconds(10); // small setup time
+  digitalWrite(
+    DIR_PIN,
+    positiveDirection ? CW_POSITIVE_DIR_LEVEL : CCW_NEGATIVE_DIR_LEVEL
+  );
+  delayMicroseconds(10);
 }
 
-void moveRelativeSteps(long deltaSteps)
+long degreesToSteps(float degrees)
 {
-  if (deltaSteps == 0) return;
-
-  if (deltaSteps > 0)
-  {
-    setDirection(true);
-    for (long i = 0; i < deltaSteps; i++)
-    {
-      pulseStep();
-    }
-  }
-  else
-  {
-    setDirection(false);
-    for (long i = 0; i < -deltaSteps; i++)
-    {
-      pulseStep();
-    }
-  }
-
-  currentPositionSteps += deltaSteps;
-}
-
-void moveAbsoluteSteps(long targetSteps)
-{
-  long delta = targetSteps - currentPositionSteps;
-  moveRelativeSteps(delta);
-}
-
-long degreesToSteps(float deg)
-{
-  return lround(deg * STEPS_PER_REV / 360.0);
+  return lround(degrees * STEPS_PER_REV / 360.0);
 }
 
 float stepsToDegrees(long steps)
@@ -86,129 +62,113 @@ float stepsToDegrees(long steps)
   return steps * 360.0 / STEPS_PER_REV;
 }
 
-void moveRelativeDegrees(float deltaDeg)
+void moveRelativeSteps(long deltaSteps)
 {
-  long deltaSteps = degreesToSteps(deltaDeg);
-  moveRelativeSteps(deltaSteps);
-}
-
-void moveAbsoluteDegrees(float targetDeg)
-{
-  long targetSteps = degreesToSteps(targetDeg);
-  moveAbsoluteSteps(targetSteps);
-}
-
-void printStatus()
-{
-  Serial.println("----- Status -----");
-  Serial.print("Current position (steps): ");
-  Serial.println(currentPositionSteps);
-  Serial.print("Current position (deg): ");
-  Serial.println(stepsToDegrees(currentPositionSteps), 3);
-  Serial.print("Current direction: ");
-  Serial.println(currentDirectionCW ? "CW" : "CCW");
-  Serial.print("Delay between step edges (us): ");
-  Serial.println(stepDelayUs);
-  Serial.println("------------------");
-}
-
-String readCommandLine()
-{
-  String cmd = "";
-  while (Serial.available())
+  if (deltaSteps == 0)
   {
-    char c = Serial.read();
-    if (c == '\n' || c == '\r')
-    {
-      if (cmd.length() > 0) break;
-    }
-    else
-    {
-      cmd += c;
-    }
-  }
-  return cmd;
-}
-
-void handleCommand(String cmd)
-{
-  cmd.trim();
-  if (cmd.length() == 0) return;
-
-  if (cmd == "P")
-  {
-    printStatus();
     return;
   }
 
-  if (cmd == "Z")
+  bool positiveDirection = (deltaSteps > 0);
+  long stepCount = positiveDirection ? deltaSteps : -deltaSteps;
+
+  setPositiveDirection(positiveDirection);
+  for (long i = 0; i < stepCount; ++i)
+  {
+    pulseStep();
+  }
+
+  currentPositionSteps += deltaSteps;
+}
+
+void moveAbsoluteDegrees(float targetDegrees)
+{
+  long targetSteps = degreesToSteps(targetDegrees);
+  moveRelativeSteps(targetSteps - currentPositionSteps);
+}
+
+void moveRelativeDegrees(float deltaDegrees)
+{
+  moveRelativeSteps(degreesToSteps(deltaDegrees));
+}
+
+void sendCurrentPosition(const char *prefix)
+{
+  Serial.print(prefix);
+  Serial.print(' ');
+  Serial.println(stepsToDegrees(currentPositionSteps), 6);
+}
+
+void trimTrailingWhitespace(char *buffer)
+{
+  int length = strlen(buffer);
+  while (length > 0 && isspace(buffer[length - 1]))
+  {
+    buffer[length - 1] = '\0';
+    --length;
+  }
+}
+
+bool startsWith(const char *text, const char *prefix)
+{
+  return strncmp(text, prefix, strlen(prefix)) == 0;
+}
+
+void handleCommand(char *command)
+{
+  while (*command != '\0' && isspace(*command))
+  {
+    ++command;
+  }
+
+  if (*command == '\0')
+  {
+    return;
+  }
+
+  if (strcmp(command, "PING") == 0)
+  {
+    Serial.println("OK PONG");
+    return;
+  }
+
+  if (strcmp(command, "GET_POS") == 0)
+  {
+    sendCurrentPosition("POS");
+    return;
+  }
+
+  if (strcmp(command, "ZERO") == 0)
   {
     currentPositionSteps = 0;
-    Serial.println("Position reset to zero.");
+    sendCurrentPosition("OK");
     return;
   }
 
-  if (cmd.startsWith("AS "))
+  if (strcmp(command, "HOME") == 0)
   {
-    long value = cmd.substring(3).toInt();
-    moveAbsoluteSteps(value);
-    Serial.println("Done: absolute steps move.");
-    printStatus();
+    moveAbsoluteDegrees(0.0);
+    sendCurrentPosition("OK");
     return;
   }
 
-  if (cmd.startsWith("RS "))
+  if (startsWith(command, "MOVE_ABS "))
   {
-    long value = cmd.substring(3).toInt();
-    moveRelativeSteps(value);
-    Serial.println("Done: relative steps move.");
-    printStatus();
+    float targetDegrees = atof(command + 9);
+    moveAbsoluteDegrees(targetDegrees);
+    sendCurrentPosition("OK");
     return;
   }
 
-  if (cmd.startsWith("AD "))
+  if (startsWith(command, "MOVE_REL "))
   {
-    float value = cmd.substring(3).toFloat();
-    moveAbsoluteDegrees(value);
-    Serial.println("Done: absolute degree move.");
-    printStatus();
+    float deltaDegrees = atof(command + 9);
+    moveRelativeDegrees(deltaDegrees);
+    sendCurrentPosition("OK");
     return;
   }
 
-  if (cmd.startsWith("RD "))
-  {
-    float value = cmd.substring(3).toFloat();
-    moveRelativeDegrees(value);
-    Serial.println("Done: relative degree move.");
-    printStatus();
-    return;
-  }
-
-  if (cmd.startsWith("V "))
-  {
-    int value = cmd.substring(2).toInt();
-    if (value > 0)
-    {
-      stepDelayUs = (unsigned int)value;
-      Serial.print("New delayMicroseconds: ");
-      Serial.println(stepDelayUs);
-    }
-    else
-    {
-      Serial.println("Invalid delay value.");
-    }
-    return;
-  }
-
-  Serial.println("Unknown command.");
-  Serial.println("Use:");
-  Serial.println("  AS <steps>");
-  Serial.println("  RS <steps>");
-  Serial.println("  AD <deg>");
-  Serial.println("  RD <deg>");
-  Serial.println("  V <us>");
-  Serial.println("  P");
-  Serial.println("  Z");
+  Serial.println("ERR Unknown command");
 }
 
 void setup()
@@ -217,29 +177,24 @@ void setup()
   pinMode(DIR_PIN, OUTPUT);
 
   digitalWrite(STEP_PIN, LOW);
-  digitalWrite(DIR_PIN, LOW);
+  digitalWrite(DIR_PIN, CCW_NEGATIVE_DIR_LEVEL);
 
   Serial.begin(115200);
   delay(1000);
-
-  Serial.println("Stepper control ready.");
-  Serial.println("Commands:");
-  Serial.println("  AS <steps>   -> absolute position in steps");
-  Serial.println("  RS <steps>   -> relative move in steps");
-  Serial.println("  AD <deg>     -> absolute position in degrees");
-  Serial.println("  RD <deg>     -> relative move in degrees");
-  Serial.println("  V <us>       -> set delayMicroseconds between steps");
-  Serial.println("  P            -> print status");
-  Serial.println("  Z            -> zero current position");
-  printStatus();
+  Serial.println("READY");
 }
 
 void loop()
 {
-  if (Serial.available())
+  static char commandBuffer[48];
+
+  if (!Serial.available())
   {
-    String cmd = Serial.readStringUntil('\n');
-    cmd.trim();  // remove \r or spaces
-    handleCommand(cmd);
+    return;
   }
+
+  size_t length = Serial.readBytesUntil('\n', commandBuffer, sizeof(commandBuffer) - 1);
+  commandBuffer[length] = '\0';
+  trimTrailingWhitespace(commandBuffer);
+  handleCommand(commandBuffer);
 }

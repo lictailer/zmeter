@@ -68,6 +68,73 @@ class FakeEquipment:
         self.logic = FakeLogic()
 
 
+class FakeHardware:
+    def __init__(self):
+        self.command_router = None
+        self.source_device = None
+        self.device_label = None
+
+    def set_command_router(self, command_router, source_device=None):
+        self.command_router = command_router
+        if source_device is not None:
+            self.source_device = source_device
+
+    def list_available_channels(self):
+        response = self.command_router.route_command(
+            {
+                "request_id": "catalog-hw",
+                "source_device": self.source_device,
+                "action": "list_catalog",
+                "target_device": None,
+                "channel": None,
+                "value": None,
+            }
+        )
+        if not response["ok"]:
+            raise RuntimeError(response["error_message"])
+        return response["catalog"]
+
+    def read_remote_channel(self, target_device, channel):
+        response = self.command_router.route_command(
+            {
+                "request_id": "read-hw",
+                "source_device": self.source_device,
+                "action": "read",
+                "target_device": target_device,
+                "channel": channel,
+                "value": None,
+            }
+        )
+        if not response["ok"]:
+            raise RuntimeError(response["error_message"])
+        return response["value"]
+
+    def write_remote_channel(self, target_device, channel, value):
+        response = self.command_router.route_command(
+            {
+                "request_id": "write-hw",
+                "source_device": self.source_device,
+                "action": "write",
+                "target_device": target_device,
+                "channel": channel,
+                "value": value,
+            }
+        )
+        if not response["ok"]:
+            raise RuntimeError(response["error_message"])
+        return response["value"]
+
+
+class FakeNestedLogic:
+    def __init__(self):
+        self.hardware = FakeHardware()
+
+
+class FakeNestedEquipment:
+    def __init__(self):
+        self.logic = FakeNestedLogic()
+
+
 class FakeScanList:
     def __init__(self):
         self.setter_updates = []
@@ -100,7 +167,12 @@ def bind_main_window_method(harness, method_name):
 
 def build_harness():
     harness = Harness()
-    harness.equips = {"fake_0": FakeEquipment()}
+    harness.equips = {
+        "fake_0": FakeEquipment(),
+        "autofocus_xz_0": FakeNestedEquipment(),
+    }
+    harness.equips_set_channels = {}
+    harness.equips_get_channels = {}
     harness.setter_equipment_info_for_scanning = {}
     harness.getter_equipment_info_for_scanning = {}
     harness.setter_equipment_info = {}
@@ -115,10 +187,12 @@ def build_harness():
         "_make_artificial_channel_writer",
         "_make_artificial_channel_reader",
         "_is_nan_value",
+        "_inject_command_router_into_object",
         "_set_default_wait",
         "_set_default_count",
         "write_artificial_channel",
         "read_artificial_channel",
+        "filter_scan_channels",
         "make_variables_dictionary",
         "make_equipment_info",
         "setup_default_channel_info",
@@ -178,6 +252,7 @@ class DeviceCommandBusTests(unittest.TestCase):
         catalog = self.harness.get_device_channel_catalog()
 
         self.assertIn("fake_0", catalog)
+        self.assertIn("autofocus_xz_0", catalog)
         self.assertEqual(
             catalog["fake_0"]["readable"],
             ["broken", "voltage", "x", "y"],
@@ -192,6 +267,26 @@ class DeviceCommandBusTests(unittest.TestCase):
         self.assertEqual(catalog["default"]["writable"], ["wait", "count"])
         self.assertEqual(catalog["artificial_channel"]["readable"], ["n", "E"])
         self.assertEqual(catalog["artificial_channel"]["writable"], ["n", "E"])
+        self.assertEqual(catalog["autofocus_xz_0"]["readable"], [])
+        self.assertEqual(catalog["autofocus_xz_0"]["writable"], [])
+
+    def test_router_metadata_injects_widget_logic_and_nested_hardware(self):
+        equipment = self.harness.equips["fake_0"]
+        nested_equipment = self.harness.equips["autofocus_xz_0"]
+        nested_hardware = nested_equipment.logic.hardware
+
+        self.assertIs(equipment.command_router, self.harness.command_router)
+        self.assertEqual(equipment.device_label, "fake_0")
+        self.assertIs(equipment.logic.command_router, self.harness.command_router)
+        self.assertEqual(equipment.logic.device_label, "fake_0")
+
+        self.assertIs(nested_equipment.command_router, self.harness.command_router)
+        self.assertEqual(nested_equipment.device_label, "autofocus_xz_0")
+        self.assertIs(nested_equipment.logic.command_router, self.harness.command_router)
+        self.assertEqual(nested_equipment.logic.device_label, "autofocus_xz_0")
+        self.assertIs(nested_hardware.command_router, self.harness.command_router)
+        self.assertEqual(nested_hardware.device_label, "autofocus_xz_0")
+        self.assertEqual(nested_hardware.source_device, "autofocus_xz_0")
 
     def test_valid_routed_write_and_read_use_mainwindow_path(self):
         responses = []
@@ -356,6 +451,19 @@ class DeviceCommandBusTests(unittest.TestCase):
         self.assertEqual(latest_catalog["artificial_channel"]["writable"], ["n2", "E2"])
         self.assertEqual(len(self.harness.scanlist.setter_updates), 1)
         self.assertEqual(len(self.harness.scanlist.getter_updates), 1)
+
+    def test_nested_hardware_can_route_commands_without_client(self):
+        hardware = self.harness.equips["autofocus_xz_0"].logic.hardware
+
+        catalog = hardware.list_available_channels()
+        self.assertIn("fake_0", catalog)
+
+        written = hardware.write_remote_channel("fake_0", "x", 0.5)
+        self.assertEqual(written, 0.5)
+        self.assertEqual(self.harness.equips["fake_0"].logic.values["x"], 0.5)
+
+        read_value = hardware.read_remote_channel("fake_0", "x")
+        self.assertEqual(read_value, 0.5)
 
     def test_feature_device_client_can_request_catalog_and_route_commands(self):
         feature_device = FeatureDevice(self.harness.command_router)

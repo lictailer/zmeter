@@ -18,7 +18,7 @@ Boot sequence:
 1. Create Qt app (`QApplication`) first.
 2. Instantiate instrument widgets in `create_equipment()`.
 3. Connect each instrument (`connect()` / `connect_visa()`).
-4. Create `core.mainWindow.MainWindow(info=ScanInfo, save_path, backup_main_path, equips)`.
+4. Create `core.mainWindow.MainWindow(info=ScanInfo, save_path, backup_main_path, equips, equips_set_channels, equips_get_channels)`.
 5. Show main window.
 
 Current default instruments enabled in `start_zmeter.py`:
@@ -35,6 +35,7 @@ Top-level runtime stack:
 
 Main components:
 - `core/mainWindow.py`: global orchestrator and device registry.
+- `core/device_command_router.py`: optional cross-device command router owned by `MainWindow`.
 - `core/scanlist.py`: queue manager for multiple scan presets and manual actions.
 - `core/scan.py`: per-scan configuration window + start/stop/pause/save + plots.
 - `core/scan_logic_new.py`: threaded recursive scan engine.
@@ -54,6 +55,12 @@ Important integration contract used by scan engine:
 - Scan-discoverable getters are methods named `get_<var>` in `.logic`.
 - `MainWindow.make_variables_dictionary()` introspects `.logic` for these names.
 
+Cross-device communication update:
+- `MainWindow` now creates one shared `DeviceCommandRouter`.
+- Devices are expected to receive injected `command_router` and `device_label` metadata from `MainWindow`, including nested `.logic` / `.hardware` layers when present.
+- Preferred device-side usage is direct synchronous `command_router.route_command({...})`; `DeviceCommandClient` exists but is optional convenience only.
+- See `documents/device_command_bus_guide.md` for the full design and integration pattern.
+
 Shutdown contract expected by `MainWindow.closeEvent()`:
 - `terminate_dev()`
 - `close()`
@@ -69,6 +76,13 @@ Routing logic:
 - Variable name is suffix after `label_`.
 - Calls setter function dictionary built from `.logic.set_*`.
 - `MainWindow.read_info(slave_channel)` mirrors this for getters.
+
+Scan-channel whitelist update:
+- `start_zmeter.py` can now define optional `equips_set_channels` and `equips_get_channels` dictionaries keyed by equipment label (for example `ni6432_0`).
+- If a label is present in these dictionaries, only the listed scan variables are exposed in the scan channel list.
+- This filtering only affects scan discovery in `MainWindow`; it does not change the device GUI or remove methods from the logic object.
+- If a label is omitted, all discovered `set_*` / `get_*` scan channels remain available.
+- Unknown whitelist entries are silently skipped.
 
 Special pseudo-devices:
 - `default`: built-in wait/count setters.
@@ -227,17 +241,24 @@ Instrument directories generally include `<name>_main.py`, `<name>_logic.py`, `<
 
 Examples:
 - `nidaq/`: NI-DAQ via PyDAQmx.
+- `ni6432/`: NI USB-6432 via `nidaqmx`, with AO feedback, hardware-clocked AI integration, hardware-gated counter reads, dual integration times, and a dedicated PyQt UI/logic stack.
 - `keithley24xx/`: Keithley 24xx via PyVISA.
 - `sr860/`, `sr830/`: lock-ins via PyVISA.
 - `montana2/`: cryostat controller via Montana libs.
 - `hp34401a/`, `k10cr1/`, `tlpm/`, `opticool/`, `demoDevice/` etc.
 
 Note:
-- `ni6432/ni6432_hardware.py` is currently empty (placeholder).
+- `ni6432` is no longer a placeholder. The implemented stack is:
+  - `ni6432/ni6432_hardware.py`: `nidaqmx` hardware layer with `connect`, `disconnect`, AO write, hardware-clocked AI integration, and gated counter integration.
+  - `ni6432/ni6432_logic.py`: scan-facing `set_AO*`, `get_AI*`, `get_counter*`, `get_AO*` methods, plus AO-feedback caching and separate AO/counter integration times.
+  - `ni6432/ni6432_main.py`: GUI wrapper around `ni6432.ui` with AO controls, AO feedback readback, AI/counter live monitor modes, and scan pause/resume hooks.
 
 ## 15. Important File Map
 - `start_zmeter.py`: app entry, instrument selection, connect addresses.
 - `core/mainWindow.py`: global app window, device routing, close/shutdown.
+- `ni6432/ni6432_main.py`: NI USB-6432 widget/UI bindings.
+- `ni6432/ni6432_logic.py`: NI USB-6432 scan-facing getters/setters and monitor logic.
+- `ni6432/ni6432_hardware.py`: NI USB-6432 low-level `nidaqmx` operations.
 - `core/scanlist.py`: scan queue UI + sequential worker.
 - `core/scan.py`: scan editor, controls, save/load, per-page plots.
 - `core/scan_logic_new.py`: recursive scan execution and progress.
@@ -251,7 +272,7 @@ Note:
 - `core/append_to_ppt.py`: slide append helper (PowerPoint COM on Windows).
 
 ## 16. Environment And Platform Expectations
-Target environment from `zmeter_Jan2026_environment.yml`:
+Target environment from `zmeter_Mar2026_environment.yml`:
 - Python 3.12
 - PyQt6, pyqtgraph, numpy, scipy
 - PyVISA
@@ -269,8 +290,12 @@ Hardware/runtime dependencies not in pure Python:
 ## 17. Practical Mental Model For New LLM Sessions
 Use this 3-step model:
 1. `start_zmeter.py` decides which instruments exist and how they are addressed.
-2. `MainWindow` introspects `.logic.get_* / set_*` and exposes them as scan channels.
+2. `MainWindow` introspects `.logic.get_* / set_*`, optionally filters them through `equips_set_channels` / `equips_get_channels`, exposes the remaining channels to scanning, and can also inject a shared command router into devices for cross-device control.
 3. `ScanLogic` executes nested loops over `setting_array`, calling `write_info/read_info`, emitting live data to plots, and saving JSON/PPT on completion.
+
+For the command-router path, use this rule:
+- If a device needs to control another device, prefer injected `command_router.route_command({...})` over directly reaching into another module.
+- For details, examples, and the current recommended pattern, see `documents/device_command_bus_guide.md`.
 
 If asked to change scan behavior, usually edit:
 - `core/scan_logic_new.py`
@@ -281,4 +306,4 @@ If asked to add/modify device channels, usually edit:
 - `<device>/<device>_logic.py` `get_* / set_*` methods
 - `<device>/<device>_main.py` wrappers/connect lifecycle
 - `<device>/<device>_hardware.py` low-level calls
-- `start_zmeter.py` for instantiation and connection.
+- `start_zmeter.py` for instantiation, connection, and optional scan-channel whitelists.

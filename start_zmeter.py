@@ -72,7 +72,7 @@ def create_equipment():
         "ni6432_0": ["AO0", "AO1"],
     }
     equips_get_channels = {
-        "ni6432_0": ["AI0", "AI1", "AI4", "counter3", "counter5"],
+        "ni6432_0": ["AI9", "AI12", "counter8", "counter12"],
     }
 
     return equips, equips_set_channels, equips_get_channels

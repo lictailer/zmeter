@@ -329,17 +329,61 @@ class MainWindow(QtWidgets.QWidget):
         return deepcopy(self.device_channel_catalog)
 
     def inject_command_router_metadata(self):
+        visited_objects = set()
         for device_label, equipment in self.equips.items():
-            equipment.device_label = device_label
-            equipment.command_router = self.command_router
-            logic = getattr(equipment, "logic", None)
-            if logic is not None:
-                logic.device_label = device_label
-                logic.command_router = self.command_router
+            self._inject_command_router_into_object(
+                equipment,
+                device_label=device_label,
+                visited_objects=visited_objects,
+            )
 
         if hasattr(self, "artificial_channel_logic"):
-            self.artificial_channel_logic.device_label = "artificial_channel"
-            self.artificial_channel_logic.command_router = self.command_router
+            self._inject_command_router_into_object(
+                self.artificial_channel_logic,
+                device_label="artificial_channel",
+                visited_objects=visited_objects,
+            )
+
+    def _inject_command_router_into_object(
+        self,
+        obj,
+        *,
+        device_label,
+        visited_objects,
+    ):
+        if obj is None:
+            return
+
+        object_id = id(obj)
+        if object_id in visited_objects:
+            return
+        visited_objects.add(object_id)
+
+        set_router = getattr(obj, "set_command_router", None)
+        if callable(set_router):
+            try:
+                set_router(self.command_router, source_device=device_label)
+            except TypeError:
+                set_router(self.command_router)
+
+        try:
+            obj.device_label = device_label
+        except Exception:
+            pass
+
+        try:
+            obj.command_router = self.command_router
+        except Exception:
+            pass
+
+        for child_attr in ("logic", "hardware"):
+            child = getattr(obj, child_attr, None)
+            if child is not None:
+                self._inject_command_router_into_object(
+                    child,
+                    device_label=device_label,
+                    visited_objects=visited_objects,
+                )
 
     # def execute_default(self, val, master): #Mohamed Chamge
     #     """

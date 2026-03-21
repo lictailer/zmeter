@@ -38,18 +38,30 @@ When `MainWindow` starts, it now:
 1. builds the equipment setter/getter dictionaries
 2. adds pseudo-devices like `default` and `artificial_channel`
 3. creates `self.command_router`
-4. injects `command_router` and `device_label` into each equipment and each `.logic`
+4. injects `command_router` and `device_label` into each equipment layer
 5. builds a lightweight device catalog
 
 That means every device can later use the same router object.
 
+The injection is recursive. `MainWindow` tries to wire:
+
+- the equipment widget
+- `.logic`
+- `.hardware`
+
+If a layer exposes `set_command_router(command_router, source_device=None)`, `MainWindow` calls it. Otherwise it falls back to assigning `.command_router` and `.device_label` directly.
+
 ### 2. A device sends a request
 
-A device sends a request through `DeviceCommandClient` or directly through:
+A device should usually send a request by calling the injected router directly:
 
 ```python
-self.command_router.sig_command_requested.emit(payload)
+response = self.command_router.route_command(payload)
 ```
+
+This is the preferred low-change path because the device does not need to import `DeviceCommandClient`.
+
+`DeviceCommandClient` still exists, but it is now optional convenience for future async UI-heavy devices.
 
 The payload is a Python dict with this shape:
 
@@ -87,7 +99,7 @@ If the request passes validation:
 
 This is important: the new bus does not create a second device-control path. It reuses the existing `read_info` and `write_info` path.
 
-### 5. The router emits a response
+### 5. The router returns a response
 
 Every request returns a response dict like:
 
@@ -195,7 +207,7 @@ That consistency matters because every future device can parse the same fields:
 - `error_code`
 - `error_message`
 
-### `DeviceCommandClient`
+### `DeviceCommandClient` (Optional)
 
 This is a convenience wrapper for devices.
 
@@ -233,6 +245,8 @@ This function filters responses:
 
 This prevents one device from accidentally treating another device's response as its own.
 
+Keep this helper available, but do not require devices to import it.
+
 ## `core/mainWindow.py`
 
 ### New startup logic in `__init__`
@@ -248,7 +262,7 @@ self.refresh_device_catalog()
 What they do:
 
 - create the router
-- give each device access to the router
+- give each device layer access to the router
 - publish the catalog immediately
 
 ### `update_artificial_channel_scan_info(self)`
@@ -383,12 +397,22 @@ into:
 
 - the equipment widget
 - the `.logic` object, if present
+- the `.hardware` object, if present
+
+It prefers calling:
+
+```python
+set_command_router(command_router, source_device=device_label)
+```
+
+when a layer exposes that method. If not, it falls back to setting `.command_router` and `.device_label` directly.
 
 It also injects the same metadata into `artificial_channel_logic`.
 
 Why this is useful:
 
 - future devices do not need to search for `MainWindow`
+- hardware-only consumers can be wired without importing `core`
 - `MainWindow` gives each device the shared router once at startup
 
 ### `write_info(self, val, master)`
@@ -494,49 +518,44 @@ class MyFeatureLogic(QtCore.QObject):
 
 Because the method names and signatures are standard, `MainWindow` will automatically include them in the catalog.
 
-## Step 2. Use the injected router from the widget
+## Step 2. Accept injected router metadata
 
-After `MainWindow` is created, it injects:
-
-- `self.command_router`
-- `self.device_label`
-
-into the device widget and its logic.
-
-So in the device widget, create the client lazily:
+The lowest-change integration is to let `MainWindow` inject the router after construction:
 
 ```python
-from PyQt6 import QtCore, QtWidgets
-from core.device_command_router import DeviceCommandClient
-
-
-class MyFeatureDevice(QtWidgets.QWidget):
+class MyFeatureHardware:
     def __init__(self):
-        super().__init__()
-        self._bus_client = None
+        self.command_router = None
+        self.source_device = "my_feature"
 
-    def _client(self):
-        if self._bus_client is None:
-            if not hasattr(self, "command_router"):
-                raise RuntimeError("command_router has not been injected by MainWindow yet.")
-            self._bus_client = DeviceCommandClient(
-                self.command_router,
-                self.device_label,
-                parent=self,
-            )
-            self._bus_client.sig_response.connect(self._handle_bus_response)
-            self._bus_client.sig_catalog_changed.connect(self._handle_catalog_changed)
-        return self._bus_client
+    def set_command_router(self, command_router, source_device=None):
+        self.command_router = command_router
+        if source_device is not None:
+            self.source_device = source_device
 ```
+
+This keeps the device independent from importing `core` helper classes.
 
 ## Step 3. Ask for the available devices and channels
 
 ```python
-    def refresh_remote_choices(self):
-        self._client().request_catalog()
+import uuid
 
-    def _handle_catalog_changed(self, catalog):
-        print("Catalog changed:", catalog)
+
+    def list_available_channels(self):
+        response = self.command_router.route_command(
+            {
+                "request_id": str(uuid.uuid4()),
+                "source_device": self.source_device,
+                "action": "list_catalog",
+                "target_device": None,
+                "channel": None,
+                "value": None,
+            }
+        )
+        if not response["ok"]:
+            raise RuntimeError(response["error_message"])
+        return response["catalog"]
 ```
 
 The catalog will look like:
@@ -554,34 +573,59 @@ You can use that to populate dropdown menus.
 
 ```python
     def move_nidaq_x(self, value):
-        self._client().request_write("nidaq_0", "AO0", value)
+        response = self.command_router.route_command(
+            {
+                "request_id": str(uuid.uuid4()),
+                "source_device": self.source_device,
+                "action": "write",
+                "target_device": "nidaq_0",
+                "channel": "AO0",
+                "value": value,
+            }
+        )
+        if not response["ok"]:
+            raise RuntimeError(response["error_message"])
 ```
 
 ## Step 5. Read from another device
 
 ```python
     def read_keithley_current(self):
-        self._client().request_read("Keithley_0", "current")
+        response = self.command_router.route_command(
+            {
+                "request_id": str(uuid.uuid4()),
+                "source_device": self.source_device,
+                "action": "read",
+                "target_device": "Keithley_0",
+                "channel": "current",
+                "value": None,
+            }
+        )
+        if not response["ok"]:
+            raise RuntimeError(response["error_message"])
+        return response["value"]
 ```
 
-## Step 6. Handle the responses
+## Step 6. Optional async client wrapper
+
+If a future widget really wants async response filtering, it can still create a `DeviceCommandClient` lazily:
 
 ```python
-    def _handle_bus_response(self, response):
-        if not response["ok"]:
-            print("Bus error:", response["error_code"], response["error_message"])
-            return
+from core.device_command_router import DeviceCommandClient
 
-        if response["action"] == "list_catalog":
-            catalog = response["catalog"]
-            print("Available devices:", catalog.keys())
 
-        elif response["action"] == "read":
-            print("Read value:", response["value"])
-
-        elif response["action"] == "write":
-            print("Write finished:", response["target_device"], response["channel"])
+class MyFeatureDevice(QtWidgets.QWidget):
+    def _client(self):
+        if not hasattr(self, "_bus_client"):
+            self._bus_client = DeviceCommandClient(
+                self.command_router,
+                self.device_label,
+                parent=self,
+            )
+        return self._bus_client
 ```
+
+But this is optional now, not the default path.
 
 ## Very Short Mental Model
 
@@ -615,7 +659,7 @@ Those can be built later on top of this foundation.
 If a new device should:
 
 - appear in scan menus: add standard `get_*` / `set_*`
-- talk to other devices: use `DeviceCommandClient`
+- talk to other devices: use the injected router directly
 - update its UI when available channels change: listen to `sig_catalog_changed`
 
 That will keep new devices consistent with the architecture introduced here.
