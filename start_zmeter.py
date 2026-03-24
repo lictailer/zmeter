@@ -22,6 +22,7 @@ from keithley24xx.keithley24xx_main import Keithley24xx
 # from auto_focus.autofocus_logic import stepper_and_galvo_xyz
 # from opticool.opticool_main import OptiCool
 from montana2.montana2_main import Montana2
+from autofocus_xuguo.autofocusXZ_main import AutofocusXZMain
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -47,6 +48,7 @@ def create_equipment():
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
         # "montana2": Montana2(),
+        "autofocusXZ": AutofocusXZMain(),
     }
 
     # ------------------------------------------------------------

@@ -49,7 +49,7 @@ The injection is recursive. `MainWindow` tries to wire:
 - `.logic`
 - `.hardware`
 
-If a layer exposes `set_command_router(command_router, source_device=None)`, `MainWindow` calls it. Otherwise it falls back to assigning `.command_router` and `.device_label` directly.
+If a layer exposes `configure_command_router(command_router, source_device=None)`, `MainWindow` calls it. Otherwise it falls back to assigning `.command_router` and `.device_label` directly.
 
 ### 2. A device sends a request
 
@@ -402,7 +402,7 @@ into:
 It prefers calling:
 
 ```python
-set_command_router(command_router, source_device=device_label)
+configure_command_router(command_router, source_device=device_label)
 ```
 
 when a layer exposes that method. If not, it falls back to setting `.command_router` and `.device_label` directly.
@@ -528,7 +528,7 @@ class MyFeatureHardware:
         self.command_router = None
         self.source_device = "my_feature"
 
-    def set_command_router(self, command_router, source_device=None):
+    def configure_command_router(self, command_router, source_device=None):
         self.command_router = command_router
         if source_device is not None:
             self.source_device = source_device

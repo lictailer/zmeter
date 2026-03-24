@@ -14,6 +14,8 @@ does not include a physical home switch.
 
 from __future__ import annotations
 
+import os
+import sys
 import threading
 import time
 import uuid
@@ -22,7 +24,14 @@ from typing import Any, Optional
 import serial
 from PyQt6 import QtCore
 
-from core.device_command_router import DeviceCommandClient
+try:
+    from core.device_command_router import DeviceCommandClient
+except ImportError:
+    _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+    from core.device_command_router import DeviceCommandClient
+
 
 
 class stepperMotorHardware:
@@ -185,7 +194,7 @@ class _CommandBusHardware:
         self.source_device = str(value)
         self._client = None
 
-    def set_command_router(
+    def configure_command_router(
         self,
         command_router: Any,
         source_device: Optional[str] = None,

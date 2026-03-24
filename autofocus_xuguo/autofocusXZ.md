@@ -9,7 +9,7 @@ The experiment need is:
 - `autofocus`: recover the best Z focus when the sample drifts
 - `auto-position`: recover the X/Y beam position when the sample shifts
 
-The current work in this folder is focused on the hardware communication layer first.
+The current work now includes hardware, helpers, logic, and a first integrated GUI binding layer.
 
 ## Current Status
 
@@ -19,16 +19,28 @@ Implemented:
 - Python hardware wrapper for Z autofocus: `AutofocusXZHardware`
 - Python hardware wrapper for X/Y auto-position: `AutoPositionXZHardware`
 - command-router-based read/write access for remote scan channels
-
-Not implemented yet:
-
-- autofocus search logic
-- image registration / reposition logic
-- GUI for the new combined feature
+- reusable auto-position helper module for square mapping and offset fitting
+- combined logic layer in `autofocusXZ_logic.py` for:
+  - XY reference map scan/load
+  - XY offset fit/apply/history/export
+  - Z offset/history/export
+  - scan-facing setters with software offset compensation
+  - absolute-home and offset-home helpers for both XY and Z
+  - two-pass autofocus absolute-maximum workflow
+  - Qt signal output for status/progress/offset/report-path updates
+  - separated report targets:
+    - autoposition PPT
+    - autofocus PPT
+- integrated GUI in `autofocusXZ_main.py` with:
+  - full button-to-logic binding for autoposition/autofocus/manual functions
+  - status panel logging with timestamp/progress/error messages
+  - nested device/channel selectors for X out, Y out, XY ref, Z ref
+  - channel catalog refresh from `list_available_channels()`
 
 Current files:
 
 - [autofocusXZ_hardware.py](C:/Users/Taylo/Documents/GitHub/zmeter/autofocus_xuguo/autofocusXZ_hardware.py)
+- [autopositionXZ_helpers.py](C:/Users/Taylo/Documents/GitHub/zmeter/autofocus_xuguo/autopositionXZ_helpers.py)
 - [autofocusXZ_logic.py](C:/Users/Taylo/Documents/GitHub/zmeter/autofocus_xuguo/autofocusXZ_logic.py)
 - [autofocusXZ_main.py](C:/Users/Taylo/Documents/GitHub/zmeter/autofocus_xuguo/autofocusXZ_main.py)
 - [stepper_driver.ino](C:/Users/Taylo/Documents/GitHub/zmeter/autofocus_xuguo/stepper_driver/stepper_driver.ino)
@@ -123,6 +135,36 @@ Main functions:
 - `move_absoluteY(value)`
 - `read_reference_value()`
 
+### 4. Auto-position helper functions
+
+Module: `autopositionXZ_helpers.py`
+
+Responsibility:
+
+- run a lightweight square 2D map with X as fast axis and Y as slow axis
+- save the map in a JSON structure compatible with the existing scan reader
+- fit the X/Y compensation offset between a reference map and a new map
+
+Main functions:
+
+- `run_autoposition_square_mapping(...)`
+- `fit_offset(...)`
+- `run_autofocus_z_profile(...)`
+- `fit_gaussian_peak(...)`
+- `append_autoposition_report_slide(...)`
+- `append_autofocus_report_slide(...)`
+- `export_history_to_csv(...)`
+
+The mapping helper saves JSON files into:
+
+- `<save_path>/autoposition/`
+
+The offset fitting helper:
+
+- uses map registration to estimate pixel shift
+- converts that shift into X/Y axis offsets
+- rejects the fit if the quality is below a threshold
+
 ## Command Router Usage
 
 The new code follows how `MainWindow` injects router metadata.
@@ -200,11 +242,10 @@ hw.disconnect()
 
 Likely next steps:
 
-- build `autofocusXZ_logic.py`
-- combine autofocus and auto-position workflow into one logic class
-- define how the reference image / reference signal is stored
-- decide how re-focus and re-position are triggered during scans
-- build the GUI in `autofocusXZ_main.py`
+- wire `AutofocusXZMain` into startup equipment list and `MainWindow`
+- verify nested channel selector UX with real catalog updates
+- bench-test long scans/autofocus in real hardware loop
+- run full hardware bench validation (map, fit, offsets, Z scan)
 
 ## Update Rule
 

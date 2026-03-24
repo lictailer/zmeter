@@ -359,12 +359,12 @@ class MainWindow(QtWidgets.QWidget):
             return
         visited_objects.add(object_id)
 
-        set_router = getattr(obj, "set_command_router", None)
-        if callable(set_router):
+        configure_router = getattr(obj, "configure_command_router", None)
+        if callable(configure_router):
             try:
-                set_router(self.command_router, source_device=device_label)
+                configure_router(self.command_router, source_device=device_label)
             except TypeError:
-                set_router(self.command_router)
+                configure_router(self.command_router)
 
         try:
             obj.device_label = device_label

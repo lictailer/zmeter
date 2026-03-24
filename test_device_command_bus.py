@@ -74,7 +74,7 @@ class FakeHardware:
         self.source_device = None
         self.device_label = None
 
-    def set_command_router(self, command_router, source_device=None):
+    def configure_command_router(self, command_router, source_device=None):
         self.command_router = command_router
         if source_device is not None:
             self.source_device = source_device
