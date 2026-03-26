@@ -65,6 +65,7 @@ class AutofocusXZMain(QtWidgets.QWidget):
         self._refresh_com_ports()
         self._push_settings_to_logic()
         self._sync_offsets_from_logic()
+        self._sync_current_z_from_logic()
         self._sync_report_paths()
         self._set_stepper_status(False)
         self._set_current_status("Idle")
@@ -331,6 +332,13 @@ class AutofocusXZMain(QtWidgets.QWidget):
         self._on_xy_offset_changed(x_offset, y_offset)
         self._on_z_offset_changed(self.logic.read_z_current_offset())
 
+    def _sync_current_z_from_logic(self) -> None:
+        try:
+            value = self.logic.read_current_z()
+        except Exception:
+            return
+        self.labelCurrentZValue.setText(f"{float(value):.6g}")
+
     def _sync_report_paths(self) -> None:
         paths = self.logic.get_report_paths()
         self._on_report_paths_changed(
@@ -415,6 +423,7 @@ class AutofocusXZMain(QtWidgets.QWidget):
         try:
             result = action()
             self._sync_offsets_from_logic()
+            self._sync_current_z_from_logic()
             self._sync_report_paths()
             self._set_current_status("Idle")
             self._append_status(f"{label} finished.", level="INFO")
@@ -449,12 +458,19 @@ class AutofocusXZMain(QtWidgets.QWidget):
         }
 
     def _collect_autofocus_settings(self) -> dict[str, Any]:
+        settle_ms_widget = getattr(self, "spinFocusSettleMs", None)
+        settle_time_s = (
+            float(settle_ms_widget.value()) / 1000.0
+            if settle_ms_widget is not None
+            else 0.1
+        )
         return {
             "x": float(self.spinFocusX.value()),
             "y": float(self.spinFocusY.value()),
             "threshold": float(self.spinFocusThreshold.value()),
-            "down_limit": float(self.spinFocusDownLimit.value()),
-            "up_limit": float(self.spinFocusUpLimit.value()),
+            "start_limit": float(self.spinFocusDownLimit.value()),
+            "stop_limit": float(self.spinFocusUpLimit.value()),
+            "settle_time_s": settle_time_s,
             "coarse_step_um": float(self.spinFocusCoarseStep.value()),
             "fine_step_um": float(self.spinFocusFineStep.value()),
             "fine_span_scale": float(self.spinFocusFineSpanScale.value()),
@@ -518,6 +534,10 @@ class AutofocusXZMain(QtWidgets.QWidget):
             self.logic.configure_z_reference_channel(
                 cfg["z_ref_device"],
                 cfg["z_ref_channel"],
+            )
+            self.logic.configure_z_height_conversion(
+                translator_height_per_rev=float(self.spinZResolution.value()),
+                gear_ratio=float(self.spinZGearRatio.value()),
             )
 
         self._run_ui_action("Apply channel config", action)

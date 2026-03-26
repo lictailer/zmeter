@@ -323,19 +323,22 @@ def run_autofocus_z_profile(
     Run a 1D autofocus profile scan in Z.
 
     This helper uses absolute-height moves and reads one reference value at each point.
+    Scan direction is preserved from `z_start_um` to `z_end_um`.
     """
     if step_um <= 0:
         raise ValueError("step_um must be positive.")
 
     start_um = float(z_start_um)
     end_um = float(z_end_um)
-    if end_um < start_um:
-        start_um, end_um = end_um, start_um
-
-    n_steps = int(np.floor((end_um - start_um) / float(step_um))) + 1
-    z_positions = start_um + np.arange(n_steps, dtype=float) * float(step_um)
-    if z_positions[-1] < end_um:
-        z_positions = np.append(z_positions, end_um)
+    if abs(end_um - start_um) <= 1e-12:
+        z_positions = np.asarray([start_um], dtype=float)
+    else:
+        direction = 1.0 if end_um > start_um else -1.0
+        signed_step = abs(float(step_um)) * direction
+        n_steps = int(np.floor(abs(end_um - start_um) / abs(float(step_um)))) + 1
+        z_positions = start_um + np.arange(n_steps, dtype=float) * signed_step
+        if abs(float(z_positions[-1]) - end_um) > 1e-12:
+            z_positions = np.append(z_positions, end_um)
 
     values = np.full_like(z_positions, np.nan, dtype=float)
     for index, position_um in enumerate(z_positions):

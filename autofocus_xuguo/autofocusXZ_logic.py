@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -83,9 +84,9 @@ class AutofocusXZLogic(QtCore.QObject):
             "x": 0.0,
             "y": 0.0,
             "threshold": 0.0,
-            "up_limit": 20.0,
-            "down_limit": -20.0,
-            "settle_time_s": 0.0,
+            "start_limit": -20.0,
+            "stop_limit": 20.0,
+            "settle_time_s": 0.1,
             "coarse_step_um": 1.0,
             "fine_span_scale": 0.25,
             "fine_step_um": 0.5,
@@ -172,6 +173,25 @@ class AutofocusXZLogic(QtCore.QObject):
     def configure_z_reference_channel(self, target_device: str, channel: str) -> None:
         self.autofocus_hardware.set_reference_channel(target_device, channel)
         self._emit_status(f"Configured Z reference: {target_device}_{channel}.")
+
+    def configure_z_height_conversion(
+        self,
+        translator_height_per_rev: float,
+        gear_ratio: float,
+    ) -> None:
+        self.autofocus_hardware.set_height_conversion(
+            translator_height_per_rev=translator_height_per_rev,
+            gear_ratio=gear_ratio,
+        )
+        effective_um_per_motor_rev = (
+            float(translator_height_per_rev) / float(gear_ratio)
+        )
+        self._emit_status(
+            "Configured Z conversion: "
+            f"resolution={float(translator_height_per_rev):.6g} um/rev, "
+            f"gear_ratio={float(gear_ratio):.6g}, "
+            f"effective={effective_um_per_motor_rev:.6g} um per motor rev."
+        )
 
     # -------------------------------------------------------------------------
     # UI / general methods
@@ -342,6 +362,9 @@ class AutofocusXZLogic(QtCore.QObject):
 
     def move_z_to_abs_home(self) -> float:
         final_physical = float(self.autofocus_hardware.home())
+        settle_s = float(self.autofocus_settings.get("settle_time_s", 0.0))
+        if settle_s > 0:
+            time.sleep(settle_s)
         logical_z = float(final_physical - self.z_offset)
         self._emit_status(f"Moved Z to absolute home. Logical Z={logical_z:.6g} um.")
         return logical_z
@@ -386,10 +409,24 @@ class AutofocusXZLogic(QtCore.QObject):
         self.autoposition_hardware.move_absoluteY(commanded)
         return commanded
 
-    def set_z_with_offset(self, z_value: float) -> float:
-        commanded_physical = float(z_value) + float(self.z_offset)
-        final_physical = float(self.autofocus_hardware.move_absolute_height(commanded_physical))
-        return float(final_physical - self.z_offset)
+    def set_z_with_offset(self, z_value: float, *, settle_time_s: float | None = None) -> float:
+        logical_z = float(z_value)
+        offset = float(self.z_offset)
+        commanded_physical = logical_z + offset
+        if not np.isfinite(commanded_physical):
+            raise ValueError(
+                "Invalid Z command computed from logical value and offset."
+            )
+        self.autofocus_hardware.move_absolute_height(commanded_physical)
+        settle_s = (
+            float(self.autofocus_settings.get("settle_time_s", 0.0))
+            if settle_time_s is None
+            else float(settle_time_s)
+        )
+        if settle_s > 0:
+            time.sleep(settle_s)
+        # Read back from hardware after motion for robust logical position.
+        return float(self.autofocus_hardware.current_height() - float(self.z_offset))
 
     def set_autoposition(self, settings: Any) -> dict[str, Any]:
         self.clear_stop_request()
@@ -524,8 +561,8 @@ class AutofocusXZLogic(QtCore.QObject):
         x_value = float(self.autofocus_settings["x"])
         y_value = float(self.autofocus_settings["y"])
         threshold = float(self.autofocus_settings["threshold"])
-        down_limit = float(self.autofocus_settings["down_limit"])
-        up_limit = float(self.autofocus_settings["up_limit"])
+        start_limit = float(self.autofocus_settings["start_limit"])
+        stop_limit = float(self.autofocus_settings["stop_limit"])
         coarse_step = float(self.autofocus_settings["coarse_step_um"])
         fine_step = float(self.autofocus_settings["fine_step_um"])
         fine_span_scale = float(self.autofocus_settings["fine_span_scale"])
@@ -533,8 +570,8 @@ class AutofocusXZLogic(QtCore.QObject):
         fine_peak_ratio_min = float(self.autofocus_settings["fine_peak_ratio_min"])
         settle_time_s = float(self.autofocus_settings["settle_time_s"])
 
-        if up_limit <= down_limit:
-            raise ValueError("up_limit must be larger than down_limit.")
+        if np.isclose(start_limit, stop_limit):
+            raise ValueError("start_limit and stop_limit must not be equal.")
         if coarse_step <= 0 or fine_step <= 0:
             raise ValueError("coarse_step_um and fine_step_um must be positive.")
 
@@ -543,11 +580,12 @@ class AutofocusXZLogic(QtCore.QObject):
 
         start_logical_z = self.read_current_z()
         old_z_offset = float(self.z_offset)
+        self.set_z_with_offset(start_limit, settle_time_s=settle_time_s)
 
         coarse_profile = run_autofocus_z_profile(
             self.autofocus_hardware,
-            z_start_um=down_limit + old_z_offset,
-            z_end_um=up_limit + old_z_offset,
+            z_start_um=start_limit + old_z_offset,
+            z_end_um=stop_limit + old_z_offset,
             step_um=coarse_step,
             settle_time_s=settle_time_s,
             point_finished_callback=lambda idx, total: self._emit_progress(
@@ -577,18 +615,28 @@ class AutofocusXZLogic(QtCore.QObject):
             )
         else:
             coarse_peak = float(coarse_fit.peak_position)
-            coarse_span = float(up_limit - down_limit)
+            coarse_min = float(min(start_limit, stop_limit))
+            coarse_max = float(max(start_limit, stop_limit))
+            coarse_span = float(abs(stop_limit - start_limit))
             fine_span = float(max(coarse_span * fine_span_scale, fine_step * 2.0))
-            fine_down = max(down_limit, coarse_peak - fine_span / 2.0)
-            fine_up = min(up_limit, coarse_peak + fine_span / 2.0)
-            if fine_up - fine_down < fine_step:
-                fine_down = max(down_limit, coarse_peak - fine_step)
-                fine_up = min(up_limit, coarse_peak + fine_step)
+            fine_low = max(coarse_min, coarse_peak - fine_span / 2.0)
+            fine_high = min(coarse_max, coarse_peak + fine_span / 2.0)
+            if fine_high - fine_low < fine_step:
+                fine_low = max(coarse_min, coarse_peak - fine_step)
+                fine_high = min(coarse_max, coarse_peak + fine_step)
+
+            coarse_direction_positive = stop_limit > start_limit
+            if coarse_direction_positive:
+                fine_start = fine_high
+                fine_stop = fine_low
+            else:
+                fine_start = fine_low
+                fine_stop = fine_high
 
             fine_profile = run_autofocus_z_profile(
                 self.autofocus_hardware,
-                z_start_um=fine_down + old_z_offset,
-                z_end_um=fine_up + old_z_offset,
+                z_start_um=fine_start + old_z_offset,
+                z_end_um=fine_stop + old_z_offset,
                 step_um=fine_step,
                 settle_time_s=settle_time_s,
                 point_finished_callback=lambda idx, total: self._emit_progress(
@@ -630,7 +678,10 @@ class AutofocusXZLogic(QtCore.QObject):
                         f"threshold {threshold:.6g}."
                     )
                 else:
-                    self.set_z_with_offset(float(fine_fit.peak_position))
+                    self.set_z_with_offset(
+                        float(fine_fit.peak_position),
+                        settle_time_s=settle_time_s,
+                    )
                     self.z_offset = float(self.autofocus_hardware.current_height())
                     self._emit_z_offset()
                     success = True
@@ -641,7 +692,7 @@ class AutofocusXZLogic(QtCore.QObject):
         if not success:
             # Restore the original logical Z position if autofocus fails.
             try:
-                self.set_z_with_offset(start_logical_z)
+                self.set_z_with_offset(start_logical_z, settle_time_s=settle_time_s)
             except Exception:
                 pass
 
@@ -652,8 +703,8 @@ class AutofocusXZLogic(QtCore.QObject):
                 "x": float(x_value),
                 "y": float(y_value),
                 "threshold": float(threshold),
-                "down_limit": float(down_limit),
-                "up_limit": float(up_limit),
+                "start_limit": float(start_limit),
+                "stop_limit": float(stop_limit),
                 "old_z_offset": float(old_z_offset),
                 "new_z_offset": float(self.z_offset),
                 "coarse_peak_um": None if coarse_fit.peak_position is None else float(coarse_fit.peak_position),
@@ -706,16 +757,11 @@ class AutofocusXZLogic(QtCore.QObject):
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 
-    def _report_folder(self) -> Path:
-        folder = Path(self.save_path) / "autofocusXZ_reports"
-        folder.mkdir(parents=True, exist_ok=True)
-        return folder
-
     def _autoposition_report_ppt_path(self) -> str:
-        return str(self._report_folder() / "autoposition_report.pptx")
+        return str(self._autoposition_folder() / "autoposition_report.pptx")
 
     def _autofocus_report_ppt_path(self) -> str:
-        return str(self._report_folder() / "autofocus_report.pptx")
+        return str(self._autofocus_folder() / "autofocus_report.pptx")
 
     @staticmethod
     def _timestamp() -> str:
