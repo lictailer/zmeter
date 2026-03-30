@@ -119,16 +119,23 @@ def add_slide_with_qpixmap(
             comments_box.TextFrame.TextRange.Text = f"Comments:\n{comments_value}"
             comments_box.TextFrame.TextRange.Font.Size = 11
         else:
-            for temp_path, pos in zip(temp_files, image_positions):
+            for temp_path, pixmap, pos in zip(temp_files, pixmap_images, image_positions):
                 left, top, width, height = pos
+                src_w = max(float(pixmap.width()), 1.0)
+                src_h = max(float(pixmap.height()), 1.0)
+                scale = min(width / src_w, height / src_h)
+                draw_w = src_w * scale
+                draw_h = src_h * scale
+                draw_left = left + (width - draw_w) / 2
+                draw_top = top + (height - draw_h) / 2
                 slide.Shapes.AddPicture(
                     FileName=temp_path,
                     LinkToFile=False,
                     SaveWithDocument=True,
-                    Left=left,
-                    Top=top,
-                    Width=width,
-                    Height=height,
+                    Left=draw_left,
+                    Top=draw_top,
+                    Width=draw_w,
+                    Height=draw_h,
                 )
             if comments_text and comments_text.strip():
                 comments_box = slide.Shapes.AddTextbox(

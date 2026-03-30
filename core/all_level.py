@@ -1,7 +1,6 @@
 from .scan_info import *
 from .individual_setter import IndividualSetter
 from .nested_menu import NestedMenu
-import re
 
 
 class IndividualLevel(QtWidgets.QWidget):
@@ -10,22 +9,15 @@ class IndividualLevel(QtWidgets.QWidget):
     def __init__(self, individual_level_info=None,setter_equipment_info=None,getter_equipment_info=None):
         super(IndividualLevel, self).__init__()
         uic.loadUi("core/ui/individual_level.ui", self)
-        self.setter_equipment_info=setter_equipment_info
+        self.setter_equipment_info = setter_equipment_info
         self.getter_equipment_info = getter_equipment_info
-        if individual_level_info != None:
-            self.manual_set_before_info = individual_level_info["manual_set_before"]
-            self.manual_set_after_info = individual_level_info["manual_set_after"]
-        else:
-            self.manual_set_before_info = ""
-            self.manual_set_after_info = ""
-        
         self.set_record_equipment_info()
+        self.set_manual_set_channel_menu()
+        self.horizontalLayout.insertWidget(0, self.getter_nested_menu)
+        if hasattr(self, "label_3"):
+            self.label_3.hide()
+        self.manual_set_channel_layout.insertWidget(0, self.manual_set_menu)
         self.set_setter_equipment_info(self.setter_equipment_info)
-        self.set_manual_set_info()
-        self.horizontalLayout.insertWidget(1,self.nested_menu)
-
-
-# change name level_info to info
 
         self.record = []
         if individual_level_info == None:
@@ -36,23 +28,36 @@ class IndividualLevel(QtWidgets.QWidget):
         self.master_add_one_pb.clicked.connect(self.when_add_clicked)
         self.master_delete_one_pb.clicked.connect(self.delete_master)
         self.record_clean_pb.clicked.connect(self.when_clean_clicked)
-        # self.setting_method_le.editingFinished.connect(self.setting_method_changed)
-        # self.enable_setting_method_checkBox.stateChanged.connect(self.setting_method_changed)
-        self.manual_set_before.editingFinished.connect(self.when_manual_set_before_changed)
-        self.manual_set_after.editingFinished.connect(self.when_manual_set_after_changed)
+        self.manual_set_before_add_pb.clicked.connect(self.when_add_manual_set_before_clicked)
+        self.manual_set_after_add_pb.clicked.connect(self.when_add_manual_set_after_clicked)
+        self.manual_set_before_remove_last_pb.clicked.connect(self.when_remove_last_manual_set_before_clicked)
+        self.manual_set_after_remove_last_pb.clicked.connect(self.when_remove_last_manual_set_after_clicked)
+        self.manual_set_clear_all_pb.clicked.connect(self.when_clear_all_manual_set_clicked)
+        self.settle_time_spinbox.valueChanged.connect(self.when_settle_time_changed)
         
     def set_record_equipment_info(self):
-        self.nested_menu = NestedMenu()
-        self.nested_menu.set_choices(self.getter_equipment_info)
-        # print(EquipmentInfo)
-        self.nested_menu.sig_self_changed.connect(self.when_combobox_changed)
+        self.getter_nested_menu = NestedMenu()
+        self.getter_nested_menu.label.hide()
+        self.getter_nested_menu.set_choices(self.getter_equipment_info)
+        self.getter_nested_menu.sig_self_changed.connect(self.when_combobox_changed)
+
+    def set_manual_set_channel_menu(self):
+        self.manual_set_menu = NestedMenu()
+        self.manual_set_menu.set_choices(self.setter_equipment_info)
 
     def set_info(self, info,):
+        if 'settle_time' not in info:
+            info['settle_time'] = 0.0
+        if 'manual_set_before' not in info:
+            info['manual_set_before'] = []
+        if 'manual_set_after' not in info:
+            info['manual_set_after'] = []
         self.individual_level_info = info
         self.update_ui()
 
     def set_setter_equipment_info(self, setter_equipment_info):
-    #set the equipments available according to the given equipment info
+        self.setter_equipment_info = setter_equipment_info
+        self.manual_set_menu.set_choices(self.setter_equipment_info)
         
         for i in range(self.verticalLayout.count()):
             item = self.verticalLayout.itemAt(i).widget()
@@ -61,36 +66,39 @@ class IndividualLevel(QtWidgets.QWidget):
 
     def set_getter_equipment_info(self, getter_equipment_info):
         self.getter_equipment_info = getter_equipment_info
-        self.nested_menu.set_choices(self.getter_equipment_info)
-        
-
-
-
-        #     for key in value.keys():
-        #         self.record_cb.addItem(key)
-        #         print(key)
+        self.getter_nested_menu.set_choices(self.getter_equipment_info)
     
     def update_ui(self):
         clearLayout(self.verticalLayout)
         for setter in self.individual_level_info['setters']:
             self.add_master(info=self.individual_level_info['setters'][setter])
-        text = ''
-        for getter in self.individual_level_info['getters']:
-            text += f"{getter}, "
-        self.record_label.setText(text)
+        self._refresh_record_label()
         # self.individual_level_info['setting_array']=self.get_setting_array(personalized_method=False)
+
+        self.setting_method_le.blockSignals(True)
+        self.setting_method_le.setText(self.individual_level_info.get('setting_method', ''))
+        self.setting_method_le.blockSignals(False)
 
         if self.individual_level_info['setting_method'] == '':
             self.enable_setting_method_checkBox.setChecked(False)
         else:
             self.enable_setting_method_checkBox.setChecked(True)
+
+        self.settle_time_spinbox.blockSignals(True)
+        self.settle_time_spinbox.setValue(float(self.individual_level_info['settle_time']))
+        self.settle_time_spinbox.blockSignals(False)
+        self.update_manual_set_labels()
             
         self.sig_info_changed.emit([self, self.individual_level_info])
-        # print("updated")
-        
-        #updated
-        # for equipment in self.equipment_info:
-        #     pass
+
+    def _refresh_record_label(self):
+        getters = [g for g in self.individual_level_info['getters'] if g != 'none']
+        if len(getters) == 0:
+            self.individual_level_info['getters'] = ['none']
+            self.record_label.setText('Record: (none)')
+            return
+        self.individual_level_info['getters'] = getters
+        self.record_label.setText('Record: ' + ', '.join(getters))
 
     def when_add_clicked(self):
         self.add_master()
@@ -101,9 +109,56 @@ class IndividualLevel(QtWidgets.QWidget):
         w.sig_self_changed.connect(self.setter_changed)
         self.setter_changed(w)
 
-    def set_manual_set_info(self):
-        self.manual_set_before.setText(self.convert_dict_list_to_text(self.manual_set_before_info))
-        self.manual_set_after.setText(self.convert_dict_list_to_text(self.manual_set_after_info))
+    def _format_manual_set_list(self, dict_list):
+        if not dict_list:
+            return "(empty)"
+        text_list = []
+        for i, mapping in enumerate(dict_list, start=1):
+            for key, value in mapping.items():
+                text_list.append(f"{i}. {key}->{value}")
+        return " | ".join(text_list)
+
+    def update_manual_set_labels(self):
+        self.manual_set_before_label.setText(
+            self._format_manual_set_list(self.individual_level_info['manual_set_before'])
+        )
+        self.manual_set_after_label.setText(
+            self._format_manual_set_list(self.individual_level_info['manual_set_after'])
+        )
+
+    def _add_manual_set(self, key):
+        channel = self.manual_set_menu.name
+        if channel in ["", "void", "none"]:
+            return
+        value = float(self.manual_set_value_spinbox.value())
+        self.individual_level_info[key].append({channel: value})
+        self.update_manual_set_labels()
+        self.sig_info_changed.emit([self, self.individual_level_info])
+
+    def when_add_manual_set_before_clicked(self):
+        self._add_manual_set('manual_set_before')
+
+    def when_add_manual_set_after_clicked(self):
+        self._add_manual_set('manual_set_after')
+
+    def _remove_last_manual_set(self, key):
+        if len(self.individual_level_info[key]) == 0:
+            return
+        self.individual_level_info[key].pop()
+        self.update_manual_set_labels()
+        self.sig_info_changed.emit([self, self.individual_level_info])
+
+    def when_remove_last_manual_set_before_clicked(self):
+        self._remove_last_manual_set('manual_set_before')
+
+    def when_remove_last_manual_set_after_clicked(self):
+        self._remove_last_manual_set('manual_set_after')
+
+    def when_clear_all_manual_set_clicked(self):
+        self.individual_level_info['manual_set_before'] = []
+        self.individual_level_info['manual_set_after'] = []
+        self.update_manual_set_labels()
+        self.sig_info_changed.emit([self, self.individual_level_info])
 
     def setter_changed(self, setter):
         info = setter.info
@@ -150,60 +205,27 @@ class IndividualLevel(QtWidgets.QWidget):
         # self.setting_method_changed()
 
     def when_combobox_changed(self, widget):
-        if 'none' in self.individual_level_info['getters']:
-            self.individual_level_info['getters'].remove('none')
-        t=widget.name
-        if t == 'void':
+        channel = widget.name
+        if channel == 'void':
             return
-        if t in self.individual_level_info['getters']:
-            return
-        self.individual_level_info['getters'].append(t)
-        text = 'record: '
-        for r in self.individual_level_info['getters']:
-            text += f"{r}, "
-        self.record_label.setText(text)
+        getters = [g for g in self.individual_level_info['getters'] if g != 'none']
+        if channel in getters:
+            getters.remove(channel)
+        else:
+            getters.append(channel)
+        self.individual_level_info['getters'] = getters
+        self._refresh_record_label()
         self.sig_info_changed.emit([self, self.individual_level_info])
 
     def when_clean_clicked(self):
         self.individual_level_info['getters'] = ['none']
-        self.record_label.setText('none')
-        # self.nested_menu.setCurrentIndex(0)
-        self.sig_info_changed.emit([self, self.individual_level_info])
-    
-    def convert_text_to_dict_list(self,text):
-        mappings = text.split(',')
-        dict_list = []
-        for mapping in mappings:
-            temp, value = mapping.split('->')
-            value = float(value)
-            key=temp.strip()
-            dict_list.append({key: value})
-        
-        return dict_list
-    
-    def convert_dict_list_to_text(self, dict_list):
-        text = ""
-        for i in range(len(dict_list)):
-            if i != 0:
-                text += ", "
-                
-            for key, value in dict_list[i].items():
-                text += f"{key}->{value}"
-        return text
-
-    def when_manual_set_before_changed(self):
-        text = self.manual_set_before.text()
-        self.individual_level_info['manual_set_before'] = self.convert_text_to_dict_list(text)
-        self.sig_info_changed.emit([self, self.individual_level_info])
-    
-    def when_manual_set_after_changed(self):
-        text = self.manual_set_after.text()
-        self.individual_level_info['manual_set_after'] = self.convert_text_to_dict_list(text)
+        self._refresh_record_label()
+        # self.getter_nested_menu.setCurrentIndex(0)
         self.sig_info_changed.emit([self, self.individual_level_info])
 
-    def when_artificial_channel_added(self):
-        text = self.artificial_channel.text()
-        equation,new_channel = text.split('=')
+    def when_settle_time_changed(self, value):
+        self.individual_level_info['settle_time'] = float(value)
+        self.sig_info_changed.emit([self, self.individual_level_info])
 
 
 # if __name__ == "__main__":

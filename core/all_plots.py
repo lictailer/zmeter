@@ -304,7 +304,6 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.update_roi_text()
 
 
-
     def update_lines_from_roi(self):
         center = self.roi.pos() + self.roi.size() / 2
         self.h_line.setPos(center.y())

@@ -1,171 +1,141 @@
-# Multi-Level Scanning Logic Documentation
+# ScanLogic (`core/scan_logic_new.py`)
 
-## Overview
+This file documents the active scan engine only: `core/scan_logic_new.py`.
 
-The `ScanLogic` module implements a sophisticated hierarchical scanning system that can execute multi-level parameter sweeps with real-time data acquisition and progress tracking. The system supports nested scanning loops where higher-numbered levels (outer loops) change slower than lower-numbered levels (inner loops), enabling complex measurement sequences across multiple instruments.
+For UI-to-engine setup flow (`Scan`, `AllLevelSetting`, `IndividualLevel`, `IndividualSetter`), see [README_scan_overview.md](README_scan_overview.md).
 
-## Key Features
+## Scope
 
-- **Recursive Multi-Level Scanning**: Supports arbitrary nesting depth with configurable setters and getters
-- **Multithreaded Device Communication**: Parallel communication with multiple devices for optimal performance
-- **Real-Time Progress Tracking**: Time estimates and completion percentages with GUI updates
-- **PyQt6 Signal Integration**: Non-blocking communication with GUI components
-- **Artificial Channel Support**: Calculated parameters and derived measurements
-- **Manual Pre/Post Settings**: Custom actions before/after each scanning level
+Main class:
+- `core/scan_logic_new.py` -> `ScanLogic(QtCore.QThread)`
 
-## Architecture Overview
+Used by:
+- `core/scan.py` -> `self.logic = ScanLogic(...)`
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                    ScanLogic (QThread)                     │
-├────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐    ┌─────────────────┐                │
-│  │   Recursive     │    │  Multithreaded  │                │
-│  │   Looping       │◄──►│   Device I/O    │                │
-│  │   Algorithm     │    │   Management    │                │
-│  └─────────────────┘    └─────────────────┘                │
-│           │                       │                        │
-│           ▼                       ▼                        │
-│  ┌─────────────────┐    ┌─────────────────┐                │
-│  │   Data Storage  │    │   Progress      │                │
-│  │   & Indexing    │    │   Tracking      │                │
-│  └─────────────────┘    └─────────────────┘                │
-└────────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-                ┌─────────────────┐
-                │   GUI Updates   │
-                │   via Qt        │
-                │   Signals       │
-                └─────────────────┘
-```
+Primary entry path:
+1. `Scan._start_scan_now()` calls `self.logic.initialize_scan_data(self.info)`
+2. `Scan._start_scan_now()` starts thread via `self.logic.start()`
+3. `ScanLogic.run()` checks `go_scan` and calls `scan()`
+4. `scan()` calls `looping(self.max_level)` (recursive execution)
 
-## Core Concepts
+## 1) Initialization (`initialize_scan_data`)
 
-### Level Hierarchy
+`initialize_scan_data(scan_config)` normalizes the scan info into runtime arrays/lists:
+- `self.level_target_arrays`: each level's `setting_array`
+- `self.level_setters`: setter channel list per level
+- `self.level_getters`: getter channel list per level
+- `self.level_target_counts`: point count per level (`setting_array.shape[1]`)
+- `self.level_getter_counts`: getter count per level
+- `self.level_manual_settings`: `[manual_set_before, manual_set_after]` per level
+- `self.level_settle_times`: per-level delay (seconds) between write and read
+- `self.level_data_arrays`: preallocated `np.nan` arrays for results
+- `self.current_target_indices`: current index at each level
+- `self.total_points`: product of point counts across levels
 
-The scanning system organizes parameters into hierarchical levels:
+Current behavior details:
+- If a level has no getters, the code appends `"none"` to that level getter list.
+- Data array shape for level `L` is:
+  - `[num_getters_at_L, points(level_max), ..., points(level_L)]`
 
-- **Level 0 (Innermost)**: Changes fastest - fine-resolution parameters like frequency
-- **Level 1, 2, ... N**: Change progressively slower - medium-scale parameters like amplitude  
-- **Level N (Outermost)**: Changes slowest - major conditions like temperature
+Related functions:
+- `initialize_scan_data`
+- `reset_flags`
 
-### Execution Flow Example
+## 2) Recursive Runtime (`looping`)
 
-**3-Level Scan**: Temperature [4K, 300K] × Amplitude [0.1V, 0.5V, 1.0V] × Frequency [1Hz, 2Hz, 3Hz, 4Hz, 5Hz]
+Core loop function:
+- `looping(current_level)`
 
-```
-🌡️ Temperature = 4K
-├── 🔧 Amplitude = 0.1V
-│   ├── 🎵 Freq = 1Hz → 📊 Measure → Store
-│   ├── 🎵 Freq = 2Hz → 📊 Measure → Store  
-│   └── ... (all 5 frequencies)
-├── 🔧 Amplitude = 0.5V
-│   └── ... (all 5 frequencies again)
-└── 🔧 Amplitude = 1.0V
-    └── ... (all 5 frequencies again)
+Execution order at each level:
+1. Pause/stop gate (`_pause_gate`, `received_stop`)
+2. Apply `manual_set_before` (`main_window.write_info`)
+3. Build grouped channel maps:
+   - `group_writing_device_channels(...)`
+   - `group_reading_device_channels(...)`
+4. For each target column:
+   - write all setter channels (`multi_thread_write`)
+   - wait `settle_time` once for this level (if configured and this level has readable channels)
+   - read all getter channels (`multi_thread_read`)
+     - if artificial-channel skip-read flag is set, fill getters with `NaN` via `build_nan_measurements`
+   - store results in `self.level_data_arrays[...]`
+   - emit `sig_new_data([level_data_arrays, current_target_indices_copy])`
+   - recurse into inner level: `looping(current_level - 1)`
+   - progress/time update (`update_remaining_time_estimate`)
+   - hourly autosave trigger check (`check_auto_backup_trigger`)
+5. Apply `manual_set_after`
+6. Reset this level index to `0`
 
-🌡️ Temperature = 300K  
-└── ... (repeat all amplitude/frequency combinations)
-```
+Notes:
+- Base case is `current_level == -1`.
+- Scan starts from `max_level` (outermost level) and recurses inward.
 
-**Total**: 2 × 3 × 5 = 30 measurement points
+Related functions:
+- `looping`
+- `check_auto_backup_trigger`
+- `update_remaining_time_estimate`
 
-## Recursive Looping Algorithm
+## 3) Device Grouping + Multi-Thread I/O
 
-### How Recursive Looping Creates Nested Scans
+Helpers:
+- `extract_device_from_channel(channel_name)`
+- `group_writing_device_channels(level_index)`
+- `group_reading_device_channels(level_index)`
 
-The scanning system uses a simple recursive function to automatically create nested measurement loops. Here's the high-level flow:
+Write path:
+- `multi_thread_write(...)` builds `{device: {channel: value}}`
+- uses `ThreadPoolExecutor(max_workers=num_devices)`
+- each worker calls `write_single_device_all_channels(...)`
 
-```
-                    ┌────────────────────────┐
-                    │    Start Scan at       │
-                    │   Outermost Level      │
-                    └───────────┬────────────┘
-                                │
-                    ┌───────────▼─────────────┐
-                    │   🔧 Setup Phase       │
-                    │ • Manual settings       │
-                    │ • Group device channels │
-                    └───────────┬─────────────┘
-                                │
-         ┌──────────────────────▼──────────────────────┐
-         │             Measurement Loop                │
-         │                                             │
-         │  For each point at this level:              │
-         │  ┌────────────────────────────────────────┐ │
-         │  │ 1.  Set device parameters              │ │
-         │  │   (multithreaded - all devices at once)│ │
-         │  │                                        │ │
-         │  │ 2.  Read measurements                  │ │
-         │  │   (multithreaded - all devices at once)│ │
-         │  │                                        │ │
-         │  │ 3. Store data in arrays                │ │
-         │  │                                        │ │
-         │  │ 4. RECURSIVE CALL                      │ │
-         │  │   ↓ Process ALL inner levels           │ │
-         │  │   ↓ before moving to next point        │ │
-         │  └────────────────────────────────────────┘ │
-         └─────────────────────────────────────────────┘
-                                │
-                    ┌───────────▼─────────────┐
-                    │   🧹 Cleanup Phase      │
-                    │ • Manual settings       │
-                    │ • Reset counters        │
-                    └─────────────────────────┘
-```
+Read path:
+- `multi_thread_read(...)` uses one worker per device
+- each worker calls `read_single_device_all_channels(...)`
+- merged into one dict keyed by full channel name
 
+Artificial channels:
+- Write: `artificial_channel_logic.set_channel_value(..., is_scan_write=True)`
+- Read: `artificial_channel_logic.read_channel_value(...)`
+- Skip-read support: `artificial_channel_logic.consume_skip_read_for_scan()`
 
+## 4) Pause / Resume / Stop Control
 
-### Why Recursion Works
+Thread control API:
+- `request_pause()`
+- `request_resume()`
+- `request_stop()`
 
-**Key Insight**: The recursive function call ensures ALL inner measurements complete before the outer level advances to its next point, creating perfect nested loops automatically.
+Mechanism:
+- `QMutex` + `QWaitCondition`
+- `_pause_gate()` blocks while paused, wakes on resume/stop
+- stop also clears pause and wakes blocked waiters
 
-**Example Result**: For Level1=[A,B] and Level0=[1,2,3], measurements occur at: (A,1), (A,2), (A,3), (B,1), (B,2), (B,3)
+`scan.py` wiring:
+- pause button -> `ScanLogic.request_pause`
+- resume button -> `ScanLogic.request_resume`
+- stop button -> `ScanLogic.request_stop`
 
-## Multithreaded Device Communication
+## 5) Signals Used by GUI
 
-### Parallel Write and Read Operations
+Emitted by `ScanLogic`:
+- `sig_new_data(object)` -> consumed by `Scan.new_data(...)`
+- `sig_update_remaining_time(str)` -> `Scan.update_remaining_time_label(...)`
+- `sig_update_remaining_points(str)` -> `Scan.update_remaining_points_label(...)`
+- `sig_auto_backup(bool)` -> `Scan.auto_backup(...)`
+- `sig_scan_finished()` -> `Scan.scan_finished(...)`
 
-**The system implements parallel communication for BOTH write and read operations**, enabling simultaneous communication with multiple devices during parameter setting and measurement acquisition.
+## 6) Cleanup Guarantees
 
-### How Parallel Communication Works
+`scan()` wraps execution in `try/finally`:
+- always resets flags
+- always clears artificial skip-read state
+- always calls `main_window.start_equipments()`
+- always emits `sig_scan_finished`
 
-1. **Device Grouping**: Channels are automatically grouped by device (e.g., `lockin_0`, `nidaq_0`, `nidaq_1`)
-2. **ThreadPool**: Creates one thread per device for simultaneous communication
-3. **Parallel Execution**: All devices communicate at the same time instead of sequentially
+This means pause/stop/interruption still returns control back to GUI and device runtime.
 
-### Performance Benefits
+## 7) Where To Edit What
 
-**Sequential**: Write Dev1 → Write Dev2 → Write Dev3 → Read Dev1 → Read Dev2 → Read Dev3
-**Parallel**: All devices write simultaneously, then all devices read simultaneously
-
-**Result**: **3-5x faster** for multi-device setups
-
-## Data Storage and Progress Tracking
-
-### Data Organization
-- **N-Dimensional Arrays**: Measurement data automatically organized by level hierarchy
-- **Real-Time Updates**: Live progress tracking with time estimates
-- **GUI Integration**: Non-blocking updates via Qt signals
-
-## Error Handling and Control
-
-### Scan Control
-- **Start/Stop**: Responsive start and stop controls
-- **Graceful Termination**: Clean shutdown with proper equipment re-initialization  
-- **Progress Monitoring**: Real-time time estimates and completion tracking
-
-## System Capabilities
-
-### Performance
-- **Multithreaded**: 3-5x speedup through parallel device communication
-- **Scalable**: No limit on nesting depth or device count (within hardware constraints)
-- **Efficient**: Memory pre-allocation and optimized indexing
-
-### Reliability  
-- **Thread-Safe**: Each device operates independently
-- **Robust Error Handling**: Graceful recovery from interruptions
-- **Real-Time Monitoring**: Live progress and time estimation
-
-This architecture provides a robust, scalable, and high-performance scanning system suitable for complex multi-parameter experimental sequences.
+- Change recursion order/data write indexing: `looping`
+- Change progress/time computation: `update_remaining_time_estimate`
+- Change pause semantics: `_pause_gate`, `request_*`
+- Change read/write grouping: `extract_device_from_channel`, `group_*`, `multi_thread_*`
+- Change autosave trigger cadence: `check_auto_backup_trigger`

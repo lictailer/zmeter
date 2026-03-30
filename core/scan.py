@@ -79,10 +79,12 @@ class Scan(QtWidgets.QWidget):
             self.info = {'name': 'no name',
                          'levels': self.all_level_setting.all_level_info,
                          'data': {},
-                         'plots': self.all_plot_setting.info}
+                         'plots': self.all_plot_setting.info,
+                         'comments': ''}
         else:
             self.info = info
             self.info['name']=name
+            self.info.setdefault('comments', '')
             # print(name)
         self.populate()
         self.all_level_setting.sig_info_changed.connect(self.when_all_level_setting_infochanged)
@@ -121,8 +123,8 @@ class Scan(QtWidgets.QWidget):
         setting_shot = self.settingTab.grab()
         main_window_shot = self.main_window.grab()
         overview_positions = [
-            (20, 70, 300, 440),   # settingTab
-            (330, 70, 610, 440),  # main_window
+            (20, 70, 450, 380),   # settingTab
+            (490, 70, 450, 380),  # main_window
         ]
 
         add_slide_with_qpixmap(
@@ -149,7 +151,7 @@ class Scan(QtWidgets.QWidget):
                 slide_title=slide_title,
                 slide_text=slide_text,
                 pixmap_images=[screenshot],
-                comments_text=comments_text,
+                image_positions=[(20, 70, 920, 450)],
             )
 
         print(
@@ -179,6 +181,7 @@ class Scan(QtWidgets.QWidget):
 
     def populate(self):
         self.lineEdit.setText(self.info['name'])
+        self.comments_textEdit.setPlainText(self.info.get('comments', ''))
         self.setWindowTitle(self.info['name'])
 
     def emit(self):
@@ -572,6 +575,10 @@ class Scan(QtWidgets.QWidget):
                     return "NaN"
                 return super().default(obj)
 
+        # Sync UI-only level editor fields (for example setting_method_le) into self.info.
+        self.update_alllevel_setting_array()
+        self.info['comments'] = self.comments_textEdit.toPlainText()
+
         ppp_box = self.PlotsPerPage                      # QComboBox
         self.info['plots_per_page'] = ppp_box.currentText()
 
@@ -647,6 +654,7 @@ class Scan(QtWidgets.QWidget):
                     
                     info = json.loads(content)  # Use json.loads() instead of json.load(file)
                     self.info = convert_special_values(info)
+                    self.info.setdefault('comments', '')
                     print("info",self.info)
 
                     ppp_val = self.info.get('plots_per_page', None)
@@ -766,6 +774,8 @@ class Scan(QtWidgets.QWidget):
                 elif isinstance(obj, float) and np.isnan(obj):
                     return "NaN"
                 return super().default(obj)
+
+        self.info['comments'] = self.comments_textEdit.toPlainText()
 
         ppp_box = self.PlotsPerPage                      # QComboBox
         self.info['plots_per_page'] = ppp_box.currentText()

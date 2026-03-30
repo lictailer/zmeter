@@ -11,6 +11,10 @@ It combines:
 
 Primary usage is experiment automation where each scan point sets one or more channels and reads one or more channels.
 
+Quick scan docs for this repo:
+- `documents/README_scan_overview.md` (UI/start flow + level-setting build path)
+- `documents/README_scan_logic.md` (runtime engine behavior in `core/scan_logic_new.py`)
+
 ## 2. Entrypoint And Runtime Boot
 Primary entrypoint: `start_zmeter.py`.
 
@@ -256,6 +260,8 @@ Note:
 ## 15. Important File Map
 - `start_zmeter.py`: app entry, instrument selection, connect addresses.
 - `core/mainWindow.py`: global app window, device routing, close/shutdown.
+- `documents/README_scan_overview.md`: scan entry and level-building overview.
+- `documents/README_scan_logic.md`: detailed runtime notes for `ScanLogic`.
 - `ni6432/ni6432_main.py`: NI USB-6432 widget/UI bindings.
 - `ni6432/ni6432_logic.py`: NI USB-6432 scan-facing getters/setters and monitor logic.
 - `ni6432/ni6432_hardware.py`: NI USB-6432 low-level `nidaqmx` operations.
