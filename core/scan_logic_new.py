@@ -63,6 +63,7 @@ ScanInfo = {
             },
             "setting_method": "[AB]",  # Method identifier for how to apply settings
             "getters": ['lockin_0_X'],  # Channels to read measurements from
+            "settle_time": 0.0,  # Delay after write and before read at this level (seconds)
             # 2D array: [setter_values][point_index] - NaN values skip that setter
             "setting_array": [[0,1,2,3,4,5,6,7,8,9,10],
                               [-1,1,0,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]]
@@ -88,6 +89,7 @@ ScanInfo = {
             },
             "setting_method": "A+B,CL",
             "getters": ['lockin_0_Y'],
+            "settle_time": 0.0,
             "setting_array": [[0,1,2]]
         }
     },
@@ -188,6 +190,7 @@ class ScanLogic(QtCore.QThread):
         self.level_target_counts = []      # Number of points per level (including NaN)
         self.level_getter_counts = []      # Number of measurement channels per level
         self.level_manual_settings = []    # Manual settings before/after each level
+        self.level_settle_times = []       # Delay between write and read for each level
         self.stop_scan = False             # Flag for graceful scan termination
         
         # Extract configuration data for each scanning level
@@ -216,6 +219,7 @@ class ScanLogic(QtCore.QThread):
             temp_manual_set = [scan_config['levels'][f'level{level_index}']['manual_set_before'], 
                               scan_config['levels'][f'level{level_index}']['manual_set_after']]
             self.level_manual_settings.append(temp_manual_set)
+            self.level_settle_times.append(float(scan_config['levels'][f'level{level_index}'].get('settle_time', 0.0)))
 
         # Count getter channels for each level
         for getters in self.level_getters:
@@ -303,20 +307,26 @@ class ScanLogic(QtCore.QThread):
                 self.main_window.write_info(value, key)
 
         reading_device_channels = self.group_reading_device_channels(current_level)
-        writing_device_channels = self.group_writing_device_channels(current_level)
 
         for target_index in range(self.level_target_counts[current_level]):
             if self._pause_gate() or self.received_stop:
                 return
 
             # write
-            self.multi_thread_write(writing_device_channels, current_level, target_index)
+            self.multi_thread_write(current_level, target_index)
 
             if self._pause_gate() or self.received_stop:
                 return
 
             if self.level_getter_counts[current_level] == 0:
                 break
+
+            settle_time = self.level_settle_times[current_level]
+            if settle_time > 0 and len(reading_device_channels) > 0:
+                time.sleep(settle_time)
+
+            if self._pause_gate() or self.received_stop:
+                return
 
             # read
             if self.main_window.artificial_channel_logic.consume_skip_read_for_scan():
@@ -465,16 +475,6 @@ class ScanLogic(QtCore.QThread):
         end_time = time.time()
         return result
 
-    def group_writing_device_channels(self, level_index):
-        device_channels = {}
-        for setter_index in range(len(self.level_setters[level_index])):
-            setter_channel = self.level_setters[level_index][setter_index]
-            device_name, variable = self.extract_device_from_channel(setter_channel)
-            if device_name not in device_channels:
-                device_channels[device_name] = {}
-            device_channels[device_name][variable] = 0
-        return device_channels
-
     def write_single_device_all_channels(self, device, channel_value_list):
         for channel, value in channel_value_list.items():
             if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
@@ -486,14 +486,40 @@ class ScanLogic(QtCore.QThread):
             else:
                 self.main_window.write_info(value, f"{device}_{channel}")
 
-    def multi_thread_write(self, writing_device_channels, level_index, target_index):
+    def _build_write_payload(self, level_index, target_index):
+        """
+        Build one write payload for a scan point.
+
+        Duplicate setter channels are resolved by setter order:
+        first active setter wins for the same channel at this point.
+        """
         set_value = self.level_target_arrays[level_index][:, target_index]
-        print("writing_device_channels.items(): ",writing_device_channels.items())
-        for device, channel_list in writing_device_channels.items():
-            print("channel_list:", channel_list)
-            for channel in channel_list:
-                channel_list_index = self.level_setters[level_index].index(f"{device}_{channel}")
-                writing_device_channels[device][channel] = set_value[channel_list_index]
+        device_channels = {}
+
+        for setter_index, setter_channel in enumerate(self.level_setters[level_index]):
+            value = set_value[setter_index]
+            if np.isnan(value):
+                continue
+
+            device_name, variable = self.extract_device_from_channel(setter_channel)
+            if device_name in (None, "", "none"):
+                continue
+
+            if device_name not in device_channels:
+                device_channels[device_name] = {}
+
+            # First active setter wins if same channel appears more than once.
+            if variable in device_channels[device_name]:
+                continue
+            device_channels[device_name][variable] = value
+
+        return device_channels
+
+    def multi_thread_write(self, level_index, target_index):
+        writing_device_channels = self._build_write_payload(level_index, target_index)
+        if len(writing_device_channels) == 0:
+            return
+
         with ThreadPoolExecutor(max_workers=len(writing_device_channels)) as executor:
             futures = [executor.submit(self.write_single_device_all_channels, device, channel_value_list) for device, channel_value_list in writing_device_channels.items()]
 

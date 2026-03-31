@@ -1,0 +1,948 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>autofocusXZ</class>
+ <widget class="QWidget" name="autofocusXZ">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1440</width>
+    <height>1266</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>1440</width>
+    <height>16777215</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>AutoFocus / AutoPosition XZ</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayoutMain">
+   <item>
+    <widget class="QGroupBox" name="groupBoxSystem">
+     <property name="title">
+      <string>System / Channel Setup</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayoutSystem">
+      <item row="1" column="5">
+       <widget class="QPushButton" name="btnBrowseSavePath">
+        <property name="text">
+         <string>Browse</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="2">
+       <widget class="QLabel" name="labelYDev">
+        <property name="text">
+         <string>Y Out Channel</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="3">
+       <widget class="QLineEdit" name="lineYDevice">
+        <property name="text">
+         <string>ni6432_0</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="2">
+       <widget class="QLabel" name="labelXYRefDev">
+        <property name="text">
+         <string>XY Ref Channel</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="labelZRefDev">
+        <property name="text">
+         <string>Z Ref Channel</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QLineEdit" name="lineZRefDevice">
+        <property name="text">
+         <string>ni6432_0</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="4" colspan="2">
+       <widget class="QPushButton" name="btn_refreshListChannels">
+        <property name="text">
+         <string>Refresh</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="3">
+       <widget class="QLineEdit" name="lineXYRefDevice">
+        <property name="text">
+         <string>ni6432_0</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLineEdit" name="autoPositionPptPath">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="3">
+       <widget class="QLineEdit" name="autoFocusPptPath">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="2">
+       <widget class="QLabel" name="labelReportPptPath">
+        <property name="text">
+         <string>Autofocus PPT</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QPushButton" name="disconnect_com_btn">
+        <property name="text">
+         <string>Disconnect Stepper</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1" colspan="4">
+       <widget class="QLineEdit" name="lineSavePath">
+        <property name="text">
+         <string>data</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QLabel" name="ard_label_status">
+        <property name="text">
+         <string>OFF</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelSavePath">
+        <property name="text">
+         <string>Save Path</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLineEdit" name="lineXDevice">
+        <property name="text">
+         <string>ni6432_0</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="comboComPort"/>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelCurrentMapPath">
+        <property name="text">
+         <string>Autoposition PPT</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="4">
+       <widget class="QLabel" name="labelStatusT">
+        <property name="text">
+         <string>Status</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QPushButton" name="connect_com_btn">
+        <property name="text">
+         <string>Connect Stepper</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="labelXDev">
+        <property name="text">
+         <string>X Out Channel</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelCom">
+        <property name="text">
+         <string>Stepper COM</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QDoubleSpinBox" name="spinZResolution">
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>1000000.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>500.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="3">
+       <widget class="QDoubleSpinBox" name="spinZGearRatio">
+        <property name="decimals">
+         <number>3</number>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>20.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>3.333000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="labelZResolution">
+        <property name="text">
+         <string>Z Resolution (um/rev)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="2">
+       <widget class="QLabel" name="labelZGearRatio">
+        <property name="text">
+         <string>Gear Ratio</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="4" rowspan="2" colspan="2">
+       <widget class="QPushButton" name="btnApplyChannelConfig">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>Apply Config</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayoutWorkflows">
+     <item>
+      <widget class="QGroupBox" name="groupBoxAutoPosition">
+       <property name="title">
+        <string>AutoPosition X/Y</string>
+       </property>
+       <layout class="QGridLayout" name="gridLayoutAutoPosition">
+        <item row="0" column="2">
+         <widget class="QLabel" name="labelXYCenterY">
+          <property name="text">
+           <string>Center Y</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="3">
+         <widget class="QDoubleSpinBox" name="spinXYCenterY">
+          <property name="decimals">
+           <number>6</number>
+          </property>
+          <property name="minimum">
+           <double>-99.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>99.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QLabel" name="labelXYPoints">
+          <property name="text">
+           <string>Points/Line</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelXYCenterX">
+          <property name="text">
+           <string>Center X</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QDoubleSpinBox" name="spinXYCenterX">
+          <property name="decimals">
+           <number>6</number>
+          </property>
+          <property name="minimum">
+           <double>-99.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>99.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QDoubleSpinBox" name="spinXYSpan">
+          <property name="minimum">
+           <double>0.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.300000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="labelXYSpan">
+          <property name="text">
+           <string>Span</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="3">
+         <widget class="QSpinBox" name="spinXYPoints">
+          <property name="minimum">
+           <number>2</number>
+          </property>
+          <property name="maximum">
+           <number>1000</number>
+          </property>
+          <property name="value">
+           <number>101</number>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="0" rowspan="2" colspan="2">
+         <widget class="QPushButton" name="btnMeasureAndSetXYOffset_2">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Run Autoposition</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="3">
+         <widget class="QPushButton" name="btnExportXYOffsetHistory">
+          <property name="text">
+           <string>Export XY History</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QPushButton" name="btnScanXYReference">
+          <property name="text">
+           <string>Scan Reference</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QPushButton" name="btnLoadXYReference">
+          <property name="text">
+           <string>Load Reference</string>
+          </property>
+         </widget>
+        </item>
+        <item row="9" column="2">
+         <widget class="QLabel" name="labelCurrentXYOffsetY">
+          <property name="text">
+           <string>Y Offset:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="9" column="3">
+         <widget class="QLabel" name="labelCurrentXYOffsetYValue">
+          <property name="text">
+           <string>0.0</string>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="2">
+         <widget class="QLabel" name="labelCurrentXYOffsetX">
+          <property name="text">
+           <string>X Offset:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QPushButton" name="btnSetXYOffset">
+          <property name="text">
+           <string>Set Offset</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <widget class="QPushButton" name="btnReadXYOffset">
+          <property name="text">
+           <string>Read XY Offset</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="2">
+         <widget class="QPushButton" name="btnClearXYOffsetHistory">
+          <property name="text">
+           <string>Clear XY Offset</string>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="3">
+         <widget class="QLabel" name="labelCurrentXYOffsetXValue">
+          <property name="text">
+           <string>0.0</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="3">
+         <widget class="QDoubleSpinBox" name="spinXYQualityThreshold">
+          <property name="decimals">
+           <number>3</number>
+          </property>
+          <property name="maximum">
+           <double>1.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.600000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QLabel" name="labelXYQuality">
+          <property name="text">
+           <string>Quality Thres</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="labelXYUpsample">
+          <property name="text">
+           <string>Upsample</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QSpinBox" name="spinXYUpsampleFactor">
+          <property name="minimum">
+           <number>1</number>
+          </property>
+          <property name="value">
+           <number>20</number>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1">
+         <widget class="QPushButton" name="btnMoveXYAbsHome">
+          <property name="text">
+           <string>Move XY Abs Home</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="0">
+         <widget class="QPushButton" name="btnMoveXYHome">
+          <property name="text">
+           <string>Move XY Home (Offset)</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="groupBoxAutofocus">
+       <property name="title">
+        <string>AutoFocus Z</string>
+       </property>
+       <layout class="QGridLayout" name="gridLayoutAutofocus">
+        <item row="5" column="0">
+         <widget class="QPushButton" name="btnCurrentZToZero">
+          <property name="text">
+           <string>Set Z Offset</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="0" rowspan="2" colspan="2">
+         <widget class="QPushButton" name="btnRunAutofocus">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Run Autofocus</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="labelFocusY">
+          <property name="text">
+           <string>Focus Reference Y</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="3">
+         <widget class="QDoubleSpinBox" name="spinFocusY">
+          <property name="decimals">
+           <number>6</number>
+          </property>
+          <property name="minimum">
+           <double>-99.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>99.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QDoubleSpinBox" name="spinFocusX">
+          <property name="decimals">
+           <number>6</number>
+          </property>
+          <property name="minimum">
+           <double>-99.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>99.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="labelFocusX">
+          <property name="text">
+           <string>Focus Reference X</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="labelFocusThreshold">
+          <property name="text">
+           <string>Threshold</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QDoubleSpinBox" name="spinFocusThreshold">
+          <property name="minimum">
+           <double>-1000000.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>1000000.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="3">
+         <widget class="QDoubleSpinBox" name="spinFocusUpLimit">
+          <property name="minimum">
+           <double>-10000.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>10000.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>20.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="labelCoarse">
+          <property name="text">
+           <string>Coarse Step (um)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="labelFocusDown">
+          <property name="text">
+            <string>Start Limit (um)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="3">
+         <widget class="QLabel" name="labelCurrentZValue">
+          <property name="text">
+           <string>0.0</string>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="3">
+         <widget class="QLabel" name="labelCurrentZOffsetValue">
+          <property name="text">
+           <string>0.0</string>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="2">
+         <widget class="QLabel" name="labelCurrentZOffsetT">
+          <property name="text">
+           <string>Z Offset:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="2">
+         <widget class="QPushButton" name="btnClearZOffsetHistory">
+          <property name="text">
+           <string>Clear Z Offset</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <widget class="QPushButton" name="btnReadZOffset">
+          <property name="text">
+           <string>Read Z Offset</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="2">
+         <widget class="QPushButton" name="btnReadCurrentZ">
+          <property name="text">
+           <string>Read Current Z</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <widget class="QPushButton" name="btnMoveZAbsHome">
+          <property name="text">
+           <string>Move Z Abs Home</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0">
+         <widget class="QPushButton" name="btnMoveZHome">
+          <property name="text">
+           <string>Move Z Home (Offset)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="3">
+         <widget class="QPushButton" name="btnExportZOffsetHistory">
+          <property name="text">
+           <string>Export Z History</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QDoubleSpinBox" name="spinFocusDownLimit">
+          <property name="minimum">
+           <double>-10000.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>10000.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>-20.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QLabel" name="labelFocusUp">
+          <property name="text">
+            <string>Stop Limit (um)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QDoubleSpinBox" name="spinFocusCoarseStep">
+          <property name="minimum">
+           <double>0.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>1.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="labelFineSpan">
+          <property name="text">
+           <string>Fine Span Scale</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="3">
+         <widget class="QDoubleSpinBox" name="spinFocusFineStep">
+          <property name="minimum">
+           <double>0.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.500000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="2">
+         <widget class="QLabel" name="labelFine">
+          <property name="text">
+           <string>Fine Step (um)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QDoubleSpinBox" name="spinFocusFineSpanScale">
+          <property name="maximum">
+            <double>1.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.250000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="2">
+         <widget class="QLabel" name="labelFocusSettleMs">
+          <property name="text">
+           <string>Settle Time (ms)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="3">
+         <widget class="QDoubleSpinBox" name="spinFocusSettleMs">
+          <property name="decimals">
+           <number>1</number>
+          </property>
+          <property name="minimum">
+           <double>0.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>1000000.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>10.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>100.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="2">
+         <widget class="QLabel" name="labelCurrentZT">
+          <property name="text">
+           <string>Current Z:</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBoxManual">
+     <property name="title">
+      <string>Manual / Utility</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayoutManual">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelManualX">
+        <property name="text">
+         <string>X with offset</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QDoubleSpinBox" name="spinManualXWithOffset">
+        <property name="decimals">
+         <number>6</number>
+        </property>
+        <property name="minimum">
+         <double>-99.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>99.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QPushButton" name="btnMoveXWithOffset">
+        <property name="text">
+         <string>Move X</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QLabel" name="labelManualY">
+        <property name="text">
+         <string>Y with offset</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="4">
+       <widget class="QDoubleSpinBox" name="spinManualYWithOffset">
+        <property name="decimals">
+         <number>6</number>
+        </property>
+        <property name="minimum">
+         <double>-99.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>99.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QPushButton" name="btnMoveYWithOffset">
+        <property name="text">
+         <string>Move Y</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelManualZ">
+        <property name="text">
+         <string>Z with offset</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QDoubleSpinBox" name="spinManualZWithOffset">
+        <property name="decimals">
+         <number>3</number>
+        </property>
+        <property name="minimum">
+         <double>-10000.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>10000.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QPushButton" name="btnMoveZWithOffset">
+        <property name="text">
+         <string>Move Z</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QPushButton" name="btnReadXYReferenceValue">
+        <property name="text">
+         <string>Read XY Ref</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="4">
+       <widget class="QPushButton" name="btnReadZReferenceValue">
+        <property name="text">
+         <string>Read Z Ref</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="5">
+       <widget class="QPushButton" name="update_settings_btn">
+        <property name="text">
+         <string>Update Settings</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBoxStatus">
+     <property name="title">
+      <string>Status / Logs</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayoutStatus">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutStatus">
+        <item>
+         <widget class="QLabel" name="labelCurrentStatus">
+          <property name="text">
+           <string>Current Status:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="labelCurrentStatusValue">
+          <property name="text">
+           <string>Idle</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="horizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnSaveStatusLog">
+          <property name="text">
+           <string>Save Log</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnStopOperations">
+          <property name="text">
+           <string>Stop</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnClearStatusLog">
+          <property name="text">
+           <string>Clear Log</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QPlainTextEdit" name="statusTextPanel">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>160</height>
+         </size>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="plainText">
+         <string>AutoFocusXZ panel ready.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QGridLayout" name="gridLayoutPaths"/>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
