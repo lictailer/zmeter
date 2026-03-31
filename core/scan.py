@@ -73,6 +73,7 @@ class Scan(QtWidgets.QWidget):
         self.plots1_layout.addWidget(self.graphing_plots[0])
         self.plots2_layout.addWidget(self.graphing_plots[1])
         self.plots3_layout.addWidget(self.graphing_plots[2])
+        self._configure_plot_tab_stretch()
 
         self.scrollArea.setWidget(self.all_level_setting)
         if info is None:
@@ -183,6 +184,20 @@ class Scan(QtWidgets.QWidget):
         self.lineEdit.setText(self.info['name'])
         self.comments_textEdit.setPlainText(self.info.get('comments', ''))
         self.setWindowTitle(self.info['name'])
+
+    def _configure_plot_tab_stretch(self):
+        """
+        Keep the plot region as the vertical stretch owner in each tab.
+        This avoids the spacer row consuming extra height when only one plot exists.
+        """
+        for tab in [self.Plots1Tab, self.Plots2Tab, self.Plots3Tab]:
+            layout = tab.layout()
+            if layout is None:
+                continue
+            # Reset first, then assign stretch to the plot container row (index 0).
+            for i in range(layout.count()):
+                layout.setStretch(i, 0)
+            layout.setStretch(0, 1)
 
     def emit(self):
         self.sig_info_changed.emit(self.info)
@@ -690,6 +705,7 @@ class Scan(QtWidgets.QWidget):
         self.plots1_layout.addWidget(self.graphing_plots[0])
         self.plots2_layout.addWidget(self.graphing_plots[1])
         self.plots3_layout.addWidget(self.graphing_plots[2])
+        self._configure_plot_tab_stretch()
 
         self.populate()
         self.all_level_setting.sig_info_changed.connect(self.when_all_level_setting_infochanged)

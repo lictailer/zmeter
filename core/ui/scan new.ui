@@ -73,7 +73,7 @@
             <x>0</x>
             <y>0</y>
             <width>1127</width>
-            <height>521</height>
+            <height>515</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_4"/>
@@ -312,7 +312,7 @@
           <enum>Qt::Vertical</enum>
          </property>
          <property name="sizeType">
-          <enum>QSizePolicy::MinimumExpanding</enum>
+          <enum>QSizePolicy::Expanding</enum>
          </property>
          <property name="sizeHint" stdset="0">
           <size>
@@ -349,9 +349,6 @@
           </widget>
          </item>
         </layout>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_3"/>
        </item>
        <item>
         <layout class="QGridLayout" name="gridLayout_plot1">
