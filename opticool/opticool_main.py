@@ -1,6 +1,7 @@
 # from distutils.command.build_scripts import first_line_re
 from PyQt6 import QtWidgets, uic
 import sys
+from datetime import datetime
 from .opticool_logic import OptiCool_Logic
 
 
@@ -20,6 +21,7 @@ class OptiCool(QtWidgets.QWidget):
         self.pushButton_4.clicked.connect(self.get_field)
         self.connect_pushButton.clicked.connect(self.connect)
         self.disconnect_pushButton.clicked.connect(self.disconnect)
+        self.abortStable_pushButton.clicked.connect(self.abort_stable_wait)
 
         self.logic.sig_last_field.connect(self.update_field)
         self.logic.sig_last_temperature.connect(self.update_temperature)
@@ -41,6 +43,9 @@ class OptiCool(QtWidgets.QWidget):
 
     def disconnect(self):
         self._start_logic_job("disconnect")
+
+    def abort_stable_wait(self):
+        self.logic.request_abort_stable_wait()
 
     def set_temperature(self):
         if not self.logic.is_connected:
@@ -119,7 +124,8 @@ class OptiCool(QtWidgets.QWidget):
         self._append_log(message)
 
     def _append_log(self, message):
-        self.logStatus_textEdit.append(str(message))
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.logStatus_textEdit.append(f"[{timestamp}] {message}")
         self.logStatus_textEdit.verticalScrollBar().setValue(
             self.logStatus_textEdit.verticalScrollBar().maximum()
         )

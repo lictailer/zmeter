@@ -19,6 +19,8 @@ class OptiCool_Logic(QtCore.QThread):
         self.setpoint_temperature = 0.0
         self.setpoint_tesla = 0.0
         self.is_connected = False
+        self.abort_stable_wait_requested = False
+        self.current_wait_mode = None
 
     def _ensure_connected(self):
         if not self.is_connected:
@@ -56,53 +58,120 @@ class OptiCool_Logic(QtCore.QThread):
         except Exception as exc:
             self.sig_status.emit(f"Disconnect failed: {exc}")
 
+    def request_abort_stable_wait(self):
+        if self.current_wait_mode is None:
+            self.sig_status.emit("No active stable wait to abort.")
+            return
+        self.abort_stable_wait_requested = True
+        self.sig_status.emit(
+            f"Abort requested for {self.current_wait_mode} stable wait."
+        )
+
     def set_temperature(self, target_k):
         self._ensure_connected()
+        target_k = float(target_k)
+        self.sig_status.emit(f"Requested temperature setpoint: {target_k:.5f} K")
         self.sig_setting_temperature.emit("setting...")
-        self.hardware.set_temperature(float(target_k))
+        self.hardware.set_temperature(target_k)
         self.get_temperature()
 
     def set_temperature_stable(self, target_k):
         self._ensure_connected()
+        target_k = float(target_k)
+        self.abort_stable_wait_requested = False
+        self.current_wait_mode = "temperature"
         self.set_temperature(target_k)
+        self.sig_status.emit(
+            f"Waiting for temperature to stabilize at {target_k:.5f} K..."
+        )
+        wait_start = time.monotonic()
         read_arr = np.zeros(50)
-        while True:
-            [status, val, temperature_status_string] = self.hardware.get_temperature()
-            self.sig_last_temperature.emit(val)
-            read_arr[-1] = val
-            read_arr[0:-1] = read_arr[1::]
+        try:
+            while True:
+                [status, val, temperature_status_string] = self.hardware.get_temperature()
+                self.sig_last_temperature.emit(val)
+                read_arr[-1] = val
+                read_arr[0:-1] = read_arr[1::]
 
-            if temperature_status_string in ["Stable"]:
-                break
-            elif np.std(read_arr) < 0.0001:
-                break
-            time.sleep(0.1)
+                if self.abort_stable_wait_requested:
+                    elapsed_s = time.monotonic() - wait_start
+                    self.sig_status.emit(
+                        "Temperature stable wait aborted after "
+                        f"{elapsed_s:.1f} s. Target remains {target_k:.5f} K."
+                    )
+                    break
+
+                if temperature_status_string in ["Stable"]:
+                    elapsed_s = time.monotonic() - wait_start
+                    self.sig_status.emit(
+                        "Temperature stable reached at "
+                        f"{val:.5f} K in {elapsed_s:.1f} s."
+                    )
+                    break
+                elif np.std(read_arr) < 0.0001:
+                    elapsed_s = time.monotonic() - wait_start
+                    self.sig_status.emit(
+                        "Temperature considered stable by std threshold in "
+                        f"{elapsed_s:.1f} s."
+                    )
+                    break
+                time.sleep(0.1)
+        finally:
+            self.abort_stable_wait_requested = False
+            self.current_wait_mode = None
 
     def get_temperature(self):
         self._ensure_connected()
         [status, val, temperature_status] = self.hardware.get_temperature()
         self.sig_last_temperature.emit(val)
+        self.sig_status.emit(f"Temperature readback: {val:.5f} K ({temperature_status})")
         return val
 
     def set_field(self, target_t):
         self._ensure_connected()
+        target_t = float(target_t)
+        self.sig_status.emit(f"Requested field setpoint: {target_t:.6f} T")
         self.sig_setting_field.emit("setting...")
-        self.hardware.set_field(float(target_t) * 10000)
+        self.hardware.set_field(target_t * 10000)
 
     def set_field_stable(self, target_t):
         self._ensure_connected()
+        target_t = float(target_t)
+        self.abort_stable_wait_requested = False
+        self.current_wait_mode = "field"
         self.set_field(target_t)
-        while True:
-            [status, val, field_status_string] = self.hardware.get_field()
-            self.sig_last_field.emit(val)
-            if field_status_string == "Holding":
-                break
-            time.sleep(0.001)
+        self.sig_status.emit(f"Waiting for field to stabilize at {target_t:.6f} T...")
+        wait_start = time.monotonic()
+        try:
+            while True:
+                [status, val, field_status_string] = self.hardware.get_field()
+                self.sig_last_field.emit(val)
+
+                if self.abort_stable_wait_requested:
+                    elapsed_s = time.monotonic() - wait_start
+                    self.sig_status.emit(
+                        "Field stable wait aborted after "
+                        f"{elapsed_s:.1f} s. Target remains {target_t:.6f} T."
+                    )
+                    break
+
+                if field_status_string == "Holding":
+                    elapsed_s = time.monotonic() - wait_start
+                    self.sig_status.emit(
+                        "Field stable reached at "
+                        f"{val/10000:.6f} T in {elapsed_s:.1f} s."
+                    )
+                    break
+                time.sleep(0.01)
+        finally:
+            self.abort_stable_wait_requested = False
+            self.current_wait_mode = None
 
     def get_field(self):
         self._ensure_connected()
         [status, val, field_status] = self.hardware.get_field()
         self.sig_last_field.emit(val)
+        self.sig_status.emit(f"Field readback: {val/10000:.6f} T ({field_status})")
         return val / 10000
 
     def run(self):
