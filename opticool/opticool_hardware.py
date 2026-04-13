@@ -1,55 +1,93 @@
-from time import sleep
 import opticool.opticool_dll as opticool_dll
 import QuantumDesign
 import System
 
 
 class OptiCool_Hardware:
+    def __init__(self):
+        self.name = QuantumDesign.QDInstrument.QDInstrumentBase.QDInstrumentType.OptiCool
+        self.instrument = None
+        self.connected = False
 
-    name = QuantumDesign.QDInstrument.QDInstrumentBase.QDInstrumentType.OptiCool
-    Instrument = QuantumDesign.QDInstrument.QDInstrumentFactory().GetQDInstrument(name, False)
+        self.handle_field_mode = opticool_dll.dll.GetType(
+            "QuantumDesign.QDInstrument.QDInstrumentBase+FieldMode"
+        )
+        self.field_mode = System.Activator.CreateInstance(self.handle_field_mode)
 
-    handleFieldMode = opticool_dll.dll.GetType('QuantumDesign.QDInstrument.QDInstrumentBase+FieldMode')
-    FieldMode = System.Activator.CreateInstance(handleFieldMode)
+        self.handle_field_status = opticool_dll.dll.GetType(
+            "QuantumDesign.QDInstrument.QDInstrumentBase+FieldStatus"
+        )
+        self.field_status = System.Activator.CreateInstance(self.handle_field_status)
 
-    handleFieldStatus = opticool_dll.dll.GetType('QuantumDesign.QDInstrument.QDInstrumentBase+FieldStatus')
-    FieldStatus = System.Activator.CreateInstance(handleFieldStatus)
+        self.handle_field_approach = opticool_dll.dll.GetType(
+            "QuantumDesign.QDInstrument.QDInstrumentBase+FieldApproach"
+        )
+        self.field_approach = System.Activator.CreateInstance(self.handle_field_approach)
 
-    handleFieldApproach = opticool_dll.dll.GetType('QuantumDesign.QDInstrument.QDInstrumentBase+FieldApproach')
-    FieldApproach = System.Activator.CreateInstance(handleFieldApproach)
+        self.handle_temperature_status = opticool_dll.dll.GetType(
+            "QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureStatus"
+        )
+        self.temperature_status = System.Activator.CreateInstance(
+            self.handle_temperature_status
+        )
 
-    handleTemperatureStatus = opticool_dll.dll.GetType('QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureStatus')
-    TemperatureStatus = System.Activator.CreateInstance(handleTemperatureStatus)
+        self.handle_temperature_approach = opticool_dll.dll.GetType(
+            "QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureApproach"
+        )
+        self.temperature_approach = System.Activator.CreateInstance(    
+            self.handle_temperature_approach
+        )
 
-    handleTemperatureApproach = opticool_dll.dll.GetType('QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureApproach')
-    TemperatureApproach = System.Activator.CreateInstance(handleTemperatureApproach)
-    # print(FieldMode, FieldStatus, FieldApproach, TemperatureStatus, TemperatureApproach)
+    def connect_hardware(self):
+        if self.connected and self.instrument is not None:
+            return True
+
+        self.instrument = QuantumDesign.QDInstrument.QDInstrumentFactory().GetQDInstrument(
+            self.name, False
+        )
+        self.connected = self.instrument is not None
+        return self.connected
+
+    def disconnect(self):
+        self.instrument = None
+        self.connected = False
+        return True
+
+    def _require_connected(self):
+        if not self.connected or self.instrument is None:
+            raise RuntimeError("OptiCool is not connected.")
+        return self.instrument
 
     def set_temperature(self, val, rate=20):
+        instrument = self._require_connected()
         if val < 1.5 or val > 350:
             print("please enter a temperature between 1.5K and 350K")
-        self.Instrument.SetTemperature(val, rate, self.TemperatureApproach)
+        instrument.SetTemperature(val, rate, self.temperature_approach)
 
     def get_temperature(self):
+        instrument = self._require_connected()
         val = 0.0
-        [status, val, TemperatureStatus] = self.Instrument.GetTemperature(val, self.TemperatureStatus)
-        return [status, val, self.Instrument.TemperatureStatusString(TemperatureStatus)]
+        [status, val, temperature_status] = instrument.GetTemperature(
+            val, self.temperature_status
+        )
+        return [status, val, instrument.TemperatureStatusString(temperature_status)]
 
     def set_field(self, val, rate=150):
-        self.Instrument.SetField(val, rate, self.FieldApproach, self.FieldMode)
+        instrument = self._require_connected()
+        instrument.SetField(val, rate, self.field_approach, self.field_mode)
 
     def get_field(self):
+        instrument = self._require_connected()
         val = 0.0
-        [status, val, FieldStatus] = self.Instrument.GetField(val, self.FieldStatus)
+        [status, val, field_status] = instrument.GetField(val, self.field_status)
 
-        return [status, val, self.Instrument.FieldStatusString(FieldStatus)]### changed here 23_02_09
+        return [status, val, instrument.FieldStatusString(field_status)]
 
 
 
 if __name__ == "__main__":
-    import time
-
     o = OptiCool_Hardware()
-
-    print(o.get_field())
-    print(o.get_temperature())
+    if o.connect_hardware():
+        print(o.get_field())
+        print(o.get_temperature())
+    
