@@ -255,12 +255,26 @@ class Scan(QtWidgets.QWidget):
         self.main_window = mainwindow
         self.logic.main_window = mainwindow
 
+    def _stop_all_equipment_monitors(self):
+        """Best-effort monitor shutdown before scan to avoid read-contention."""
+        if self.main_window is None or not hasattr(self.main_window, "equips"):
+            return
+
+        for equipment_name, equipment in self.main_window.equips.items():
+            if not hasattr(equipment, "stop_monitor"):
+                continue
+            try:
+                equipment.stop_monitor()
+            except Exception as exc:
+                print(f"[Scan] stop_monitor failed for {equipment_name}: {exc}")
+
     def _start_scan_now(self):
         """Start a fresh scan using current self.info settings."""
         if hasattr(self, "unique_data_name"):
             del self.unique_data_name
 
         self.main_window.stop_equipments_for_scanning()
+        self._stop_all_equipment_monitors()
         self.logic.reset_flags()
         self.logic.go_scan = True
 
@@ -334,6 +348,7 @@ class Scan(QtWidgets.QWidget):
         self.logic.go_scan = True
         self.logic.initilize_data(self.info)
         self.main_window.stop_equipments_for_scanning()
+        self._stop_all_equipment_monitors()
         self.logic.start()
         while self.logic.isRunning():
             time.sleep(0.1)

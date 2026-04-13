@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>772</width>
-    <height>798</height>
+    <width>800</width>
+    <height>800</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -89,103 +89,27 @@
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
        <layout class="QGridLayout" name="gridLayout">
-        <item row="4" column="0">
-         <widget class="QLabel" name="label_7">
-          <property name="text">
-           <string>Input Mode</string>
+        <item row="3" column="5">
+         <widget class="QDoubleSpinBox" name="ampl_doubleSpinBox">
+          <property name="suffix">
+           <string> V</string>
           </property>
-         </widget>
-        </item>
-        <item row="4" column="1">
-         <widget class="QComboBox" name="input_config_comboBox">
-          <property name="layoutDirection">
-           <enum>Qt::LeftToRight</enum>
-          </property>
-          <item>
-           <property name="text">
-            <string>Current</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Voltage: A</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>Voltage: A-B</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="5" column="0">
-         <widget class="QLabel" name="label_8">
-          <property name="text">
-           <string>Input Shield</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="1">
-         <widget class="QComboBox" name="filter_slope_comboBox">
-          <property name="layoutDirection">
-           <enum>Qt::LeftToRight</enum>
-          </property>
-          <property name="maxVisibleItems">
-           <number>30</number>
-          </property>
-          <item>
-           <property name="text">
-            <string>6 dB/oct</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>12 dB/oct</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>18 dB/oct</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>24 dB/oct</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="4" column="8" colspan="2">
-         <widget class="QSpinBox" name="harmonic_spinBox">
-          <property name="maximumSize">
-           <size>
-            <width>80</width>
-            <height>16777215</height>
-           </size>
+          <property name="decimals">
+           <number>3</number>
           </property>
           <property name="minimum">
-           <number>1</number>
+           <double>0.004000000000000</double>
           </property>
           <property name="maximum">
-           <number>99</number>
+           <double>5.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.010000000000000</double>
           </property>
          </widget>
         </item>
-        <item row="6" column="8">
-         <widget class="QRadioButton" name="unlocked_radioButton">
-          <property name="enabled">
-           <bool>false</bool>
-          </property>
-          <property name="text">
-           <string/>
-          </property>
-          <property name="checkable">
-           <bool>true</bool>
-          </property>
-          <property name="autoExclusive">
-           <bool>false</bool>
-          </property>
-         </widget>
+        <item row="1" column="5">
+         <widget class="QDoubleSpinBox" name="phase_doubleSpinBox"/>
         </item>
         <item row="5" column="1">
          <widget class="QComboBox" name="input_shield_comboBox">
@@ -204,44 +128,291 @@
           </item>
          </widget>
         </item>
-        <item row="0" column="11">
-         <widget class="QComboBox" name="ext_ref_comboBox">
-          <item>
-           <property name="text">
-            <string>1MΩ</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>50Ω</string>
-           </property>
-          </item>
+        <item row="4" column="4">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Harm #</string>
+          </property>
          </widget>
         </item>
-        <item row="1" column="3" colspan="3">
-         <widget class="QRadioButton" name="sens_ovld_radioButton">
-          <property name="enabled">
-           <bool>false</bool>
+        <item row="2" column="5">
+         <widget class="QDoubleSpinBox" name="freq_doubleSpinBox">
+          <property name="maximum">
+           <double>9999999999.000000000000000</double>
           </property>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="label_8">
+          <property name="text">
+           <string>input shield</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="label_24">
+          <property name="text">
+           <string>TC OVLD</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="4">
+         <widget class="QLabel" name="label_27">
+          <property name="text">
+           <string>Freq</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="5">
+         <widget class="QSpinBox" name="harmonics_spinBox">
+          <property name="minimum">
+           <number>1</number>
+          </property>
+          <property name="maximum">
+           <number>2</number>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QCheckBox" name="sync_200hz_checkBox">
           <property name="text">
            <string/>
           </property>
-          <property name="checkable">
-           <bool>true</bool>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QComboBox" name="time_constant_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
           </property>
-          <property name="autoExclusive">
-           <bool>false</bool>
+          <property name="maxVisibleItems">
+           <number>30</number>
+          </property>
+          <item>
+           <property name="text">
+            <string>10e-6</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30e-6</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100e-6</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>300e-6</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1e-3</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>3e-3</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10e-3</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30e-3</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100e-3</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>300e-3</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>3</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>10</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>30</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="0" column="4">
+         <widget class="QLabel" name="label_11">
+          <property name="text">
+           <string>ref source</string>
           </property>
          </widget>
         </item>
-        <item row="0" column="8" colspan="2">
-         <widget class="QComboBox" name="ref_mode_comboBox">
-          <property name="maximumSize">
-           <size>
-            <width>80</width>
-            <height>16777215</height>
-           </size>
+        <item row="3" column="4">
+         <widget class="QLabel" name="label_6">
+          <property name="text">
+           <string>Ampl</string>
           </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QComboBox" name="filter_slope_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <property name="maxVisibleItems">
+           <number>30</number>
+          </property>
+          <item>
+           <property name="text">
+            <string>6 db</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>12 db</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>18 db</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>24 db</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_23">
+          <property name="text">
+           <string>Sync &lt; 200Hz</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QComboBox" name="input_config_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>A</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>A-B</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>I (1MOhm)</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>I (100MOhm)</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="label_7">
+          <property name="text">
+           <string>input config</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <widget class="QComboBox" name="input_coupling_comboBox">
+          <property name="layoutDirection">
+           <enum>Qt::LeftToRight</enum>
+          </property>
+          <item>
+           <property name="text">
+            <string>AC</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>DC</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>sensitivity</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_2">
+          <property name="text">
+           <string>time constant</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="label_10">
+          <property name="text">
+           <string>input coupling</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="label_14">
+          <property name="text">
+           <string>Slope/Oct</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QLabel" name="label_25">
+          <property name="text">
+           <string>Sens OVLD</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="4">
+         <widget class="QLabel" name="label_28">
+          <property name="text">
+           <string>Trig</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="4">
+         <widget class="QLabel" name="label_13">
+          <property name="text">
+           <string>Phase</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="5">
+         <widget class="QComboBox" name="ref_comboBox">
           <property name="layoutDirection">
            <enum>Qt::LeftToRight</enum>
           </property>
@@ -257,126 +428,8 @@
           </item>
          </widget>
         </item>
-        <item row="0" column="0">
-         <widget class="QLabel" name="label_2">
-          <property name="text">
-           <string>time constant</string>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="7">
-         <widget class="QLabel" name="label_27">
-          <property name="text">
-           <string>Freq</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="10">
-         <widget class="QLabel" name="label_15">
-          <property name="text">
-           <string>Ext Ref</string>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="8" colspan="2">
-         <widget class="QDoubleSpinBox" name="freq_doubleSpinBox">
-          <property name="maximumSize">
-           <size>
-            <width>80</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="suffix">
-           <string> Hz</string>
-          </property>
-          <property name="decimals">
-           <number>4</number>
-          </property>
-          <property name="maximum">
-           <double>9999999999.000000000000000</double>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="7">
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>Harm #</string>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="7">
-         <widget class="QLabel" name="label_6">
-          <property name="text">
-           <string>Ampl</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="2">
-         <widget class="QLabel" name="label">
-          <property name="text">
-           <string>sensitivity</string>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="3">
-         <widget class="QComboBox" name="voltage_range_comboBox">
-          <item>
-           <property name="text">
-            <string>1 V</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>300 mV</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>100 mV</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>30 mV</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>10 mV</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="1" column="0">
-         <widget class="QLabel" name="label_14">
-          <property name="text">
-           <string>filter slope</string>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="1">
-         <widget class="QCheckBox" name="sync_filter_checkBox">
-          <property name="text">
-           <string/>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="5">
-         <widget class="QPushButton" name="auto_scale_pushButton">
-          <property name="text">
-           <string>Auto Sensitivity</string>
-          </property>
-         </widget>
-        </item>
-        <item row="6" column="0">
-         <widget class="QLabel" name="label_10">
-          <property name="text">
-           <string>Input Coupling</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="QComboBox" name="time_constant_comboBox">
+        <item row="0" column="3">
+         <widget class="QComboBox" name="sensitivity_comboBox">
           <property name="layoutDirection">
            <enum>Qt::LeftToRight</enum>
           </property>
@@ -385,124 +438,150 @@
           </property>
           <item>
            <property name="text">
-            <string>1 us</string>
+            <string>2 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>3 us</string>
+            <string>5 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>10 us</string>
+            <string>10 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>30 us</string>
+            <string>20 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>100 us</string>
+            <string>50 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>300 us</string>
+            <string>100 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>1 ms</string>
+            <string>200 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>3 ms</string>
+            <string>500 nV/fA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>10 ms</string>
+            <string>1 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>30 ms</string>
+            <string>2 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>100 ms</string>
+            <string>5 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>300 ms</string>
+            <string>10 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>1 s</string>
+            <string>20 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>3 s</string>
+            <string>50 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>10 s</string>
+            <string>100 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>30 s</string>
+            <string>200 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>100 s</string>
+            <string>500 uV/pA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>300 s</string>
+            <string>1 mV/nA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>1 ks</string>
+            <string>2 mV/nA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>3 ks</string>
+            <string>5 mV/nA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>10 ks</string>
+            <string>10 mV/nA</string>
            </property>
           </item>
           <item>
            <property name="text">
-            <string>30 ks</string>
+            <string>20 mV/nA</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>50 mV/nA</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100 mV/nA</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>200 mV/nA</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>500 mV/nA</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>1 V/uA</string>
            </property>
           </item>
          </widget>
         </item>
-        <item row="5" column="8" colspan="2">
-         <widget class="QComboBox" name="trig_comboBox">
-          <property name="maximumSize">
-           <size>
-            <width>80</width>
-            <height>16777215</height>
-           </size>
+        <item row="7" column="0">
+         <widget class="QLabel" name="label_26">
+          <property name="text">
+           <string>input OVLD</string>
           </property>
+         </widget>
+        </item>
+        <item row="5" column="5">
+         <widget class="QComboBox" name="trig_comboBox">
           <property name="layoutDirection">
            <enum>Qt::LeftToRight</enum>
           </property>
@@ -523,101 +602,66 @@
           </item>
          </widget>
         </item>
-        <item row="6" column="1">
-         <widget class="QComboBox" name="input_coupling_comboBox">
-          <property name="layoutDirection">
-           <enum>Qt::LeftToRight</enum>
+        <item row="3" column="1">
+         <widget class="QRadioButton" name="tc_ovld_radioButton">
+          <property name="enabled">
+           <bool>false</bool>
           </property>
-          <item>
-           <property name="text">
-            <string>AC</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>DC</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="0" column="7">
-         <widget class="QLabel" name="label_11">
           <property name="text">
-           <string>ref source</string>
+           <string/>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>false</bool>
+          </property>
+          <property name="autoExclusive">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
-        <item row="3" column="8" colspan="2">
-         <widget class="QDoubleSpinBox" name="ampl_doubleSpinBox">
-          <property name="maximumSize">
-           <size>
-            <width>80</width>
-            <height>16777215</height>
-           </size>
+        <item row="7" column="1">
+         <widget class="QRadioButton" name="input_ovld_radioButton">
+          <property name="enabled">
+           <bool>false</bool>
           </property>
-          <property name="suffix">
-           <string> V</string>
-          </property>
-          <property name="decimals">
-           <number>3</number>
-          </property>
-          <property name="minimum">
-           <double>0.000000000000000</double>
-          </property>
-          <property name="maximum">
-           <double>5.000000000000000</double>
-          </property>
-          <property name="singleStep">
-           <double>0.010000000000000</double>
-          </property>
-          <property name="value">
-           <double>0.000000000000000</double>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="7">
-         <widget class="QLabel" name="label_13">
           <property name="text">
-           <string>Phase</string>
+           <string/>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="autoExclusive">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="label_23">
+        <item row="1" column="3">
+         <widget class="QRadioButton" name="sens_ovld_radioButton">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
           <property name="text">
-           <string>Sync Filter</string>
+           <string/>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="autoExclusive">
+           <bool>false</bool>
           </property>
          </widget>
         </item>
-        <item row="4" column="2" rowspan="2">
-         <widget class="QLabel" name="label_16">
-          <property name="text">
-           <string>Input Range</string>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="5" rowspan="2">
-         <widget class="QPushButton" name="auto_range_pushButton">
-          <property name="text">
-           <string>Auto Range</string>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="0">
+        <item row="4" column="2">
          <widget class="QLabel" name="label_12">
           <property name="text">
            <string>Reserve</string>
           </property>
          </widget>
         </item>
-        <item row="3" column="1">
+        <item row="4" column="3">
          <widget class="QComboBox" name="reserve_comboBox">
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>16777215</height>
-           </size>
-          </property>
           <property name="layoutDirection">
            <enum>Qt::LeftToRight</enum>
           </property>
@@ -638,221 +682,14 @@
           </item>
          </widget>
         </item>
-        <item row="0" column="3">
-         <widget class="QComboBox" name="sensitivity_comboBox">
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="layoutDirection">
-           <enum>Qt::LeftToRight</enum>
-          </property>
-          <property name="maxVisibleItems">
-           <number>30</number>
-          </property>
-          <item>
-           <property name="text">
-            <string>1 V [uA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>500 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>200 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>100 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>50 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>20 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>10 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>5 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>2 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>1 mV [nA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>500 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>200 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>100 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>50 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>20 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>10 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>5 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>2 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>1 uV [pA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>500 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>200 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>100 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>50 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>20 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>10 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>5 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>2 nV [fA]</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>1 nV [fA]</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="1" column="2">
-         <widget class="QLabel" name="label_25">
+        <item row="5" column="2">
+         <widget class="QLabel" name="label_9">
           <property name="text">
-           <string>Sens OVLD</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="10" colspan="2">
-         <widget class="QPushButton" name="auto_phase_pushButton">
-          <property name="text">
-           <string>Auto Phase</string>
-          </property>
-         </widget>
-        </item>
-        <item row="6" column="7">
-         <widget class="QLabel" name="label_29">
-          <property name="text">
-           <string>unlocked</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="8" colspan="2">
-         <widget class="QDoubleSpinBox" name="phase_doubleSpinBox">
-          <property name="maximumSize">
-           <size>
-            <width>80</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="suffix">
-           <string> deg</string>
-          </property>
-          <property name="maximum">
-           <double>360.000000000000000</double>
+           <string>notch filter</string>
           </property>
          </widget>
         </item>
         <item row="5" column="3">
-         <widget class="QComboBox" name="current_range_comboBox">
-          <item>
-           <property name="text">
-            <string>1 uA</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>10 nA</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="5" column="7">
-         <widget class="QLabel" name="label_28">
-          <property name="text">
-           <string>Trig</string>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="3">
          <widget class="QComboBox" name="notch_filter_comboBox">
           <property name="layoutDirection">
            <enum>Qt::LeftToRight</enum>
@@ -879,15 +716,15 @@
           </item>
          </widget>
         </item>
-        <item row="6" column="2">
-         <widget class="QLabel" name="label_26">
+        <item row="6" column="4">
+         <widget class="QLabel" name="label_29">
           <property name="text">
-           <string>Input OVLD</string>
+           <string>unlocked</string>
           </property>
          </widget>
         </item>
-        <item row="6" column="3">
-         <widget class="QRadioButton" name="input_ovld_radioButton">
+        <item row="6" column="5">
+         <widget class="QRadioButton" name="unlocked_radioButton">
           <property name="enabled">
            <bool>false</bool>
           </property>
@@ -899,50 +736,6 @@
           </property>
           <property name="autoExclusive">
            <bool>false</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="11">
-         <widget class="QDoubleSpinBox" name="dclevel_doubleSpinBox">
-          <property name="suffix">
-           <string> mV</string>
-          </property>
-          <property name="decimals">
-           <number>1</number>
-          </property>
-          <property name="minimum">
-           <double>-5000.000000000000000</double>
-          </property>
-          <property name="maximum">
-           <double>5000.000000000000000</double>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="10" rowspan="2">
-         <widget class="QLabel" name="label_5">
-          <property name="text">
-           <string>DC level</string>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="11">
-         <widget class="QComboBox" name="dclevel_mode_comboBox">
-          <item>
-           <property name="text">
-            <string>common</string>
-           </property>
-          </item>
-          <item>
-           <property name="text">
-            <string>difference</string>
-           </property>
-          </item>
-         </widget>
-        </item>
-        <item row="2" column="2">
-         <widget class="QLabel" name="label_9">
-          <property name="text">
-           <string>notch filter??</string>
           </property>
          </widget>
         </item>

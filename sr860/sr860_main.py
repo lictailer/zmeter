@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-import time
+from datetime import datetime
 import numpy as np
 import pyqtgraph as pg
 import pyvisa
@@ -46,6 +46,7 @@ class SR860(QtWidgets.QWidget):
 
         # ----- logic / model layer -----
         self.logic = SR860_Logic()
+        self.monitor_enabled = False
 
         # circular buffers for live plot
         self.x_log = np.full(200, np.nan, dtype=float)
@@ -94,6 +95,7 @@ class SR860(QtWidgets.QWidget):
         self.logic.sig_Theta.connect(self.update_Theta)
         self.logic.sig_is_changing.connect(self.update_status)
         self.logic.sig_connected.connect(self.update_status)
+        self.logic.sig_log.connect(self._handle_logic_log)
         self.logic.sig_input_shield.connect(self.update_input_shield)
         self.logic.sig_dc_level.connect(self.update_dc_level)
         self.logic.sig_dc_level_mode.connect(self.update_dc_level_mode)
@@ -131,11 +133,15 @@ class SR860(QtWidgets.QWidget):
         self.resume_graph_button.clicked.connect(self.start_timer)
         self.disconnect_pushButton.clicked.connect(self.disconnect_device)
 
+        # ----- UI-defined log panel behavior -----
+        self.log_textEdit.setReadOnly(True)
+        self.log_textEdit.setMaximumBlockCount(500)
+
         # ----- periodic monitor -----
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.monitor)
-        self.timer.start(50)
         self.stop_signal.connect(self.stop_timer)
+        self._append_log("SR860 UI ready. Click connect, then start graph to monitor.", level="INFO")
 
     # ------------------------------------------------------------------
     # UI helpers
@@ -152,16 +158,40 @@ class SR860(QtWidgets.QWidget):
         self.plot_t.plot(self.t_log, clear=True, pen=pen)
 
     def stop_timer(self):
+        was_enabled = self.monitor_enabled
+        self.monitor_enabled = False
         if self.timer.isActive():
             self.timer.stop()
+        if was_enabled:
+            self._append_log("SR860 monitor stopped.", level="INFO")
 
     def start_timer(self):
+        if not self.logic.connected:
+            self._append_log("Cannot start monitor: SR860 is not connected.", level="WARN")
+            return
+        if self.monitor_enabled:
+            return
+        self.monitor_enabled = True
         if not self.timer.isActive():
             self.timer.start(50)
+        self._append_log("SR860 monitor started.", level="INFO")
 
     def update_status(self, txt):
         """Generic label updater for *sig_is_changing* & *sig_connected*."""
         self.status_label.setText(str(txt))
+
+    def _handle_logic_log(self, payload):
+        if isinstance(payload, tuple) and len(payload) == 2:
+            level, message = payload
+            self._append_log(str(message), level=str(level))
+            return
+        self._append_log(str(payload), level="INFO")
+
+    def _append_log(self, message: str, level: str = "INFO"):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.log_textEdit.appendPlainText(f"[{timestamp}] [{level}] {message}")
+        scrollbar = self.log_textEdit.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     # ------------------------------------------------------------------
     # VISA connection
@@ -169,9 +199,15 @@ class SR860(QtWidgets.QWidget):
     def connect_visa(self, addr):
         if addr == None or addr == False:
             addr = self.address_cb.currentText()
-        print(f"Connecting to {addr}")
-        self.logic.connect_visa(addr)
-        self.address_cb.setCurrentText(addr)
+        if not addr:
+            self._append_log("No VISA address selected.", level="WARN")
+            return
+
+        self.stop_monitor()
+        self._append_log(f"Connecting to {addr}...", level="INFO")
+        if self.logic.connect_visa(addr):
+            self.address_cb.setCurrentText(addr)
+            self.monitor_enabled = False
 
     # ------------------------------------------------------------------
     # get_/set_ wrappers (naming follows sr860_logic)
@@ -226,12 +262,9 @@ class SR860(QtWidgets.QWidget):
     # -- sensitivity ---------------------------------------------------
     def set_sensitivity(self, idx: int | None = None):
         self.logic.stop()
-        print("isRunning", self.logic.isRunning())
         self.logic.setpoint_sensitivity = idx if idx is not None else self.sensitivity_comboBox.currentIndex()
-        print("setpoint_sensitivity", self.logic.setpoint_sensitivity)
         self.logic.job = "set_sensitivity"
         self.logic.start()
-        self.start_timer()
 
     def get_sensitivity(self):
         self.logic.job = "get_sensitivity"
@@ -478,12 +511,20 @@ class SR860(QtWidgets.QWidget):
     # periodic monitor
     # ------------------------------------------------------------------
     def monitor(self):
+        if not self.monitor_enabled:
+            return
         if not self.logic.connected:
             return
         if self.logic.isRunning():
             return
         self.logic.job = "get_all"  # bulk helper from sr860_logic
         self.logic.start()
+
+    def stop_monitor(self):
+        """Stop periodic monitor and halt any in-flight get_all monitor task."""
+        self.stop_timer()
+        if self.logic.isRunning() and self.logic.job == "get_all":
+            self.logic.stop()
 
     # ------------------------------------------------------------------
     # stubs for functionality not implemented in sr860_logic
@@ -541,7 +582,6 @@ class SR860(QtWidgets.QWidget):
 
     def set_dc_level_mode(self, idx: int | None = None):
         self.logic.stop()
-        print(self.dclevel_mode_comboBox.currentIndex())
         self.logic.setpoint_dc_level_mode = self.dclevel_mode_comboBox.currentText() if idx is None else idx
         self.logic.job = "set_dc_level_mode"
         self.logic.start()
@@ -615,9 +655,11 @@ class SR860(QtWidgets.QWidget):
         """
         Disconnect the SR860 device and update UI accordingly.
         """
+        self.stop_monitor()
         self.logic.disconnect()
 
     def terminate_dev(self):
+        self.stop_monitor()
         self.logic.disconnect()
         
 

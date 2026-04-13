@@ -55,6 +55,7 @@ class SR860_Logic(QtCore.QThread):
     # ---------- generic state signals ----------
     sig_is_changing = QtCore.pyqtSignal(object)
     sig_connected = QtCore.pyqtSignal(object)
+    sig_log = QtCore.pyqtSignal(object)
 
     # -------------------------------------------
     def __init__(self):
@@ -102,12 +103,56 @@ class SR860_Logic(QtCore.QThread):
 
         self.hardware: SR860_Hardware | None = None
 
+    def _emit_log(self, message: str, level: str = "INFO"):
+        self.sig_log.emit((level, str(message)))
+
+    def _cleanup_connection(self):
+        if self.hardware is None:
+            return
+        try:
+            self.hardware.disconnect()
+        except Exception as exc:
+            self._emit_log(f"Error during hardware.disconnect(): {exc}", level="WARN")
+        finally:
+            self.hardware = None
+
     # -------------- connection helpers ----------------
     def connect_visa(self, address: str):
-        """Instantiate SR860_Hardware and open VISA connection."""
-        self.hardware = SR860_Hardware(address)
-        self.connected = True
-        self.sig_connected.emit(f"connected to {address}")
+        """Instantiate SR860_Hardware, validate IDN, and mark connected."""
+        self.reject_signal = True
+        self.job = ""
+        if self.isRunning():
+            self.wait()
+        self.reject_signal = False
+
+        self.connected = False
+        self._cleanup_connection()
+
+        temp_hardware: SR860_Hardware | None = None
+        try:
+            temp_hardware = SR860_Hardware(address)
+            idn = temp_hardware.idn()
+            if not idn:
+                raise RuntimeError("No response to *IDN? query.")
+            if "SR860" not in idn.upper():
+                raise ValueError(f"Unexpected instrument identity: {idn}")
+
+            self.hardware = temp_hardware
+            self.connected = True
+            self.sig_connected.emit(f"connected to {address}")
+            self._emit_log(f"Connected to {address}: {idn}", level="INFO")
+            return True
+        except Exception as exc:
+            if temp_hardware is not None:
+                try:
+                    temp_hardware.disconnect()
+                except Exception:
+                    pass
+            self.hardware = None
+            self.connected = False
+            self.sig_connected.emit("connection failed")
+            self._emit_log(f"Connection failed for {address}: {exc}", level="ERROR")
+            return False
 
     # -------------- get wrappers ---------------------
     def get_frequency(self):
@@ -523,16 +568,12 @@ class SR860_Logic(QtCore.QThread):
         if self.isRunning():
             self.wait()
 
-        if self.hardware is not None:
-            try:
-                self.hardware.disconnect()
-            except Exception as exc:
-                print("[WARN] Error during hardware.disconnect():", exc)
-            self.hardware = None
+        self._cleanup_connection()
 
         if self.connected:
             self.connected = False
             self.sig_connected.emit("disconnected")
+            self._emit_log("Disconnected SR860.", level="INFO")
 
         # allow new jobs after a future reconnect
         self.reject_signal = False
@@ -549,9 +590,9 @@ class SR860_Logic(QtCore.QThread):
                 try:
                     fn()
                 except Exception as exc:
-                    print(f"[WARN] SR860_Logic job '{self.job}' error:", exc)
+                    self._emit_log(f"SR860_Logic job '{self.job}' error: {exc}", level="ERROR")
             else:
-                print(f"[WARN] SR860_Logic has no job '{self.job}'")
+                self._emit_log(f"SR860_Logic has no job '{self.job}'", level="WARN")
 
             # reset marker
             self.job = ""

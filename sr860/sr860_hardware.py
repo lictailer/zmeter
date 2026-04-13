@@ -28,17 +28,17 @@ class SR860_Hardware:
 
     def _query(self, cmd: str) -> str:
         logging.debug(f"? {cmd}")
-        
+
+        last_error = None
         count = 0
         while count < 3:
             try:
                 return self._vi.query(cmd).strip()
             except Exception as e:
+                last_error = e
                 count += 1
-                print(f"Error querying {cmd}, trying again {count} times")
                 time.sleep(0.01)
-        print(f"Error querying {cmd}")
-        return None
+        raise RuntimeError(f"Error querying '{cmd}' after 3 retries: {last_error}")
 
     # -------------- identity / reset ----------------
     def idn(self) -> str:

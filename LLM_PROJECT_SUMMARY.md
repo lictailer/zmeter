@@ -14,6 +14,7 @@ Primary usage is experiment automation where each scan point sets one or more ch
 Quick scan docs for this repo:
 - `documents/README_scan_overview.md` (UI/start flow + level-setting build path)
 - `documents/README_scan_logic.md` (runtime engine behavior in `core/scan_logic_new.py`)
+- `sr860/sr860_readme.md` (SR860 module behavior, monitor/logging flow, and known risks)
 
 ## 2. Entrypoint And Runtime Boot
 Primary entrypoint: `start_zmeter.py`.
@@ -276,6 +277,7 @@ Note:
 - `core/artificial_channel_logic.py`: affine virtual channel logic.
 - `core/artificial_channel_2d_main.py`: artificial channel config UI.
 - `core/append_to_ppt.py`: slide append helper (PowerPoint COM on Windows).
+- `sr860/sr860_readme.md`: SR860 module guide + known risks for future sessions.
 
 ## 16. Environment And Platform Expectations
 Target environment from `zmeter_Mar2026_environment.yml`:
