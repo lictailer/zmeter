@@ -23,10 +23,10 @@ def main() -> None:
                 if math.isnan(thermometer.temperature):
                     line += '         '
                 else:
-                    line += ' {0:7.3f} '.format(thermometer.temperature)
+                    line += ' {} '.format(thermometer.temperature)
 
             print(line)
-            time.sleep(1)
+            time.sleep(0.05)
 
     except KeyboardInterrupt:
         pass # user cancelled
