@@ -233,7 +233,7 @@ Examples:
 - `hp34401a/`, `k10cr1/`, `tlpm/`, `opticool/`, `demoDevice/` etc.
 
 Note:
-- `ni6432/ni6432_hardware.py` is currently empty (placeholder).
+- `ni6423/ni6423_hardware.py` is currently empty (placeholder).
 
 ## 15. Important File Map
 - `start_zmeter.py`: app entry, instrument selection, connect addresses.

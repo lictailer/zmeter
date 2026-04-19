@@ -5,21 +5,24 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtWidgets, uic
 
-from .ni6432_logic import NI6432Logic
+try:
+    from .ni6423_logic import NI6423Logic
+except ImportError:
+    from ni6423_logic import NI6423Logic
 
 
-class NI6432(QtWidgets.QWidget):
+class NI6423(QtWidgets.QWidget):
     AO_CHANNELS = [f"AO{i}" for i in range(4)]
     AI_CHANNELS = [f"AI{i}" for i in range(32)]
-    COUNTER_CHANNELS = [f"counter{i}" for i in range(4)]
+    COUNTER_CHANNELS = ["counter0"]
     MONITOR_PERIOD_MS = 50
     LOG_LENGTH = 300
 
     def __init__(self):
         super().__init__()
-        uic.loadUi("ni6432/ni6432.ui", self)
+        uic.loadUi("ni6423/ni6423.ui", self)
 
-        self.logic = NI6432Logic()
+        self.logic = NI6423Logic()
 
         self.monitor_mode: Optional[str] = None  # None, "ai", "counter"
         self.active_monitor_channel: Optional[str] = None
@@ -54,8 +57,6 @@ class NI6432(QtWidgets.QWidget):
         ]
 
         self.spinBox.setRange(0, 31)
-        self.spinBox_2.setRange(0, 3)
-        self.spinBox_2.setSingleStep(1)
 
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.monitor)
@@ -93,7 +94,6 @@ class NI6432(QtWidgets.QWidget):
         self.stop_pushButton.clicked.connect(self.stop_monitor)
 
         self.spinBox.editingFinished.connect(self.when_ai_index_changed)
-        self.spinBox_2.editingFinished.connect(self.when_counter_index_changed)
         self.setIntegrateTime_button.clicked.connect(self.when_set_integrate_time_clicked)
 
         self.logic.sig_name.connect(self.setup_name_label)
@@ -222,9 +222,8 @@ class NI6432(QtWidgets.QWidget):
     def start_counter_monitor(self):
         if not self.logic.is_initialized:
             return
-        counter_index = int(self.spinBox_2.value())
-        channel = f"counter{counter_index}"
-        self.logic.update_next_counter_channel(f"Ctr{counter_index}")
+        channel = "counter0"
+        self.logic.update_next_counter_channel("Ctr0")
         self.monitor_mode = "counter"
         self.active_monitor_channel = channel
         self._plot_channel(channel)
@@ -239,11 +238,6 @@ class NI6432(QtWidgets.QWidget):
         if self.monitor_mode != "ai" or not self.logic.is_initialized:
             return
         self.start_ai_monitor()
-
-    def when_counter_index_changed(self):
-        if self.monitor_mode != "counter" or not self.logic.is_initialized:
-            return
-        self.start_counter_monitor()
 
     def start_timer(self):
         if self.scan_paused:
@@ -293,7 +287,7 @@ class NI6432(QtWidgets.QWidget):
         if channel == self.active_monitor_channel:
             self._plot_channel(channel)
             if channel.startswith("counter"):
-                self.currentread_label.setText(f"{value:,.1f}")
+                self.currentread_label.setText(f"{value:,.5f}")
             else:
                 self.currentread_label.setText(f"{value:+.5f}")
 
@@ -321,6 +315,6 @@ class NI6432(QtWidgets.QWidget):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    window = NI6432()
+    window = NI6423()
     window.show()
     app.exec()

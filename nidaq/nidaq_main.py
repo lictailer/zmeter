@@ -1,8 +1,12 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from .nidaq_logic import NIDAQLogic
 import numpy as np
 import pyqtgraph as pg
+
+try:
+    from .nidaq_logic import NIDAQLogic
+except ImportError:
+    from nidaq_logic import NIDAQLogic
 
 
 class NIDAQ(QtWidgets.QWidget):
