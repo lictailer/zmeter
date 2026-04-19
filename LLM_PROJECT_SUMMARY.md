@@ -254,7 +254,7 @@ Examples:
 
 Note:
 - `ni6432` is no longer a placeholder. The implemented stack is:
-  - `ni6432/ni6432_hardware.py`: `nidaqmx` hardware layer with `connect`, `disconnect`, AO write, hardware-clocked AI integration, and gated counter integration.
+  - `ni6423/ni6423_hardware.py`: `nidaqmx` hardware layer with `connect`, `disconnect`, AO write, hardware-clocked AI integration, and gated counter integration.
   - `ni6432/ni6432_logic.py`: scan-facing `set_AO*`, `get_AI*`, `get_counter*`, `get_AO*` methods, plus AO-feedback caching and separate AO/counter integration times.
   - `ni6432/ni6432_main.py`: GUI wrapper around `ni6432.ui` with AO controls, AO feedback readback, AI/counter live monitor modes, and scan pause/resume hooks.
 

@@ -11,7 +11,7 @@ from core.mainWindow import MainWindow
 # devices that are not required in your particular setup.
 # ------------------------------------------------------------
 from sr830_v2.sr830_main import SR830
-from ni6432.ni6432_main import NI6432
+from ni6423.ni6423_main import NI6423
 from sr860.sr860_main import SR860
 # from hp34401a.hp34401a_main import HP34401A
 from nidaq.nidaq_main import NIDAQ
@@ -38,7 +38,7 @@ def create_equipment():
         # "lockin_2": SR830(),
         "sr860_test": SR860(),
         # "nidaq_0": NIDAQ(),
-        # "ni6432_0": NI6432(),
+        "ni6423_0": NI6423(),
         # "nidaq_1": NIDAQ(),
         # "DMM_A": HP34401A(),
         # "HWP": K10CR1(),
@@ -55,7 +55,7 @@ def create_equipment():
     # Connection commands – adjust to match your instrument addresses.
     # ------------------------------------------------------------
     # equips["nidaq_0"].connect("Dev1")
-    # equips["ni6432_0"].connect("Dev7")
+    equips["ni6423_0"].connect("Dev2")
     # equips["nidaq_1"].connect("Dev2")
     # equips["HWP"].connect(serial="55369504")
     # equips["HWP_1"].connect(serial="55243324")
@@ -71,10 +71,10 @@ def create_equipment():
     # If a label is missing, all get_/set_ channels from that device logic are exposed.
     # Unknown channel names are silently skipped.
     equips_set_channels = {
-        "ni6432_0": ["AO0", "AO1"],
+        "ni6423_0": ["AO0", "AO1"],
     }
     equips_get_channels = {
-        "ni6432_0": ["AI9", "AI12", "counter8", "counter12"],
+        "ni6423_0": ["AI0", "AI1", "AI4", "counter0"],
     }
 
     return equips, equips_set_channels, equips_get_channels

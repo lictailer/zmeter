@@ -1,9 +1,12 @@
 import numpy as np
 from PyQt6 import QtCore, QtWidgets, uic
 import time
-from .nidaq_hardware import NIDAQHardWare
 import sys
 
+try:
+    from .nidaq_hardware import NIDAQHardWare
+except ImportError:
+    from nidaq_hardware import NIDAQHardWare
 
 class NIDAQLogic(QtCore.QThread):
     sig_new_write = QtCore.pyqtSignal(object)
