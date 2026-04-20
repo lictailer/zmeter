@@ -89,7 +89,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2],
                 }
             },
-            "setting_method": "A+B,CF",
+            "setting_method": "A+B,C",
             "getters": ["none"],
             "setting_array": [],
             "settle_time": 0.0,
@@ -122,7 +122,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                 },
             },
-            "setting_method": "A+B,CJ",
+            "setting_method": "A+B,C",
             "getters": ["nidaq_0_AI0"],
             "setting_array": [],
             "settle_time": 0.0,
@@ -147,7 +147,7 @@ ScanInfo = {
                     "destinations": [0, 1, 2],
                 }
             },
-            "setting_method": "A+B,CK",
+            "setting_method": "A+B,C",
             "getters": [],
             "setting_array": [],
             "settle_time": 0.0,
