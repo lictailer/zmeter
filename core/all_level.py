@@ -320,7 +320,8 @@ class AllLevelSetting(QtWidgets.QWidget):
             self.verticalLayout.itemAt(i).widget().update_setting_array()
 
     def settings(self):
-        print(self.all_level_info)
+        pass
+        # print(self.all_level_info)
 
 
 if __name__ == "__main__":
