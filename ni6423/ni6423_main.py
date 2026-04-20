@@ -98,7 +98,7 @@ class NI6423(QtWidgets.QWidget):
 
         self.logic.sig_name.connect(self.setup_name_label)
         self.logic.sig_connected.connect(self.update_connection_label)
-        self.logic.sig_new_write.connect(self.update_write_display)
+        # self.logic.sig_new_write.connect(self.update_write_display)
         self.logic.sig_new_read.connect(self.update_read_display)
         self.logic.sig_error.connect(self.update_error_label)
 

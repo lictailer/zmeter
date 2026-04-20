@@ -34,7 +34,6 @@ class autofocus_main(QtWidgets.QWidget):
             self.label_status.setText("Connected")
         except Exception as e:
             self.label_status.setText("Error")
-            print(e)
 
     def disconnect_sys(self):
         try:
@@ -42,7 +41,6 @@ class autofocus_main(QtWidgets.QWidget):
             self.label_status.setText("Disconnected")
         except Exception as e:
             self.label_status.setText("Error")
-            print(e)
 
     def update_settings(self):
         ''' Update the settings from the GUI inputs to the logic class. '''

@@ -10,19 +10,23 @@ from core.mainWindow import MainWindow
 # Import the equipment modules you plan to use below.  Comment out any
 # devices that are not required in your particular setup.
 # ------------------------------------------------------------
-from sr830_v2.sr830_main import SR830
-from ni6423.ni6423_main import NI6423
-from sr860.sr860_main import SR860
-# from hp34401a.hp34401a_main import HP34401A
-from nidaq.nidaq_main import NIDAQ
-from keithley24xx.keithley24xx_main import Keithley24xx
-# from k10cr1.k10cr1_main import K10CR1
-# from tlpm.tlpm_main import TLPM
-# from auto_focus.autofocus_main import autofocus_main
-# from auto_focus.autofocus_logic import stepper_and_galvo_xyz
 # from opticool.opticool_main import OptiCool
 from montana2.montana2_main import Montana2
-from autofocus_xuguo.autofocusXZ_main import AutofocusXZMain
+
+from sr830_v2.sr830_main import SR830
+from sr860.sr860_main import SR860
+from keithley24xx.keithley24xx_main import Keithley24xx
+# from hp34401a.hp34401a_main import HP34401A
+
+from nidaq.nidaq_main import NIDAQ
+from ni6423.ni6423_main import NI6423
+
+# from k10cr1.k10cr1_main import K10CR1
+# from tlpm.tlpm_main import TLPM
+
+# from auto_focus.autofocus_main import autofocus_main
+# from auto_focus.autofocus_logic import stepper_and_galvo_xyz
+# from autofocus_xuguo.autofocusXZ_main import AutofocusXZMain
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -34,12 +38,11 @@ def create_equipment():
     """Instantiate and connect to all equipment required for the session."""
 
     equips = {
-        "lockin_1": SR830(),
-        # "lockin_2": SR830(),
-        "sr860_test": SR860(),
+        "lockin_0": SR830(),
+        # "lockin_1": SR830(),
+        "lockin_2": SR860(),
         # "nidaq_0": NIDAQ(),
         "ni6423_0": NI6423(),
-        # "nidaq_1": NIDAQ(),
         # "DMM_A": HP34401A(),
         # "HWP": K10CR1(),
         # "HWP_1": K10CR1(),
@@ -48,14 +51,14 @@ def create_equipment():
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
         # "montana2": Montana2(),
-        "autofocusXZ": AutofocusXZMain(),
+        # "autofocusXZ": AutofocusXZMain(),
     }
 
     # ------------------------------------------------------------
     # Connection commands – adjust to match your instrument addresses.
     # ------------------------------------------------------------
     # equips["nidaq_0"].connect("Dev1")
-    equips["ni6423_0"].connect("Dev2")
+    # equips["ni6423_0"].connect("Dev2")
     # equips["nidaq_1"].connect("Dev2")
     # equips["HWP"].connect(serial="55369504")
     # equips["HWP_1"].connect(serial="55243324")
