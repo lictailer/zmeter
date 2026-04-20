@@ -1,5 +1,24 @@
-/pycache/
+# Python bytecode and build artifacts
 *.pyc
+*.pyo
+*.pyd
 __pycache__/
 */__pycache__/*
 **/__pycache__
+
+# Common cache directories/files
+.cache/
+*/.cache/
+**/.cache/
+*.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Project data (ignore folder itself and all contents)
+data/
+
+# Editor settings
+.vscode/
+/keithley24xx/__pycache__
