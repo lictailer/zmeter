@@ -13,7 +13,7 @@ from core.mainWindow import MainWindow
 # from opticool.opticool_main import OptiCool
 from montana2.montana2_main import Montana2
 
-from sr830_v2.sr830_main import SR830
+from sr830_v2.sr830_main import SR830 #please use sr830_v2 instead of the original sr830, please report the bugs to Xuguo
 from sr860.sr860_main import SR860
 from keithley24xx.keithley24xx_main import Keithley24xx
 # from hp34401a.hp34401a_main import HP34401A
@@ -73,6 +73,7 @@ def create_equipment():
     # Optional scan-channel filters by equipment label.
     # If a label is missing, all get_/set_ channels from that device logic are exposed.
     # Unknown channel names are silently skipped.
+    # Only ni6423 support this function so far
     equips_set_channels = {
         "ni6423_0": ["AO0", "AO1"],
     }
