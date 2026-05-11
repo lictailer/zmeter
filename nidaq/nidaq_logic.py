@@ -8,7 +8,6 @@ except ImportError:
     from nidaq_hardware import NIDAQHardWare
 import sys
 
-
 class NIDAQLogic(QtCore.QThread):
     sig_new_write = QtCore.pyqtSignal(object)
     sig_new_read = QtCore.pyqtSignal(object)

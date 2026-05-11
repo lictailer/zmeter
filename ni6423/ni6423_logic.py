@@ -6,17 +6,21 @@ from typing import Deque, Dict, Optional, Set
 
 from PyQt6 import QtCore
 
-from .ni6432_hardware import NI6432Hardware
+try:
+    from .ni6423_hardware import NI6423Hardware
+except ImportError:
+    from ni6423_hardware import NI6423Hardware
 
 
-class NI6432Logic(QtCore.QThread):
+
+class NI6423Logic(QtCore.QThread):
     """
-    Logic layer for NI USB-6432.
+    Logic layer for NI USB-6423.
 
     Scan-facing methods:
     - set_AO0..set_AO3(val)
     - get_AI0..get_AI31()
-    - get_counter0..get_counter3()
+    - get_counter0()
     - get_AO0..get_AO3()  # AO readback from AI28..AI31
     """
 
@@ -31,7 +35,7 @@ class NI6432Logic(QtCore.QThread):
 
     AO_CHANNELS = [f"AO{i}" for i in range(4)]
     AI_CHANNELS = [f"AI{i}" for i in range(32)]
-    COUNTER_CHANNELS = [f"Ctr{i}" for i in range(4)]
+    COUNTER_CHANNELS = ["Ctr0"]
     AO_FEEDBACK_MAP = {
         "AO0": "AI28",
         "AO1": "AI29",
@@ -50,7 +54,7 @@ class NI6432Logic(QtCore.QThread):
         self._feedback_worker: Optional[threading.Thread] = None
 
         self.dev_name = ""
-        self.daq: Optional[NI6432Hardware] = None
+        self.daq: Optional[NI6423Hardware] = None
         self.is_initialized = False
 
         self.ao_integrating_time = 1e-3
@@ -77,12 +81,12 @@ class NI6432Logic(QtCore.QThread):
                 self.close()
 
             self.dev_name = dev_name
-            self.daq = NI6432Hardware(device_name=dev_name)
+            self.daq = NI6423Hardware(device_name=dev_name)
             try:
                 self.daq.connect()
             except Exception as exc:
                 self.daq = None
-                self.sig_error.emit(f"Failed to connect NI6432 ({dev_name}): {exc}")
+                self.sig_error.emit(f"Failed to connect NI6423 ({dev_name}): {exc}")
                 raise
 
             self.is_initialized = True
@@ -262,7 +266,7 @@ class NI6432Logic(QtCore.QThread):
         try:
             with self._lock:
                 daq = self._require_daq()
-                value = daq.read_sample_counter(counter_channel, integration_time)
+                value = daq.read_sample_counter(integration_time)
         except Exception as exc:
             self.sig_error.emit(f"Counter read failed ({counter_channel}): {exc}")
             raise
@@ -327,7 +331,7 @@ class NI6432Logic(QtCore.QThread):
 
             self._feedback_worker = threading.Thread(
                 target=self._feedback_worker_loop,
-                name="ni6432-feedback-worker",
+                name="ni6423-feedback-worker",
                 daemon=True,
             )
             self._feedback_worker.start()
@@ -356,14 +360,14 @@ class NI6432Logic(QtCore.QThread):
             self._feedback_queued.clear()
 
     # ------------------------ utilities ------------------------
-    def _require_daq(self) -> NI6432Hardware:
+    def _require_daq(self) -> NI6423Hardware:
         if self.daq is None or not self.is_initialized:
-            raise RuntimeError("NI6432 is not initialized. Call initialize() first.")
+            raise RuntimeError("NI6423 is not initialized. Call initialize() first.")
         return self.daq
 
     def _validate_integrating_time(self, time_s: float) -> float:
-        minimum = NI6432Hardware.MIN_INTEGRATION_S
-        step = NI6432Hardware.INTEGRATION_STEP_S
+        minimum = NI6423Hardware.MIN_INTEGRATION_S
+        step = NI6423Hardware.INTEGRATION_STEP_S
 
         if time_s < minimum:
             raise ValueError(f"Integrating time must be >= {minimum} s.")
@@ -378,7 +382,7 @@ class NI6432Logic(QtCore.QThread):
 def _make_set_ao(index: int):
     channel = f"AO{index}"
 
-    def setter(self: NI6432Logic, value: float) -> float:
+    def setter(self: NI6423Logic, value: float) -> float:
         return self.write_ao_channel(channel, value)
 
     setter.__name__ = f"set_AO{index}"
@@ -388,7 +392,7 @@ def _make_set_ao(index: int):
 def _make_get_ai(index: int):
     channel = f"AI{index}"
 
-    def getter(self: NI6432Logic) -> float:
+    def getter(self: NI6423Logic) -> float:
         return self.read_ai_channel(channel)
 
     getter.__name__ = f"get_AI{index}"
@@ -399,7 +403,7 @@ def _make_get_counter(index: int):
     channel = f"Ctr{index}"
     emit_name = f"counter{index}"
 
-    def getter(self: NI6432Logic) -> float:
+    def getter(self: NI6423Logic) -> float:
         return self.read_counter_channel(channel, emit_name=emit_name)
 
     getter.__name__ = f"get_counter{index}"
@@ -409,7 +413,7 @@ def _make_get_counter(index: int):
 def _make_get_ao_feedback(index: int):
     ao_name = f"AO{index}"
 
-    def getter(self: NI6432Logic) -> float:
+    def getter(self: NI6423Logic) -> float:
         return self.read_ao_feedback_channel(ao_name)
 
     getter.__name__ = f"get_AO{index}"
@@ -417,21 +421,20 @@ def _make_get_ao_feedback(index: int):
 
 
 for _i in range(4):
-    setattr(NI6432Logic, f"set_AO{_i}", _make_set_ao(_i))
+    setattr(NI6423Logic, f"set_AO{_i}", _make_set_ao(_i))
 
 for _i in range(32):
-    setattr(NI6432Logic, f"get_AI{_i}", _make_get_ai(_i))
+    setattr(NI6423Logic, f"get_AI{_i}", _make_get_ai(_i))
 
-for _i in range(16):
-    setattr(NI6432Logic, f"get_counter{_i}", _make_get_counter(_i))
+setattr(NI6423Logic, "get_counter0", _make_get_counter(0))
 
 for _i in range(4):
-    setattr(NI6432Logic, f"get_AO{_i}", _make_get_ao_feedback(_i))
+    setattr(NI6423Logic, f"get_AO{_i}", _make_get_ao_feedback(_i))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Brief smoke test for NI6432Logic: connection, AO, AI, counter."
+        description="Brief smoke test for NI6423Logic: connection, AO, AI, counter."
     )
     parser.add_argument("--device", default="Dev1", help="NI device name, e.g. Dev1")
     parser.add_argument("--ao-channel", default="AO0", help="AO channel, e.g. AO0")
@@ -454,7 +457,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logic = NI6432Logic()
+    logic = NI6423Logic()
     logic.sig_error.connect(lambda msg: print(f"[SIG_ERROR] {msg}"))
     logic.sig_name.connect(lambda msg: print(f"[SIG_NAME] {msg}"))
     logic.sig_connected.connect(lambda state: print(f"[SIG_CONNECTED] {state}"))
@@ -490,10 +493,12 @@ if __name__ == "__main__":
         print(f"[PASS] AI read -> {ai_val:+.6f} V")
 
         counter_name = args.counter_channel.capitalize()
-        counter_idx = counter_name.replace("Ctr", "")
-        counter_getter = getattr(logic, f"get_counter{counter_idx}")
-        print(f"[TEST] get_counter{counter_idx}()")
-        count_rate = counter_getter()
+        if counter_name != "Ctr0":
+            raise ValueError(
+                "Only Ctr0 is supported in the current counter hardware mode."
+            )
+        print("[TEST] get_counter0()")
+        count_rate = logic.get_counter0()
         print(f"[PASS] counter read -> {count_rate:.3f} Hz")
 
         print("[TEST] request_all_ao_feedback_async()")
