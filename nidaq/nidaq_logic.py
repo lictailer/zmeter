@@ -1,7 +1,11 @@
 import numpy as np
 from PyQt6 import QtCore, QtWidgets, uic
 import time
-from .nidaq_hardware import NIDAQHardWare
+
+try:
+    from .nidaq_hardware import NIDAQHardWare
+except ImportError:
+    from nidaq_hardware import NIDAQHardWare
 import sys
 
 

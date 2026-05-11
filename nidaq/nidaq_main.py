@@ -1,6 +1,11 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from .nidaq_logic import NIDAQLogic
+
+try:
+    from .nidaq_logic import NIDAQLogic
+except ImportError:
+    from nidaq_logic import NIDAQLogic
+
 import numpy as np
 import pyqtgraph as pg
 
@@ -10,7 +15,7 @@ class NIDAQ(QtWidgets.QWidget):
 
     def __init__(self):
         super(NIDAQ, self).__init__()
-        uic.loadUi(r"nidaq/nidaq.ui", self)
+        uic.loadUi(r"nidaq/nidaq_new.ui", self)
         self.logic = NIDAQLogic()
 
         self.connect_sig_slot()
@@ -187,7 +192,7 @@ class NIDAQ(QtWidgets.QWidget):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     window = NIDAQ()
-    window.logic.initialize("Dev1")
+    window.logic.initialize("Dev7")
     center = [0.0, 0.0]
     window.pos_to_go_doubleSpinBox.setValue(center[0])
     window.pos_to_go_doubleSpinBox_2.setValue(center[1])
