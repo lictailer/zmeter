@@ -366,19 +366,45 @@ class Scan(QtWidgets.QWidget):
             gp.update_plots()
 
     def new_data(self,info):
-        new_data, current_target_index=info
+        emit_metadata = None
+        if isinstance(info, (list, tuple)) and len(info) >= 3:
+            new_data, current_target_index, emit_metadata = info[0], info[1], info[2]
+        else:
+            new_data, current_target_index = info
+
         self.info['data']=new_data
+
+        source_level = None
+        changed_getter_indices = None
+        if isinstance(emit_metadata, dict):
+            source_level = emit_metadata.get("source_level")
+            changed_getter_indices = emit_metadata.get("changed_getter_indices")
+            if changed_getter_indices is not None:
+                changed_getter_indices = set(changed_getter_indices)
+
+        def should_update_plot(plot_widget):
+            if source_level is None or changed_getter_indices is None:
+                return True
+            getter_level = getattr(plot_widget, "getter_level_number", None)
+            getter_index = getattr(plot_widget, "getter_number", None)
+            if getter_level is None or getter_index is None:
+                return True
+            return getter_level == source_level and getter_index in changed_getter_indices
 
         for gp in self.graphing_plots:
             for plot in range(gp.plots_layout.count()):
                 w = gp.plots_layout.itemAt(plot).widget()
                 if isinstance(w,LinePlot):
+                    if not should_update_plot(w):
+                        continue
                     if(current_target_index[w.setter_level_number]==0):
                         w.y_coordinates=np.full(w.setting_info_length, np.nan)
                     w.data=new_data                
                     # plot_line method now handles clearing and preserves v_line position
                     w.plot_line(current_target_index)
                 if isinstance(w,ImagePlot):
+                    if not should_update_plot(w):
+                        continue
                     w.update_image(new_data,current_target_index)
 
     def _backup_subfolder(self) -> str:

@@ -1,6 +1,23 @@
 from .scan_info import *
 from .individual_setter import IndividualSetter
 from .nested_menu import NestedMenu
+import re
+
+
+AVERAGE_GETTER_REGEX = re.compile(r"^level(\d+)_average_(.+)$")
+
+
+def parse_average_getter_token(token):
+    if not isinstance(token, str):
+        return None
+    match = AVERAGE_GETTER_REGEX.match(token)
+    if not match:
+        return None
+    return int(match.group(1)), match.group(2)
+
+
+def is_average_getter_token(token):
+    return parse_average_getter_token(token) is not None
 
 
 class IndividualLevel(QtWidgets.QWidget):
@@ -38,12 +55,12 @@ class IndividualLevel(QtWidgets.QWidget):
     def set_record_equipment_info(self):
         self.getter_nested_menu = NestedMenu()
         self.getter_nested_menu.label.hide()
-        self.getter_nested_menu.set_choices(self.getter_equipment_info)
+        self.getter_nested_menu.set_choices(self.getter_equipment_info or {})
         self.getter_nested_menu.sig_self_changed.connect(self.when_combobox_changed)
 
     def set_manual_set_channel_menu(self):
         self.manual_set_menu = NestedMenu()
-        self.manual_set_menu.set_choices(self.setter_equipment_info)
+        self.manual_set_menu.set_choices(self.setter_equipment_info or {})
 
     def set_info(self, info,):
         if 'settle_time' not in info:
@@ -57,7 +74,7 @@ class IndividualLevel(QtWidgets.QWidget):
 
     def set_setter_equipment_info(self, setter_equipment_info):
         self.setter_equipment_info = setter_equipment_info
-        self.manual_set_menu.set_choices(self.setter_equipment_info)
+        self.manual_set_menu.set_choices(self.setter_equipment_info or {})
         
         for i in range(self.verticalLayout.count()):
             item = self.verticalLayout.itemAt(i).widget()
@@ -66,7 +83,7 @@ class IndividualLevel(QtWidgets.QWidget):
 
     def set_getter_equipment_info(self, getter_equipment_info):
         self.getter_equipment_info = getter_equipment_info
-        self.getter_nested_menu.set_choices(self.getter_equipment_info)
+        self.getter_nested_menu.set_choices(self.getter_equipment_info or {})
     
     def update_ui(self):
         clearLayout(self.verticalLayout)
@@ -244,9 +261,10 @@ class AllLevelSetting(QtWidgets.QWidget):
         super(AllLevelSetting, self).__init__()
         uic.loadUi("core/ui/scan_setting.ui", self)
         self.add_pb.clicked.connect(self.add_level)
-        self.getter_equipment_info=getter_equipment_info
+        self.getter_equipment_info = getter_equipment_info or {}
         self.delete_pb.clicked.connect(self.delete_level)
-        self.setter_equipment_info=setter_equipment_info
+        self.setter_equipment_info = setter_equipment_info or {}
+        self.all_level_info = {}
         if all_level_info:
             self.set_info(all_level_info)
         
@@ -257,7 +275,7 @@ class AllLevelSetting(QtWidgets.QWidget):
         self.update_ui()
     
     def set_setter_equipment_info(self,setter_equipment_info):
-        self.setter_equipment_info=setter_equipment_info
+        self.setter_equipment_info = setter_equipment_info or {}
         # print(self.equipment_info)
         for i in range(self.verticalLayout.count()):
             item = self.verticalLayout.itemAt(i).widget()
@@ -265,31 +283,160 @@ class AllLevelSetting(QtWidgets.QWidget):
                 item.set_setter_equipment_info(self.setter_equipment_info)
 
     def set_getter_equipment_info(self, getter_equipment_info):
-        self.getter_equipment_info = getter_equipment_info
+        self.getter_equipment_info = getter_equipment_info or {}
+        self._refresh_getter_menus()
+        self._cleanup_stale_average_getters()
+        self._refresh_record_labels()
+        self.sig_info_changed.emit(self.all_level_info)
+        
+    def _iter_level_widgets(self):
         for i in range(self.verticalLayout.count()):
             item = self.verticalLayout.itemAt(i).widget()
-            if type(item) == IndividualLevel:
-                item.set_getter_equipment_info(self.getter_equipment_info)
+            if isinstance(item, IndividualLevel):
+                yield i, item
+
+    def _get_direct_getters_for_level(self, level_index):
+        level_info = self.all_level_info.get(f"level{level_index}", {})
+        getters = level_info.get("getters", [])
+        output = []
+        for getter in getters:
+            if getter == "none":
+                continue
+            if is_average_getter_token(getter):
+                continue
+            if getter not in output:
+                output.append(getter)
+        return output
+
+    def _build_getter_menu_for_level(self, level_index):
+        base_choices = copy.deepcopy(self.getter_equipment_info or {})
+
+        if isinstance(base_choices, dict):
+            output_choices = base_choices
+            for source_level in range(level_index):
+                source_getters = self._get_direct_getters_for_level(source_level)
+                if len(source_getters) == 0:
+                    continue
+                output_choices[f"level{source_level}_average"] = source_getters
+            return output_choices
+
+        if isinstance(base_choices, list):
+            output_choices = base_choices
+            for source_level in range(level_index):
+                source_getters = self._get_direct_getters_for_level(source_level)
+                if len(source_getters) == 0:
+                    continue
+                output_choices.append({f"level{source_level}_average": source_getters})
+            return output_choices
+
+        return base_choices
+
+    def _refresh_getter_menus(self):
+        for level_index, level_widget in self._iter_level_widgets():
+            level_widget.set_getter_equipment_info(
+                self._build_getter_menu_for_level(level_index)
+            )
+
+    def _refresh_record_labels(self):
+        for level_index, level_widget in self._iter_level_widgets():
+            level_key = f"level{level_index}"
+            if level_key not in self.all_level_info:
+                continue
+            level_widget.individual_level_info = self.all_level_info[level_key]
+            level_widget._refresh_record_label()
+
+    def _cleanup_stale_average_getters(self):
+        direct_getter_map = {}
+        level_count = len(self.all_level_info)
+        for level_index in range(level_count):
+            direct_getter_map[level_index] = set(
+                self._get_direct_getters_for_level(level_index)
+            )
+
+        changed = False
+        for level_index in range(level_count):
+            level_key = f"level{level_index}"
+            level_info = self.all_level_info.get(level_key, {})
+            getters = list(level_info.get("getters", []))
+
+            filtered_getters = []
+            for getter in getters:
+                if getter == "none":
+                    continue
+
+                parsed_average = parse_average_getter_token(getter)
+                if parsed_average is None:
+                    filtered_getters.append(getter)
+                    continue
+
+                source_level, source_channel = parsed_average
+                if source_level >= level_index:
+                    changed = True
+                    continue
+                if source_channel not in direct_getter_map.get(source_level, set()):
+                    changed = True
+                    continue
+
+                filtered_getters.append(getter)
+
+            if len(filtered_getters) == 0:
+                filtered_getters = ["none"]
+
+            if filtered_getters != getters:
+                level_info["getters"] = filtered_getters
+                self.all_level_info[level_key] = level_info
+                changed = True
+
+        return changed
         
 
     def update_ui(self):
-        for i in range(self.verticalLayout.count()):
-            self.verticalLayout.itemAt(i).widget().deleteLater()
-        for l in self.all_level_info:
-            w = IndividualLevel(individual_level_info=self.all_level_info[l],setter_equipment_info=self.setter_equipment_info,getter_equipment_info=self.getter_equipment_info)
-            #fix last line
+        clearLayout(self.verticalLayout)
+
+        ordered_levels = []
+        for level_key, level_info in self.all_level_info.items():
+            try:
+                level_index = int(str(level_key).replace("level", ""))
+            except ValueError:
+                level_index = len(ordered_levels)
+            ordered_levels.append((level_index, level_info))
+        ordered_levels.sort(key=lambda item: item[0])
+
+        rebuilt_level_info = {}
+        for i, (_, level_info) in enumerate(ordered_levels):
+            rebuilt_level_info[f"level{i}"] = level_info
+        self.all_level_info = rebuilt_level_info
+
+        for i in range(len(self.all_level_info)):
+            level_key = f"level{i}"
+            w = IndividualLevel(
+                individual_level_info=self.all_level_info[level_key],
+                setter_equipment_info=self.setter_equipment_info,
+                getter_equipment_info={},
+            )
             self.verticalLayout.addWidget(w)
-            w.groupBox.setTitle(f'level: {self.verticalLayout.count()-1}')
+            w.groupBox.setTitle(f"level: {i}")
             w.sig_info_changed.connect(self.update_info)
-            self.update_info([w, w.individual_level_info])
+
+        self._cleanup_stale_average_getters()
+        self._refresh_getter_menus()
+        self._refresh_record_labels()
+        self.sig_info_changed.emit(self.all_level_info)
 
     def add_level(self):
-        w = IndividualLevel(setter_equipment_info=self.setter_equipment_info,getter_equipment_info=self.getter_equipment_info)
+        w = IndividualLevel(
+            setter_equipment_info=self.setter_equipment_info,
+            getter_equipment_info={},
+        )
         # w.set_setter_equipment_info(self.equipment_info)
         self.verticalLayout.addWidget(w)
-        w.groupBox.setTitle(f'level: {self.verticalLayout.count()-1}')
+        w.groupBox.setTitle(f"level: {self.verticalLayout.count()-1}")
         w.sig_info_changed.connect(self.update_info)
-        self.update_info([w, w.individual_level_info])
+        self.all_level_info[f"level{self.verticalLayout.count()-1}"] = w.individual_level_info
+        self._cleanup_stale_average_getters()
+        self._refresh_getter_menus()
+        self._refresh_record_labels()
+        self.sig_info_changed.emit(self.all_level_info)
 
 
     def delete_level(self):
@@ -300,6 +447,9 @@ class AllLevelSetting(QtWidgets.QWidget):
         self.verticalLayout.removeWidget(w)
         w.deleteLater()
         self.all_level_info.pop(f'level{n-1}')
+        self._cleanup_stale_average_getters()
+        self._refresh_getter_menus()
+        self._refresh_record_labels()
         self.sig_info_changed.emit(self.all_level_info)
 
     def update_info(self, level_and_info):
@@ -311,7 +461,10 @@ class AllLevelSetting(QtWidgets.QWidget):
                 n = i
                 break
         self.all_level_info[f'level{n}'] = info
-        self.sig_info_changed.emit( self.all_level_info)
+        self._cleanup_stale_average_getters()
+        self._refresh_getter_menus()
+        self._refresh_record_labels()
+        self.sig_info_changed.emit(self.all_level_info)
         # print("all level info emitted")
         # print(info)
 

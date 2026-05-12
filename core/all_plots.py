@@ -53,7 +53,14 @@ class LinePlot(QtWidgets.QWidget):
             # self.setting_info=setting_info[~np.isnan(setting_info)]
             self.setting_info_length=len(self.setting_info)
             self.x_coordinates = self.setting_info
-        self.getter_number=int(self.y_name[3])
+
+        getter_match = re.match(r"L(\d+)G(\d+)_", self.y_name or "")
+        if getter_match:
+            self.getter_level_number = int(getter_match.group(1))
+            self.getter_number = int(getter_match.group(2))
+        else:
+            self.getter_level_number = self.setter_level_number
+            self.getter_number = int(self.y_name[3])
                 
         self.y_coordinates=np.full(self.setting_info_length, np.nan)
         self.update_count = 0
@@ -242,7 +249,13 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.x_level_number=int(self.x_name[-1])
         self.y_level_number=int(self.y_name[-1])
 
-        self.getter_number=int(self.z_name[3])
+        getter_match = re.match(r"L(\d+)G(\d+)_", self.z_name or "")
+        if getter_match:
+            self.getter_level_number = int(getter_match.group(1))
+            self.getter_number = int(getter_match.group(2))
+        else:
+            self.getter_level_number = self.x_level_number
+            self.getter_number = int(self.z_name[3])
         self.is_full=False
 
         self.x_setting_info = x_setting_info
@@ -269,6 +282,7 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.data_shape = [y_datashape, x_datashape]
 
         self.data = np.full((self.data_shape[0],self.data_shape[1]),np.nan)
+        self.outer_context_key = None
 
         # Image plot panel
         self.image = pg.ImageItem(image = self.data)
@@ -439,10 +453,11 @@ class ImagePlot(pg.GraphicsLayoutWidget):
 
 
     def update_image(self,new_data,current_target_index):
-        if (np.isnan(self.data[-1,-1]))==0:
-            
-            self.is_full=True
-            self.data = np.full((self.data_shape[0],self.data_shape[1]),np.nan)
+        outer_context_key = tuple(current_target_index[self.y_level_number + 1:])
+        if self.outer_context_key != outer_context_key:
+            self.outer_context_key = outer_context_key
+            self.data = np.full((self.data_shape[0], self.data_shape[1]), np.nan)
+
         current_y=current_target_index[self.x_level_number]
         current_x=current_target_index[self.y_level_number]
         reversed_current_target_index=[]
@@ -450,9 +465,13 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             reversed_current_target_index.append(i)
         index_list = reversed_current_target_index[0:len(current_target_index) - self.x_level_number]
         index_tuple = tuple(index_list)
+        new_value = new_data[self.x_level_number][self.getter_number][index_tuple]
 
-        self.data[current_x, current_y] = new_data[self.x_level_number][self.getter_number][index_tuple]
+        current_value = self.data[current_x, current_y]
+        if np.isclose(current_value, new_value, equal_nan=True):
+            return
 
+        self.data[current_x, current_y] = new_value
         self.image.setImage(self.data)
 
 

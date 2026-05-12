@@ -13,12 +13,12 @@ from core.mainWindow import MainWindow
 # from opticool.opticool_main import OptiCool
 from montana2.montana2_main import Montana2
 
-from sr830_v2.sr830_main import SR830 #please use sr830_v2 instead of the original sr830, please report the bugs to Xuguo
-from sr860.sr860_main import SR860
-from keithley24xx.keithley24xx_main import Keithley24xx
+# from sr830_v2.sr830_main import SR830 #please use sr830_v2 instead of the original sr830, please report the bugs to Xuguo
+# from sr860.sr860_main import SR860
+# from keithley24xx.keithley24xx_main import Keithley24xx
 # from hp34401a.hp34401a_main import HP34401A
 
-from nidaq.nidaq_main import NIDAQ
+# from nidaq.nidaq_main import NIDAQ
 from ni6423.ni6423_main import NI6423
 
 # from k10cr1.k10cr1_main import K10CR1
@@ -38,11 +38,11 @@ def create_equipment():
     """Instantiate and connect to all equipment required for the session."""
 
     equips = {
-        "lockin_0": SR830(),
+        # "lockin_0": SR830(),
         # "lockin_1": SR830(),
-        "lockin_2": SR860(),
+        # "lockin_2": SR860(),
         # "nidaq_0": NIDAQ(),
-        "ni6423_0": NI6423(),
+        # "ni6423_0": NI6423(),
         # "DMM_A": HP34401A(),
         # "HWP": K10CR1(),
         # "HWP_1": K10CR1(),
@@ -50,7 +50,7 @@ def create_equipment():
         # "Keithley_1": Keithley24xx(),
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
-        # "montana2": Montana2(),
+        "montana2": Montana2(),
         # "autofocusXZ": AutofocusXZMain(),
     }
 

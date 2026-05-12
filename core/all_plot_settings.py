@@ -1,4 +1,5 @@
 from .scan_info import *
+import re
 
 
 class IndividualImagePlotSetting(QtWidgets.QWidget):
@@ -55,8 +56,20 @@ class IndividualImagePlotSetting(QtWidgets.QWidget):
             getters = self.level_info[level]['getters']
             if self.available_z_level[level]:
                 for gi, getter in enumerate(getters):
+                    if getter == "none":
+                        continue
                     z_values.append(f'L{li}G{gi}_{getter}')
         return x_values,y_values, z_values
+
+    def _select_or_default(self, combo_box, values, preferred_value):
+        if len(values) == 0:
+            combo_box.setCurrentText("")
+            return ""
+        if preferred_value in values:
+            combo_box.setCurrentText(preferred_value)
+            return preferred_value
+        combo_box.setCurrentIndex(0)
+        return combo_box.currentText()
 
     def update_choices(self):
         self.is_setting_info=True
@@ -71,12 +84,9 @@ class IndividualImagePlotSetting(QtWidgets.QWidget):
         self.comboBox_y.addItems(y_values)
         self.comboBox_z.addItems(z_values)
         self.comboBox_x.addItems(x_values)
-        if previous_x in x_values:
-            self.comboBox_x.setCurrentText(previous_x)
-        if previous_y in y_values:
-            self.comboBox_y.setCurrentText(previous_y)
-        if previous_z in z_values:
-            self.comboBox_z.setCurrentText(previous_z)
+        self.info["x"] = self._select_or_default(self.comboBox_x, x_values, previous_x)
+        self.info["y"] = self._select_or_default(self.comboBox_y, y_values, previous_y)
+        self.info["z"] = self._select_or_default(self.comboBox_z, z_values, previous_z)
         self.is_setting_info=False
     def emit_signal(self):
         self.sig_info_changed.emit([self, self.info])
@@ -84,11 +94,10 @@ class IndividualImagePlotSetting(QtWidgets.QWidget):
     def find_level(self,name):
         if not name:
             return None
-        if "level" in name:
-            level_number=name[-1]
-        else:
-            level_number=name[1]
-        selected_level=int(level_number)
+        match = re.search(r"(\d+)", name)
+        if match is None:
+            return None
+        selected_level=int(match.group(1))
         
         return(selected_level)
     def when_cb_x_changed(self, text):
@@ -132,9 +141,10 @@ class IndividualImagePlotSetting(QtWidgets.QWidget):
     def set_choices(self,info):
         self.info = info
         self.is_setting_info = True
-        self.comboBox_x.setCurrentText(self.info['x'])
-        self.comboBox_y.setCurrentText(self.info['y'])
-        self.comboBox_z.setCurrentText(self.info['z'])
+        x_values, y_values, z_values = self.calculate_choices()
+        self.info["x"] = self._select_or_default(self.comboBox_x, x_values, self.info.get("x", ""))
+        self.info["y"] = self._select_or_default(self.comboBox_y, y_values, self.info.get("y", ""))
+        self.info["z"] = self._select_or_default(self.comboBox_z, z_values, self.info.get("z", ""))
         self.is_setting_info = False
         self.emit_signal()
 
@@ -182,8 +192,20 @@ class IndividualLinePlotSetting(QtWidgets.QWidget):
             if self.avalable_level[level]==True :
                 getters = self.level_info[level]['getters']
                 for gi, getter in enumerate(getters):
+                    if getter == "none":
+                        continue
                     y_values.append(f'L{li}G{gi}_{getter}')
         return x_values, y_values
+
+    def _select_or_default(self, combo_box, values, preferred_value):
+        if len(values) == 0:
+            combo_box.setCurrentText("")
+            return ""
+        if preferred_value in values:
+            combo_box.setCurrentText(preferred_value)
+            return preferred_value
+        combo_box.setCurrentIndex(0)
+        return combo_box.currentText()
 
     def update_choices(self):
         self.is_setting_choice = True
@@ -194,22 +216,18 @@ class IndividualLinePlotSetting(QtWidgets.QWidget):
         self.comboBox_y.clear()
         self.comboBox_y.addItems(y_values)
         self.comboBox_x.addItems(x_values)
-        if previous_x in x_values:
-            self.comboBox_x.setCurrentText(previous_x)
-        if previous_y in y_values:
-            self.comboBox_y.setCurrentText(previous_y)
+        self.info["x"] = self._select_or_default(self.comboBox_x, x_values, previous_x)
+        self.info["y"] = self._select_or_default(self.comboBox_y, y_values, previous_y)
         self.is_setting_choice =False
         
 
     def find_level(self,name):
         if not name:
             return None
-        if "level" in name:
-            level_number=name[-1]
-        else:
-            # print("the name is",name)
-            level_number=name[1]
-        selected_level=f'level{level_number}'
+        match = re.search(r"(\d+)", name)
+        if match is None:
+            return None
+        selected_level=f'level{match.group(1)}'
         
         return(selected_level)
 
@@ -246,8 +264,9 @@ class IndividualLinePlotSetting(QtWidgets.QWidget):
     def set_choices(self,info):
         self.info = info
         self.is_setting_choice = True
-        self.comboBox_x.setCurrentText(info['x'])
-        self.comboBox_y.setCurrentText(info['y'])
+        x_values, y_values = self.calculate_choices()
+        self.info["x"] = self._select_or_default(self.comboBox_x, x_values, info.get("x", ""))
+        self.info["y"] = self._select_or_default(self.comboBox_y, y_values, info.get("y", ""))
         self.is_setting_choice = False
         self.emit_signal()
 

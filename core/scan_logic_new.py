@@ -22,6 +22,7 @@ from scipy.io import savemat
 import random
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
+import re
 
 # Example scan configuration structure showing the expected data format
 ScanInfo = {
@@ -106,6 +107,8 @@ ScanInfo = {
     },
 }
 
+AVERAGE_GETTER_REGEX = re.compile(r"^level(\d+)_average_(.+)$")
+
 
 class ScanLogic(QtCore.QThread):
     """
@@ -186,6 +189,7 @@ class ScanLogic(QtCore.QThread):
         self.level_target_arrays = []      # Parameter values to set at each level
         self.level_setters = []            # Hardware channels to write to
         self.level_getters = []            # Hardware channels to read from
+        self.level_getter_specs = []       # Parsed getter metadata for each level
         self.level_data_arrays = []        # Storage for measurement results
         self.level_target_counts = []      # Number of points per level (including NaN)
         self.level_getter_counts = []      # Number of measurement channels per level
@@ -210,7 +214,14 @@ class ScanLogic(QtCore.QThread):
             # Extract getter channel names (where to read measurements)
             if len(scan_config['levels'][f'level{level_index}']['getters']) == 0:
                 scan_config['levels'][f'level{level_index}']['getters'].append('none')
-            self.level_getters.append(scan_config['levels'][f'level{level_index}']['getters'])
+            level_getters = scan_config['levels'][f'level{level_index}']['getters']
+            self.level_getters.append(level_getters)
+            self.level_getter_specs.append(
+                [
+                    self.build_getter_spec(level_index, getter_name)
+                    for getter_name in level_getters
+                ]
+            )
 
             # Store the number of measurement points for this level
             self.level_target_counts.append(self.level_target_arrays[level_index].shape[1])
@@ -242,6 +253,44 @@ class ScanLogic(QtCore.QThread):
         self.current_target_indices = []
         for level_index in range(self.max_level + 1):
             self.current_target_indices.append(0)
+
+    def _find_direct_getter_index(self, level_index, getter_channel):
+        if level_index >= len(self.level_getter_specs):
+            return None
+        for getter_index, getter_spec in enumerate(self.level_getter_specs[level_index]):
+            if getter_spec["kind"] != "direct":
+                continue
+            if getter_spec["channel"] == getter_channel:
+                return getter_index
+        return None
+
+    def build_getter_spec(self, current_level, getter_name):
+        if getter_name == "none":
+            return {"kind": "none", "name": getter_name}
+
+        if not isinstance(getter_name, str):
+            return {"kind": "direct", "name": getter_name, "channel": getter_name}
+
+        match = AVERAGE_GETTER_REGEX.match(getter_name)
+        if match is None:
+            return {"kind": "direct", "name": getter_name, "channel": getter_name}
+
+        source_level = int(match.group(1))
+        source_channel = match.group(2)
+        source_getter_index = None
+
+        if source_level < current_level and source_level >= 0:
+            source_getter_index = self._find_direct_getter_index(source_level, source_channel)
+
+        resolved = source_getter_index is not None
+        return {
+            "kind": "average",
+            "name": getter_name,
+            "source_level": source_level,
+            "source_channel": source_channel,
+            "source_getter_index": source_getter_index,
+            "resolved": resolved,
+        }
 
     def reset_flags(self):
         """Reset all control flags to their default states."""
@@ -318,9 +367,6 @@ class ScanLogic(QtCore.QThread):
             if self._pause_gate() or self.received_stop:
                 return
 
-            if self.level_getter_counts[current_level] == 0:
-                break
-
             settle_time = self.level_settle_times[current_level]
             if settle_time > 0 and len(reading_device_channels) > 0:
                 time.sleep(settle_time)
@@ -337,23 +383,58 @@ class ScanLogic(QtCore.QThread):
             if self._pause_gate() or self.received_stop:
                 return
 
-            # store measurements
-            for getter_index in range(len(self.level_getters[current_level])):
-                getter_channel = self.level_getters[current_level][getter_index]
-                if getter_channel == "none":
+            # store direct getter measurements first (pre-recursion behavior preserved)
+            direct_changed_getter_indices = []
+            for getter_index, getter_spec in enumerate(self.level_getter_specs[current_level]):
+                if getter_spec["kind"] != "direct":
                     continue
-                indices_slice = slice(self.max_level, current_level, -1)
-                indices = self.current_target_indices[indices_slice]
-                full_index_tuple = (getter_index, *indices, self.current_target_indices[current_level])
-                self.level_data_arrays[current_level][full_index_tuple] = measurements[getter_channel]
+                getter_channel = getter_spec["channel"]
+                self.store_getter_value(
+                    current_level,
+                    getter_index,
+                    measurements.get(getter_channel, np.nan),
+                )
+                direct_changed_getter_indices.append(getter_index)
 
             current_target_indices_copy = deepcopy(self.current_target_indices)
-            self.sig_new_data.emit([self.level_data_arrays, current_target_indices_copy])
+            self.sig_new_data.emit(
+                [
+                    self.level_data_arrays,
+                    current_target_indices_copy,
+                    {
+                        "source_level": current_level,
+                        "changed_getter_indices": direct_changed_getter_indices,
+                        "phase": "direct",
+                    },
+                ]
+            )
 
             # Skip lower/faster levels when an artificial-channel write was skipped.
             # if not skip_lower_level:
                 # self.looping(current_level - 1)
             self.looping(current_level - 1)
+
+            average_changed_getter_indices = []
+            for getter_index, getter_spec in enumerate(self.level_getter_specs[current_level]):
+                if getter_spec["kind"] != "average":
+                    continue
+                average_value = self.compute_average_getter_value(current_level, getter_spec)
+                self.store_getter_value(current_level, getter_index, average_value)
+                average_changed_getter_indices.append(getter_index)
+
+            if len(average_changed_getter_indices) > 0:
+                current_target_indices_copy = deepcopy(self.current_target_indices)
+                self.sig_new_data.emit(
+                    [
+                        self.level_data_arrays,
+                        current_target_indices_copy,
+                        {
+                            "source_level": current_level,
+                            "changed_getter_indices": average_changed_getter_indices,
+                            "phase": "average",
+                        },
+                    ]
+                )
 
             # progress updates
             self.current_target_indices[current_level] += 1
@@ -371,6 +452,39 @@ class ScanLogic(QtCore.QThread):
                 self.main_window.write_info(value, key)
 
         self.current_target_indices[current_level] = 0
+
+    def store_getter_value(self, level_index, getter_index, value):
+        indices_slice = slice(self.max_level, level_index, -1)
+        indices = self.current_target_indices[indices_slice]
+        full_index_tuple = (getter_index, *indices, self.current_target_indices[level_index])
+        self.level_data_arrays[level_index][full_index_tuple] = value
+
+    def compute_average_getter_value(self, current_level, getter_spec):
+        if getter_spec.get("resolved", False) is False:
+            return np.nan
+
+        source_level = getter_spec["source_level"]
+        source_getter_index = getter_spec["source_getter_index"]
+        if source_level is None or source_getter_index is None:
+            return np.nan
+
+        source_data = self.level_data_arrays[source_level][source_getter_index]
+
+        outer_indices = []
+        for level_index in range(self.max_level, current_level - 1, -1):
+            outer_indices.append(self.current_target_indices[level_index])
+
+        if len(outer_indices) > 0:
+            source_slice = source_data[tuple(outer_indices)]
+        else:
+            source_slice = source_data
+
+        source_slice = np.asarray(source_slice)
+        if source_slice.size == 0:
+            return np.nan
+        if np.isnan(source_slice).all():
+            return np.nan
+        return float(np.nanmean(source_slice))
 
     def extract_device_from_channel(self, channel_name):
         """
@@ -427,9 +541,11 @@ class ScanLogic(QtCore.QThread):
     def group_reading_device_channels(self, level_index):
         device_channels = {}
         
-        # Read from each getter channel configured for this level
-        for getter_index in range(self.level_getter_counts[level_index]):
-            getter_channel = self.level_getters[level_index][getter_index]
+        # Read only direct getter channels at this level.
+        for getter_spec in self.level_getter_specs[level_index]:
+            if getter_spec["kind"] != "direct":
+                continue
+            getter_channel = getter_spec["channel"]
             
             # Extract device name and variable name
             device_name, variable = self.extract_device_from_channel(getter_channel)
