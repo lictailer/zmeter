@@ -169,7 +169,6 @@ class IndividualLinePlotSetting(QtWidgets.QWidget):
         self.avalable_level={}
 
     def set_level_info(self, info):
-        print("all level setting info recieved")
         self.level_info = info
         for level in self.level_info.keys():
             self.avalable_level[level]=True

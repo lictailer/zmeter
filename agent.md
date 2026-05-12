@@ -13,7 +13,7 @@ Primary usage is experiment automation where each scan point sets one or more ch
 
 Quick scan docs for this repo:
 - `documents/README_scan_overview.md` (UI/start flow + level-setting build path)
-- `documents/README_scan_logic.md` (runtime engine behavior in `core/scan_logic_new.py`)
+- `documents/README_scan_logic.md` (runtime engine behavior in `core/scan_logic.py`)
 - `sr860/sr860_readme.md` (SR860 module behavior, monitor/logging flow, and known risks)
 
 ## 2. Entrypoint And Runtime Boot
@@ -43,7 +43,7 @@ Main components:
 - `core/device_command_router.py`: optional cross-device command router owned by `MainWindow`.
 - `core/scanlist.py`: queue manager for multiple scan presets and manual actions.
 - `core/scan.py`: per-scan configuration window + start/stop/pause/save + plots.
-- `core/scan_logic_new.py`: threaded recursive scan engine.
+- `core/scan_logic.py`: threaded recursive scan engine.
 - `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py`: scan parameter construction.
 - `core/all_plot_settings.py`, `core/all_plots.py`: plot definitions and rendering.
 - `core/artificial_channel_logic.py`, `core/artificial_channel_2d_main.py`: virtual 2D coordinate transform channels.
@@ -129,7 +129,7 @@ Algorithm:
 - If disabled, `Brakets(..., personalized_input=False)` auto-generates sequential command.
 - Output is a 2D numpy array where each row is one setter and columns are scan points; `NaN` means "skip set for that setter at that point".
 
-## 8. Scan Execution Engine (`core/scan_logic_new.py`)
+## 8. Scan Execution Engine (`core/scan_logic.py`)
 Class: `ScanLogic(QThread)`.
 
 Preparation (`initialize_scan_data`):
@@ -233,13 +233,13 @@ Scan interaction:
 
 ## 13. Active And Legacy Scan Engines
 Active engine:
-- `core/scan_logic_new.py` (used by `core/scan.py`).
+- `core/scan_logic.py` (used by `core/scan.py`).
 
 Legacy engine:
 - `core/scan_logic.py` exists but is not used by current `Scan`.
 - Contains older method names and behavior.
 
-When modifying scan behavior, target `scan_logic_new.py`.
+When modifying scan behavior, target `scan_logic.py`.
 
 ## 14. Instrument Modules In This Repository
 Instrument directories generally include `<name>_main.py`, `<name>_logic.py`, `<name>_hardware.py`, and `.ui`.
@@ -268,7 +268,7 @@ Note:
 - `ni6432/ni6432_hardware.py`: NI USB-6432 low-level `nidaqmx` operations.
 - `core/scanlist.py`: scan queue UI + sequential worker.
 - `core/scan.py`: scan editor, controls, save/load, per-page plots.
-- `core/scan_logic_new.py`: recursive scan execution and progress.
+- `core/scan_logic.py`: recursive scan execution and progress.
 - `core/all_level.py`: level editor and setting array generation.
 - `core/individual_setter.py`: setter editor (linear/explicit).
 - `core/brakets.py`: setting expression parser/expander.
@@ -306,7 +306,7 @@ For the command-router path, use this rule:
 - For details, examples, and the current recommended pattern, see `documents/device_command_bus_guide.md`.
 
 If asked to change scan behavior, usually edit:
-- `core/scan_logic_new.py`
+- `core/scan_logic.py`
 - `core/scan.py`
 - `core/all_level.py` / `core/brakets.py`
 

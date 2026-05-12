@@ -1,13 +1,13 @@
-# ScanLogic (`core/scan_logic_new.py`)
+# ScanLogic (`core/scan_logic.py`)
 
-This file documents the active scan engine only: `core/scan_logic_new.py`.
+This file documents the active scan engine only: `core/scan_logic.py`.
 
 For UI-to-engine setup flow (`Scan`, `AllLevelSetting`, `IndividualLevel`, `IndividualSetter`), see [README_scan_overview.md](README_scan_overview.md).
 
 ## Scope
 
 Main class:
-- `core/scan_logic_new.py` -> `ScanLogic(QtCore.QThread)`
+- `core/scan_logic.py` -> `ScanLogic(QtCore.QThread)`
 
 Used by:
 - `core/scan.py` -> `self.logic = ScanLogic(...)`

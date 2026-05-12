@@ -101,4 +101,60 @@ If you want to change:
 - Setter widgets (linear/explicit/channel chooser): `core/individual_setter.py`
 - Method parser semantics (`+`, `,`, nesting behavior): `core/brakets.py`
 - Scan run/start-stop orchestration: `core/scan.py`
-- Scan thread execution: `core/scan_logic_new.py`
+- Scan thread execution: `core/scan_logic.py`
+
+## 6) Scan Log (May 2026)
+
+### Behavior
+
+- Log widget: `scan.ui` -> `logStatus_textEdit`.
+- New log format: `[YYYY-MM-DD HH:MM:SS] [INFO|WARNING|ERROR] message`.
+- UI log is append-only for the scan window session.
+- UI visible lines are capped for performance:
+  - `Scan.MAX_UI_LOG_LINES = 5000`
+  - implemented by `QTextDocument.setMaximumBlockCount(...)`
+- JSON field `info['scan_log']` stores only the current scan-run log.
+- When loading JSON:
+  - loaded `scan_log` is appended to the UI
+  - loaded `scan_log` is used as current-run log until next scan start
+  - old log lines without severity prefix are still accepted
+
+### What gets logged
+
+- Scan lifecycle:
+  - start
+  - start summary (levels, points/level, total points, setter/getter counts)
+  - pause/resume
+  - stop/restart-stop requests
+  - finish status + elapsed time + completed/total points
+- Save/load lifecycle:
+  - autosave trigger/success/failure
+  - manual JSON save success/failure
+  - JSON backup success/failure/skipped reason
+  - PPT save success/failure
+  - PPT backup success/failure/skipped reason
+  - load canceled/failed/succeeded (+ loaded log-line count)
+- Scan runtime errors:
+  - scan error message
+  - finish-time error summary
+  - read/write/manual-set context (operation, channel, value, level, index snapshot, original exception)
+
+### Main functions
+
+- `core/scan.py`:
+  - `Scan._append_log_entry`
+  - `Scan._log_info`
+  - `Scan._log_warning`
+  - `Scan._log_error`
+  - `Scan._start_new_scan_log_session`
+  - `Scan._build_start_summary`
+  - `Scan.scan_finished`
+  - `Scan.auto_backup`
+  - `Scan.when_save_clicked`
+  - `Scan.when_save_plots_clicked`
+  - `Scan.when_load_clicked`
+- `core/scan_logic.py`:
+  - `ScanLogic._raise_scan_io_error`
+  - `ScanLogic.read_single_device_all_channels`
+  - `ScanLogic.write_single_device_all_channels`
+  - `ScanLogic.multi_thread_write`

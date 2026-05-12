@@ -7,6 +7,18 @@ from .scan_info import *
 # from scipy.interpolate import interp2d
 
 
+def _emit_scan_log(widget, level, message, *, persist_current_run=False):
+    root = widget.window() if hasattr(widget, "window") else None
+    if root is None or not hasattr(root, "_append_log_entry"):
+        return
+    try:
+        root._append_log_entry(
+            message,
+            level=level,
+            persist_current_run=persist_current_run,
+        )
+    except Exception:
+        return
 
 
 class LinePlot(QtWidgets.QWidget):
@@ -216,7 +228,35 @@ class LinePlot(QtWidgets.QWidget):
         try:
             self.line = self.plot.plot(list(self.x_coordinates), self.y_coordinates, pen=pg.mkPen(color=(240, 255, 255), width=2))
         except Exception as e:
-            print(e)
+            _emit_scan_log(
+                self,
+                "WARNING",
+                f"Line plot update failed for {self.y_name}: {type(e).__name__}: {e}",
+            )
+
+
+class SafeHistogramLUTItem(pg.HistogramLUTItem):
+    """Avoid pyqtgraph histogram warnings when image data are all NaN."""
+
+    def imageChanged(self, autoLevel=False, autoRange=False):
+        image_ref = self.imageItem
+        image_item = image_ref() if callable(image_ref) else None
+        if image_item is None:
+            return
+
+        image_data = getattr(image_item, "image", None)
+        if image_data is None:
+            return
+
+        try:
+            has_finite = bool(np.isfinite(np.asarray(image_data)).any())
+        except Exception:
+            has_finite = True
+
+        if not has_finite:
+            return
+
+        return super().imageChanged(autoLevel=autoLevel, autoRange=autoRange)
 
 
 class CustomROI(pg.ROI):
@@ -285,7 +325,8 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.outer_context_key = None
 
         # Image plot panel
-        self.image = pg.ImageItem(image = self.data)
+        self.image = pg.ImageItem()
+        self._safe_set_image(self.data)
         self.image.setRect(QtCore.QRectF(-0.5 * self.x_step, -0.5 * self.y_step, self.data.shape[1] * self.x_step, self.data.shape[0] * self.y_step))
         self.plot.addItem(self.image)
         [self.plot.getAxis(ax).setZValue(10) for ax in self.plot.axes]
@@ -296,7 +337,7 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.plot.addItem(self.roi)
 
         # Colourmap bar
-        self.cbar = pg.HistogramLUTItem(image=self.image)
+        self.cbar = SafeHistogramLUTItem(image=self.image)
         self.cbar.gradient.loadPreset('viridis')
         self.addItem(self.cbar, row=0, col=1)
         self.plot.setLabel('left',self.y_name)
@@ -451,6 +492,21 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             self.roi.setPos([x, y + step])
         self.update_lines_from_roi()
 
+    def _safe_set_image(self, image_data):
+        data_array = np.asarray(image_data)
+        if data_array.size == 0:
+            return
+
+        try:
+            all_nan = bool(np.isnan(data_array).all())
+        except Exception:
+            all_nan = False
+
+        if all_nan:
+            self.image.setImage(data_array, autoLevels=False)
+        else:
+            self.image.setImage(data_array, autoLevels=True)
+
 
     def update_image(self,new_data,current_target_index):
         outer_context_key = tuple(current_target_index[self.y_level_number + 1:])
@@ -472,7 +528,7 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             return
 
         self.data[current_x, current_y] = new_value
-        self.image.setImage(self.data)
+        self._safe_set_image(self.data)
 
 
     def load_image(self, data, target_index):
@@ -486,12 +542,18 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         
         self.data = np.array(temp)
 
-        # Final sanity check (optional, good for debugging)
         if self.data.ndim != 2:
-            print(f"Warning: expected 2D array but got shape {self.data.shape}")
+            _emit_scan_log(
+                self,
+                "WARNING",
+                (
+                    f"Image plot load skipped for {self.z_name}: "
+                    f"expected 2D array but got shape {self.data.shape}"
+                ),
+            )
+            return
 
-        # Set the image
-        self.image.setImage(self.data)
+        self._safe_set_image(self.data)
 
 
 

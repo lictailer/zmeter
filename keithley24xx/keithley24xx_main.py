@@ -46,7 +46,9 @@ class Keithley24xx(QtWidgets.QWidget):
         self.logic.sig_on_off.connect(self.on_off_label)
 
     def force_stop(self):
-        self.logic.force_stop = True
+        # Stop request is only meaningful while a voltage ramp is active.
+        if getattr(self.logic, "_ramp_active", False):
+            self.logic.force_stop = True
 
     def reset(self):
         self.logic.do_reset = True

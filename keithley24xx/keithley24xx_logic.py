@@ -24,6 +24,7 @@ class Keithley24xxLogic(QtCore.QThread):
         self.step_time: float = 1 / self.points_per_sec  # wait time between updates
         self.volt_ramp_step = self.ramp_rate / self.points_per_sec
         self.force_stop = False
+        self._ramp_active = False
 
     def reset_flags(self):
         self.do_volt = False
@@ -106,73 +107,67 @@ class Keithley24xxLogic(QtCore.QThread):
         """Ramp the source voltage to *val* at the user-defined ``self.ramp_rate``.
 
         The function uses the user-selectable update cadence ``self.points_per_sec``
-        (default 100 points/s).  The corresponding time step is
-        ``self.step_time = 1 / self.points_per_sec``.  The voltage increment
+        (default 100 points/s). The corresponding time step is
+        ``self.step_time = 1 / self.points_per_sec``. The voltage increment
         for each step is chosen to honour the selected ramp rate, guaranteeing
         an average slew rate close to ``self.ramp_rate`` volts per second
         (barring VISA/USB overhead).
         """
-        change_back_to_curr = (self.sens == 'curr')
-
-        # Switch the sensing function to voltage so we can read the starting value
-        self.sens_func_to_volt()
-
-        # Attempt to read the present voltage level; default to 0 V on failure
+        self._ramp_active = True
         try:
-            start_v = self.read()
-        except ValueError:
-            print("Initial voltage read failed – defaulting to 0 V for ramp start.")
-            start_v = 0.0
-
-        # Nothing to do if we are already (very) close to the target voltage
-        if np.isclose(start_v, val, atol=1e-9):
-            if change_back_to_curr:
-                self.sens_func_to_curr()
-            return
-        
-        # Cadence controlled by ``self.points_per_sec``
-        step_time = self.step_time  # seconds between updates
-
-        direction = 1 if val >= start_v else -1
-        step_size = direction * abs(self.ramp_rate) * step_time  # V per step
-
-        # Ensure we make progress (ramp_rate could be very small)
-        if step_size == 0:
-            step_size = direction * 1e-6  # 1 µV minimum step
-
-        current_v = start_v
-        step_counter = 0  # Counter to track steps for current reading
-        self.sens_func_to_curr()
-        self.read()
-
-        while (direction == 1 and current_v < val) or (direction == -1 and current_v > val):
-            if self.force_stop:
-                self.reset_flags()
-                break
-
-            # Move to the next intermediate voltage, but do not overshoot
-            next_v = current_v + step_size
-            if (direction == 1 and next_v > val) or (direction == -1 and next_v < val):
-                next_v = val
-
-            self.set_direct_source_voltage(next_v)
-
-            # Wait the fixed time interval to respect the desired ramp rate
-            time.sleep(step_time)
-            current_v = next_v
-            
-            # Read current every 10 points
-            step_counter += 1
-            if step_counter % 10 == 0:
-                try:
-                    self.read() 
-                except ValueError:
-                    pass
-
-        self.read()
-        # Restore sensing mode if it was changed at the beginning
-        if not change_back_to_curr:
+            change_back_to_curr = (self.sens == 'curr')
+            # Switch the sensing function to voltage so we can read the starting value
             self.sens_func_to_volt()
+            # Attempt to read the present voltage level; default to 0 V on failure
+            try:
+                start_v = self.read()
+            except ValueError:
+                print("Initial voltage read failed - defaulting to 0 V for ramp start.")
+                start_v = 0.0
+            # Nothing to do if we are already (very) close to the target voltage
+            if np.isclose(start_v, val, atol=1e-9):
+                if change_back_to_curr:
+                    self.sens_func_to_curr()
+                return
+            # Cadence controlled by ``self.points_per_sec``
+            step_time = self.step_time  # seconds between updates
+            direction = 1 if val >= start_v else -1
+            step_size = direction * abs(self.ramp_rate) * step_time  # V per step
+            # Ensure we make progress (ramp_rate could be very small)
+            if step_size == 0:
+                step_size = direction * 1e-6  # 1 uV minimum step
+            current_v = start_v
+            step_counter = 0  # Counter to track steps for current reading
+            self.sens_func_to_curr()
+            self.read()
+            while (direction == 1 and current_v < val) or (direction == -1 and current_v > val):
+                if self.force_stop:
+                    # One-shot stop: consume the request and stop this active ramp only.
+                    self.force_stop = False
+                    break
+                # Move to the next intermediate voltage, but do not overshoot
+                next_v = current_v + step_size
+                if (direction == 1 and next_v > val) or (direction == -1 and next_v < val):
+                    next_v = val
+                self.set_direct_source_voltage(next_v)
+                # Wait the fixed time interval to respect the desired ramp rate
+                time.sleep(step_time)
+                current_v = next_v
+                # Read current every 10 points
+                step_counter += 1
+                if step_counter % 10 == 0:
+                    try:
+                        self.read()
+                    except ValueError:
+                        pass
+            self.read()
+            # Restore sensing mode if it was changed at the beginning
+            if not change_back_to_curr:
+                self.sens_func_to_volt()
+        finally:
+            # Never let force_stop latch into future scan writes.
+            self.force_stop = False
+            self._ramp_active = False
 
     def update_next_func(self, fn):
         self.next_func = fn

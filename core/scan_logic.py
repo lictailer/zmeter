@@ -1,19 +1,40 @@
+"""
+Multi-Level Scanning Logic Module
+
+This module implements a hierarchical scanning system that can execute multi-level parameter sweeps
+with real-time data acquisition and progress tracking. The system supports nested scanning loops
+where higher levels change slower than lower levels, enabling complex measurement sequences.
+
+Key Features:
+- Recursive multi-level scanning with configurable setters and getters
+- Real-time progress tracking with time estimates
+- PyQt6 signal-based communication with GUI
+- Support for both linear and explicit parameter settings
+- Artificial channel support for calculated parameters
+- Manual pre/post level settings
+"""
+
 import numpy as np
 from PyQt6 import QtCore, QtWidgets, uic
-import time
 import datetime
+import time
 from scipy.io import savemat
 import random
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
+import re
 
+# Example scan configuration structure showing the expected data format
 ScanInfo = {
     "levels": {
+        # Level 0: Innermost scanning level (changes fastest)
         "level0": {
             "setters": {
+                # Each setter defines a parameter to be swept
                 "setter0": {
-                    "channel": "lockin_0_f",
-                    "explicit": False,
-                    "linear_setting": {
+                    "channel": "lockin_0_f",  # Hardware channel identifier
+                    "explicit": False,         # Use linear vs explicit values
+                    "linear_setting": {        # Linear sweep parameters
                         "start": 0,
                         "end": 10,
                         "step": 1,
@@ -22,12 +43,12 @@ ScanInfo = {
                         "points": 11,
                         "destinations": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
                     },
-                    "explicit_setting": [-1, 1, 0],
-                    "destinations": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                    "explicit_setting": [-1, 1, 0],  # Manual value list
+                    "destinations": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # Final values to use
                 },
                 "setter1": {
                     "channel": "lockin_0_A",
-                    "explicit": True,
+                    "explicit": True,  # This setter uses explicit values
                     "linear_setting": {
                         "start": 0,
                         "end": 100,
@@ -38,14 +59,17 @@ ScanInfo = {
                         "destinations": np.linspace(0, 100, 101)
                     },
                     "explicit_setting": [-1, 1, 0],
-                    "destinations": [-1, 1, 0]
+                    "destinations": [-1, 1, 0]  # Only these 3 values will be used
                 }
             },
-            "setting_method": "[AB]",
-            "getters": ['lockin_0_X'],
+            "setting_method": "[AB]",  # Method identifier for how to apply settings
+            "getters": ['lockin_0_X'],  # Channels to read measurements from
+            "settle_time": 0.0,  # Delay after write and before read at this level (seconds)
+            # 2D array: [setter_values][point_index] - NaN values skip that setter
             "setting_array": [[0,1,2,3,4,5,6,7,8,9,10],
                               [-1,1,0,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]]
         },
+        # Level 1: Outer scanning level (changes slower)
         "level1": {
             "setters": {
                 "setter0": {
@@ -66,283 +90,755 @@ ScanInfo = {
             },
             "setting_method": "A+B,CL",
             "getters": ['lockin_0_Y'],
+            "settle_time": 0.0,
             "setting_array": [[0,1,2]]
         }
     },
-    'data':{
-            },
+    'data': {
+        # This section will be populated with measurement results during scanning
+    },
     "plots": {
         "line_plots": {
-            
+            # Plot configuration for real-time data visualization
         },
         "image_plots": {
-            
+            # 2D plot configuration for multi-dimensional data
         }
     },
-    
-    
 }
+
+AVERAGE_GETTER_REGEX = re.compile(r"^level(\d+)_average_(.+)$")
 
 
 class ScanLogic(QtCore.QThread):
-    sig_capture_ui = QtCore.pyqtSignal() ######April 25
-    sig_new_data = QtCore.pyqtSignal(object)
-    sig_new_pos = QtCore.pyqtSignal(object)
-    sig_update_line = QtCore.pyqtSignal()
-    sig_set_image_source = QtCore.pyqtSignal(object)
-    sig_scan_finished = QtCore.pyqtSignal()
-    sig_update_remaining_time = QtCore.pyqtSignal(str)
-    sig_update_remaining_points = QtCore.pyqtSignal(str)  # New signal for remaining time updates
+    """
+    Multi-level scanning logic thread that executes hierarchical parameter sweeps.
+    
+    This class implements a recursive scanning algorithm where multiple levels of parameters
+    can be swept simultaneously. Higher-numbered levels change slower than lower-numbered
+    levels, creating nested scanning loops. The thread communicates with the main GUI
+    through Qt signals for real-time updates.
+    
+    Signals:
+        sig_new_data: Emitted when new measurement data is acquired
+        sig_new_pos: Emitted when scan position changes
+        sig_update_line: Emitted to update line plots
+        sig_set_image_source: Emitted to update image plot data source
+        sig_scan_finished: Emitted when entire scan sequence completes
+        sig_update_remaining_time: Emitted with time estimate string
+        sig_update_remaining_points: Emitted with progress information
+    """
+    
+    # Qt signals for communication with GUI
+    sig_new_data = QtCore.pyqtSignal(object)                # New measurement data available
+    sig_new_pos = QtCore.pyqtSignal(object)                 # Position update for tracking
+    sig_update_line = QtCore.pyqtSignal()                   # Update line plot displays
+    sig_set_image_source = QtCore.pyqtSignal(object)        # Set data source for image plots
+    sig_scan_finished = QtCore.pyqtSignal()                 # Scan completion notification
+    sig_scan_error = QtCore.pyqtSignal(str)                 # Scan runtime error summary
+    sig_update_remaining_time = QtCore.pyqtSignal(str)      # Time estimate updates
+    sig_update_remaining_points = QtCore.pyqtSignal(str)    # Progress tracking updates
+    sig_auto_backup = QtCore.pyqtSignal(bool)                   # Auto-backup trigger every hour
 
-    AI = ['AI0', 'AI1', 'AI2', 'AI3', 'AI4', 'AI5', 'AI6', 'AI7']
-    AO = ['AO0', 'AO1', 'AO2', 'AO3']
+    # Hardware channel definitions for NI-DAQ analog I/O
+    AI = ['AI0', 'AI1', 'AI2', 'AI3', 'AI4', 'AI5', 'AI6', 'AI7']  # Analog input channels
+    AO = ['AO0', 'AO1', 'AO2', 'AO3']                              # Analog output channels
 
     def __init__(self, main_window=None):
-        super().__init__() ######April 25 #importnat in April 25 edits
         QtCore.QThread.__init__(self)
         self.main_window = main_window
+
+        # --- NEW: pause primitives ---
+        self._pause_mutex = QtCore.QMutex()
+        self._pause_cond = QtCore.QWaitCondition()
+        self.received_pause = False  # NEW
+
         self.reset_flags()
+
+        # Progress tracking variables
         self.scan_start_time = None
-        self.time_spend = None
+        self.elapsed_time = None
         self.total_points = 0
         self.completed_points = 0
+        self.last_auto_hour_triggered = 0
 
-    def initilize_data(self, info):
-        # Initialize timing variables
+    def initialize_scan_data(self, scan_config):
+        """
+        Initialize all data structures and parameters for a new scan.
+        
+        This method prepares the scanning system by:
+        1. Calculating total scan points for progress tracking
+        2. Extracting setter/getter configurations for each level
+        3. Initializing data arrays with appropriate dimensions
+        4. Setting up position tracking arrays
+        
+        Args:
+            scan_config: Dictionary containing complete scan configuration
+        """
+        # Initialize timing variables for progress tracking
         self.scan_start_time = None
-        self.time_spend = None
+        self.elapsed_time = None
         self.completed_points = 0
+        self.last_auto_hour_triggered = 0
         
-        # Calculate total number of points in the scan
+        # Calculate total number of measurement points across all levels
         self.total_points = 1
-        for l in range(len(info['levels'])):
-            print(info['levels'][f'level{l}']['setting_array'])
-            self.total_points *= info['levels'][f'level{l}']['setting_array'].shape[1]
+        for level_index in range(len(scan_config['levels'])):
+            self.total_points *= scan_config['levels'][f'level{level_index}']['setting_array'].shape[1]
         
+        # Initialize data structure arrays for each scanning level
+        self.level_target_arrays = []      # Parameter values to set at each level
+        self.level_setters = []            # Hardware channels to write to
+        self.level_getters = []            # Hardware channels to read from
+        self.level_getter_specs = []       # Parsed getter metadata for each level
+        self.level_data_arrays = []        # Storage for measurement results
+        self.level_target_counts = []      # Number of points per level (including NaN)
+        self.level_getter_counts = []      # Number of measurement channels per level
+        self.level_manual_settings = []    # Manual settings before/after each level
+        self.level_settle_times = []       # Delay between write and read for each level
+        self.stop_scan = False             # Flag for graceful scan termination
+        
+        # Extract configuration data for each scanning level
+        level_number = len(scan_config['levels'])
+        self.max_level = level_number - 1  # Highest level index (outermost loop)
 
-        # FEL: for each level
-        self.targets_array_FEL = []
-        self.setters_FEL = []
-        self.getters_FEL = []
-        self.data_FEL = []
-        self.setters_targets_len_FEL = []  # FEL, for each setter, how long is the array including nans
-        self.getter_number_FEL = []
-        self.manual_set_FEL = []
-        self.stop_scan = False
-        # populate the FEL members
-        level_number = len(info['levels'])
-        self.max_level = level_number - 1
+        for level_index in range(level_number):
+            # Extract setter parameter arrays (what values to set)
+            self.level_target_arrays.append(scan_config['levels'][f'level{level_index}']['setting_array'])
 
-        for l in range(level_number):
-            self.targets_array_FEL.append(info['levels'][f'level{l}']['setting_array'])
-
+            # Extract setter channel names (where to set values)
             setters = []
-            for setter in info['levels'][f'level{l}']['setters'].values():
+            for setter in scan_config['levels'][f'level{level_index}']['setters'].values():
                 setters.append(setter['channel'])
-            self.setters_FEL.append(setters)
-            if len(info['levels'][f'level{l}']['getters']) == 0:
-                info['levels'][f'level{l}']['getters'].append('none')
-            self.getters_FEL.append(info['levels'][f'level{l}']['getters'])
+            self.level_setters.append(setters)
+            
+            # Extract getter channel names (where to read measurements)
+            if len(scan_config['levels'][f'level{level_index}']['getters']) == 0:
+                scan_config['levels'][f'level{level_index}']['getters'].append('none')
+            level_getters = scan_config['levels'][f'level{level_index}']['getters']
+            self.level_getters.append(level_getters)
+            self.level_getter_specs.append(
+                [
+                    self.build_getter_spec(level_index, getter_name)
+                    for getter_name in level_getters
+                ]
+            )
 
-            self.setters_targets_len_FEL.append(self.targets_array_FEL[l].shape[1])
+            # Store the number of measurement points for this level
+            self.level_target_counts.append(self.level_target_arrays[level_index].shape[1])
 
-            temp_manual_set = [info['levels'][f'level{l}']['manual_set_before'], info['levels'][f'level{l}']['manual_set_after']]
-            self.manual_set_FEL.append(temp_manual_set)
+            # Extract manual settings that run before/after this level
+            temp_manual_set = [scan_config['levels'][f'level{level_index}']['manual_set_before'], 
+                              scan_config['levels'][f'level{level_index}']['manual_set_after']]
+            self.level_manual_settings.append(temp_manual_set)
+            self.level_settle_times.append(float(scan_config['levels'][f'level{level_index}'].get('settle_time', 0.0)))
 
-        for g in self.getters_FEL:
-            self.getter_number_FEL.append(len(g))
-        # initialize data array
-        for l in range(level_number):
+        # Count getter channels for each level
+        for getters in self.level_getters:
+            self.level_getter_counts.append(len(getters))
+        
+        # Initialize multi-dimensional data arrays for storing measurement results
+        # Array dimensions: [getter_channels, level_N_points, level_N-1_points, ..., current_level_points]
+        for level_index in range(level_number):
+            data_shape = []
+            data_shape.append(self.level_getter_counts[level_index])  # Number of measurement channels
+            
+            # Add dimensions for all levels from outermost to current level
+            for i in range(level_number - 1, level_index - 1, -1):
+                data_shape.append(self.level_target_counts[i])
+            
+            # Initialize with NaN values (indicates no measurement taken yet)
+            self.level_data_arrays.append(np.full(shape=data_shape, fill_value=np.nan))
+        
+        # Initialize position tracking arrays for each level
+        self.current_target_indices = []
+        for level_index in range(self.max_level + 1):
+            self.current_target_indices.append(0)
 
-            g = []
-            g.append(self.getter_number_FEL[l])
-            for i in range(level_number - 1, l - 1, -1):
-                g.append(self.setters_targets_len_FEL[i])
-            # g = [self.getter_number_FEL[l], *self.setters_targets_len_FEL[0:l]]
-            # print("g:",g)
-            self.data_FEL.append(np.full(shape=g, fill_value=np.nan))
-            # [2,3,3,11][1,3,3][1,3]
-            # [11,3,3]
-            # [2,1,1]
-        #
-        self.current_target_indexs = []
-        for l in range(self.max_level + 1):
-            self.current_target_indexs.append(0)
-        # print("\nself.targets_array_FEL:")
-        # print(self.targets_array_FEL)
-        # print("\nself.setters_FEL:")
-        # print(self.setters_FEL)
-        # print("\nself.getters_FEL:")
-        # print(self.getters_FEL)
-        # print("\nself.data_FEL:")
-        # print(self.data_FEL)
-        # print("\nself.setters_targets_len_FEL:")
-        # print(self.setters_targets_len_FEL)
-        # print("\nself.getter_number_FEL:")
-        # print(self.getter_number_FEL)
-        # print("\nself.max_level:")
-        # print(self.max_level)
-        # print("\nself.current_target_indexs:")
-        # print(self.current_target_indexs)
+    def _find_direct_getter_index(self, level_index, getter_channel):
+        if level_index >= len(self.level_getter_specs):
+            return None
+        for getter_index, getter_spec in enumerate(self.level_getter_specs[level_index]):
+            if getter_spec["kind"] != "direct":
+                continue
+            if getter_spec["channel"] == getter_channel:
+                return getter_index
+        return None
+
+    def build_getter_spec(self, current_level, getter_name):
+        if getter_name == "none":
+            return {"kind": "none", "name": getter_name}
+
+        if not isinstance(getter_name, str):
+            return {"kind": "direct", "name": getter_name, "channel": getter_name}
+
+        match = AVERAGE_GETTER_REGEX.match(getter_name)
+        if match is None:
+            return {"kind": "direct", "name": getter_name, "channel": getter_name}
+
+        source_level = int(match.group(1))
+        source_channel = match.group(2)
+        source_getter_index = None
+
+        if source_level < current_level and source_level >= 0:
+            source_getter_index = self._find_direct_getter_index(source_level, source_channel)
+
+        resolved = source_getter_index is not None
+        return {
+            "kind": "average",
+            "name": getter_name,
+            "source_level": source_level,
+            "source_channel": source_channel,
+            "source_getter_index": source_getter_index,
+            "resolved": resolved,
+        }
 
     def reset_flags(self):
+        """Reset all control flags to their default states."""
         self.go_scan = False
         self.go_save = False
         self.received_stop = False
 
-    def looping(self, l):
-        # print("current level:", l)
+        self.received_pause = False
+        self._pause_cond.wakeAll()
+
+    @QtCore.pyqtSlot()
+    def request_pause(self):
+        """Pause the scan (thread will block at safe points)."""
+        with QtCore.QMutexLocker(self._pause_mutex):
+            self.received_pause = True
+
+    @QtCore.pyqtSlot()
+    def request_resume(self):
+        """Resume the scan if paused."""
+        with QtCore.QMutexLocker(self._pause_mutex):
+            self.received_pause = False
+            self._pause_cond.wakeAll()
+
+    @QtCore.pyqtSlot()
+    def request_stop(self):
+        """Stop the scan; also releases any pause wait."""
+        with QtCore.QMutexLocker(self._pause_mutex):
+            self.received_stop = True
+            self.received_pause = False
+            self._pause_cond.wakeAll()
+
+    def _pause_gate(self) -> bool:
         """
-        higher levels changes slower, but changes earlier
-        lower levels are the working ones
+        Block here while paused.
+        Returns True if a stop was requested (caller should exit).
         """
-        if l == -1:
+        self._pause_mutex.lock()
+        try:
+            while self.received_pause and not self.received_stop:
+                # Wait with a timeout so the thread can still react quickly
+                # even if a wake is missed (rare but safe).
+                self._pause_cond.wait(self._pause_mutex, 200)  # ms
+            return self.received_stop
+        finally:
+            self._pause_mutex.unlock()
+
+    def _current_index_snapshot(self):
+        if not hasattr(self, "current_target_indices"):
+            return []
+        return list(self.current_target_indices)
+
+    def _raise_scan_io_error(
+        self,
+        *,
+        operation,
+        channel,
+        value=None,
+        level_index=None,
+        target_index=None,
+        exc,
+    ):
+        detail_parts = [f"operation={operation}"]
+        if level_index is not None:
+            detail_parts.append(f"level={level_index}")
+        if target_index is not None:
+            detail_parts.append(f"target_index={target_index}")
+        detail_parts.append(f"indices={self._current_index_snapshot()}")
+        if channel is not None:
+            detail_parts.append(f"channel={channel}")
+        if value is not None:
+            detail_parts.append(f"value={value!r}")
+        detail_parts.append(f"cause={type(exc).__name__}: {exc}")
+        raise RuntimeError("; ".join(detail_parts)) from exc
+
+    def looping(self, current_level):
+        # Base case
+        if current_level == -1:
             return
-        
-        # Record start time when we begin the first level
-        if l == self.max_level and self.scan_start_time is None:
+
+        if self._pause_gate() or self.received_stop:
+            return
+
+        if current_level == self.max_level and self.scan_start_time is None:
             self.scan_start_time = time.time()
 
-        for setting_dict in self.manual_set_FEL[l][0]:
+        # Manual set BEFORE
+        for setting_dict in self.level_manual_settings[current_level][0]:
             for key, value in setting_dict.items():
-                if self.received_stop:
+                if self._pause_gate() or self.received_stop:
                     return
-                else:
+                try:
                     self.main_window.write_info(value, key)
+                except Exception as exc:
+                    self._raise_scan_io_error(
+                        operation="manual_before",
+                        channel=key,
+                        value=value,
+                        level_index=current_level,
+                        exc=exc,
+                    )
 
-        # do manual set before
-        for i in range(self.setters_targets_len_FEL[l]):
-            if self.received_stop:
+        reading_device_channels = self.group_reading_device_channels(current_level)
+
+        for target_index in range(self.level_target_counts[current_level]):
+            if self._pause_gate() or self.received_stop:
                 return
-            self.write(l, i)
-            if self.getter_number_FEL[l] == 0:
-                break
-            r = self.read(l)
-            for j in range(self.getter_number_FEL[l]):
-                indices_slice = slice(self.max_level, l, -1)
 
-                # Extract the slice as a list of indices
-                indices = self.current_target_indexs[indices_slice]
+            # write
+            self.multi_thread_write(current_level, target_index)
 
-                # Create the full index tuple including the slice as expanded indices
-                full_index_tuple = (j, *indices, self.current_target_indexs[l])
+            if self._pause_gate() or self.received_stop:
+                return
 
-                # Use the full index tuple to access and set data in self.data_FEL
-                self.data_FEL[l][full_index_tuple] = r[j]
-                # new_data_point_location=l,j,*self.current_target_indexs[self.max_level:l:-1],self.current_target_indexs[l]
-                # print(self.data_FEL)
-                # print("new_data_point_location",new_data_point_location)
-                # print('self.current_target_indexs',self.current_target_indexs)
-                # time.sleep(0.01)
-            current_target_indexs = deepcopy(self.current_target_indexs)
+            settle_time = self.level_settle_times[current_level]
+            if settle_time > 0 and len(reading_device_channels) > 0:
+                time.sleep(settle_time)
 
-            self.sig_new_data.emit([self.data_FEL, current_target_indexs])
-            # time.sleep(0.01)
-            # print('emitted')
+            if self._pause_gate() or self.received_stop:
+                return
 
-            self.looping(l - 1)
+            # read
+            if self.main_window.artificial_channel_logic.consume_skip_read_for_scan():
+                measurements = self.build_nan_measurements(reading_device_channels)
+            else:
+                measurements = self.multi_thread_read(
+                    reading_device_channels,
+                    current_level,
+                    target_index,
+                )
 
-            # Update timing information after each point
-            self.current_target_indexs[l] += 1
+            if self._pause_gate() or self.received_stop:
+                return
+
+            # store direct getter measurements first (pre-recursion behavior preserved)
+            direct_changed_getter_indices = []
+            for getter_index, getter_spec in enumerate(self.level_getter_specs[current_level]):
+                if getter_spec["kind"] != "direct":
+                    continue
+                getter_channel = getter_spec["channel"]
+                self.store_getter_value(
+                    current_level,
+                    getter_index,
+                    measurements.get(getter_channel, np.nan),
+                )
+                direct_changed_getter_indices.append(getter_index)
+
+            current_target_indices_copy = deepcopy(self.current_target_indices)
+            self.sig_new_data.emit(
+                [
+                    self.level_data_arrays,
+                    current_target_indices_copy,
+                    {
+                        "source_level": current_level,
+                        "changed_getter_indices": direct_changed_getter_indices,
+                        "phase": "direct",
+                    },
+                ]
+            )
+
+            # Skip lower/faster levels when an artificial-channel write was skipped.
+            # if not skip_lower_level:
+                # self.looping(current_level - 1)
+            self.looping(current_level - 1)
+
+            average_changed_getter_indices = []
+            for getter_index, getter_spec in enumerate(self.level_getter_specs[current_level]):
+                if getter_spec["kind"] != "average":
+                    continue
+                average_value = self.compute_average_getter_value(current_level, getter_spec)
+                self.store_getter_value(current_level, getter_index, average_value)
+                average_changed_getter_indices.append(getter_index)
+
+            if len(average_changed_getter_indices) > 0:
+                current_target_indices_copy = deepcopy(self.current_target_indices)
+                self.sig_new_data.emit(
+                    [
+                        self.level_data_arrays,
+                        current_target_indices_copy,
+                        {
+                            "source_level": current_level,
+                            "changed_getter_indices": average_changed_getter_indices,
+                            "phase": "average",
+                        },
+                    ]
+                )
+
+            # progress updates
+            self.current_target_indices[current_level] += 1
             point_end_time = time.time()
-            self.time_spend = point_end_time - self.scan_start_time
+            self.elapsed_time = point_end_time - self.scan_start_time
             self.completed_points += 1
-            
-            # Calculate and emit remaining time estimate
             self.update_remaining_time_estimate()
+            self.check_auto_backup_trigger()
 
-        for setting_dict in self.manual_set_FEL[l][1]:
+        # Manual set AFTER
+        for setting_dict in self.level_manual_settings[current_level][1]:
             for key, value in setting_dict.items():
-                self.main_window.write_info(value, key)
+                if self._pause_gate() or self.received_stop:
+                    return
+                try:
+                    self.main_window.write_info(value, key)
+                except Exception as exc:
+                    self._raise_scan_io_error(
+                        operation="manual_after",
+                        channel=key,
+                        value=value,
+                        level_index=current_level,
+                        exc=exc,
+                    )
 
-        self.current_target_indexs[l] = 0
+        self.current_target_indices[current_level] = 0
 
+    def store_getter_value(self, level_index, getter_index, value):
+        indices_slice = slice(self.max_level, level_index, -1)
+        indices = self.current_target_indices[indices_slice]
+        full_index_tuple = (getter_index, *indices, self.current_target_indices[level_index])
+        self.level_data_arrays[level_index][full_index_tuple] = value
 
-    def write(self, lv, index):
-        artificial_setters_and_vals = {}  # {artificial channel name ; val}
-        for i, ss in enumerate(self.setters_FEL[lv]):
-            val = self.targets_array_FEL[lv][i, index]
-            variable = self.get_variable(ss)
-            if self.main_window.artificial_channel_logic.has_channel(variable):
-                self.main_window.artificial_channel_logic.set_channel(variable, val)
-            else:
-                self.main_window.write_info(val, ss)
+    def compute_average_getter_value(self, current_level, getter_spec):
+        if getter_spec.get("resolved", False) is False:
+            return np.nan
 
-    def get_variable(self, name):
-        counter = False
-        for index, character in enumerate(name):
+        source_level = getter_spec["source_level"]
+        source_getter_index = getter_spec["source_getter_index"]
+        if source_level is None or source_getter_index is None:
+            return np.nan
+
+        source_data = self.level_data_arrays[source_level][source_getter_index]
+
+        outer_indices = []
+        for level_index in range(self.max_level, current_level - 1, -1):
+            outer_indices.append(self.current_target_indices[level_index])
+
+        if len(outer_indices) > 0:
+            source_slice = source_data[tuple(outer_indices)]
+        else:
+            source_slice = source_data
+
+        source_slice = np.asarray(source_slice)
+        if source_slice.size == 0:
+            return np.nan
+        if np.isnan(source_slice).all():
+            return np.nan
+        return float(np.nanmean(source_slice))
+
+    def extract_device_from_channel(self, channel_name):
+        """
+        Extract device name from channel identifier by comparing against known devices.
+        
+        This method checks the channel name against the list of devices stored in 
+        main_window.equips to find the matching device name. This approach handles
+        devices with any number of underscores in their names correctly.
+        
+        Args:
+            channel_name: Full channel identifier string (e.g., "lockin_0_frequency")
+            
+        Returns:
+            tuple: (device_name, variable) where device_name matches a known device
+                   and variable is everything after the device name and underscore.
+                   If no match found, returns (channel_name, "")
+        """
+        if self.main_window and hasattr(self.main_window, 'equips'):
+            # Check if channel name starts with any known device name
+            for device_name in self.main_window.equips.keys():
+                if channel_name.startswith(f"{device_name}_"):
+                    # Extract the remaining part after device_name_
+                    variable = channel_name[len(device_name) + 1:]
+                    return device_name, variable
+            if channel_name.startswith("artificial_channel_"):
+                return "artificial_channel", channel_name[len("artificial_channel_"):]
+            elif channel_name.startswith("default_"):
+                return "default", channel_name[len("default_"):]
+        
+        # If no pattern matches, return the whole string as device name with empty remaining part
+        return channel_name, ""
+
+    def extract_variable_from_channel(self, channel_name):
+        """
+        Extract variable name from standardized channel naming convention.
+        
+        Expected format: "device_instance_variable" (e.g., "lockin_0_frequency")
+        Returns the variable portion after the second underscore.
+        
+        Args:
+            channel_name: Full channel identifier string
+            
+        Returns:
+            str: Variable name portion of the channel identifier
+        """
+        underscore_count = 0
+        for index, character in enumerate(channel_name):
             if character == '_':
-                if counter:
-                    return name[index + 1::]
+                if underscore_count == 1:  # Found second underscore
+                    return channel_name[index + 1:]
                 else:
-                    counter = True
+                    underscore_count += 1
+    
+    def group_reading_device_channels(self, level_index):
+        device_channels = {}
+        
+        # Read only direct getter channels at this level.
+        for getter_spec in self.level_getter_specs[level_index]:
+            if getter_spec["kind"] != "direct":
+                continue
+            getter_channel = getter_spec["channel"]
+            
+            # Extract device name and variable name
+            device_name, variable = self.extract_device_from_channel(getter_channel)
+            
+            # Group channels by device
+            if device_name == None or device_name == "none" or device_name == "":
+                continue
+            elif device_name not in device_channels:
+                device_channels[device_name] = []
+            device_channels[device_name].append(variable)
+            
+        return device_channels
+        
+    def multi_thread_read(self, device_channels, level_index, target_index):
+        if len(device_channels) == 0:
+            return {}
+        with ThreadPoolExecutor(max_workers=len(device_channels)) as executor:
+            futures = [
+                executor.submit(
+                    self.read_single_device_all_channels,
+                    device,
+                    channel_list,
+                    level_index,
+                    target_index,
+                )
+                for device, channel_list in device_channels.items()
+            ]
+            # Combine all dictionary results into a single dictionary
+            combined_results = {}
+            for future in futures:
+                result_dict = future.result()
+                combined_results.update(result_dict)
+        return combined_results
 
-    def read(self, lv):
-        r = []
-        for j in range(self.getter_number_FEL[lv]):
-            slave = self.getters_FEL[lv][j]
-            variable = self.get_variable(slave)
-            if self.main_window.artificial_channel_logic.has_channel(variable):
-                r.append(self.main_window.artificial_channel_logic.read_channel(variable))
-            else:
-                r.append(self.main_window.read_info(slave))
+    def build_nan_measurements(self, device_channels):
+        skipped_measurements = {}
+        for device, channel_list in device_channels.items():
+            for channel in channel_list:
+                skipped_measurements[f"{device}_{channel}"] = np.nan
+        return skipped_measurements
 
-        return r
+    def read_single_device_all_channels(self, device, channel_list, level_index, target_index):
+        result = {}
+        for channel in channel_list:
+            full_channel = f"{device}_{channel}"
+            try:
+                if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
+                    result[full_channel] = self.main_window.artificial_channel_logic.read_channel_value(channel)
+                else:
+                    result[full_channel] = self.main_window.read_info(full_channel)
+            except Exception as exc:
+                self._raise_scan_io_error(
+                    operation="read",
+                    channel=full_channel,
+                    level_index=level_index,
+                    target_index=target_index,
+                    exc=exc,
+                )
+        return result
+
+    def write_single_device_all_channels(self, device, channel_value_list, level_index, target_index):
+        for channel, value in channel_value_list.items():
+            full_channel = f"{device}_{channel}"
+            try:
+                if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
+                    self.main_window.artificial_channel_logic.set_channel_value(
+                        channel,
+                        value,
+                        is_scan_write=True,
+                    )
+                else:
+                    self.main_window.write_info(value, full_channel)
+            except Exception as exc:
+                self._raise_scan_io_error(
+                    operation="write",
+                    channel=full_channel,
+                    value=value,
+                    level_index=level_index,
+                    target_index=target_index,
+                    exc=exc,
+                )
+
+    def _build_write_payload(self, level_index, target_index):
+        """
+        Build one write payload for a scan point.
+
+        Duplicate setter channels are resolved by setter order:
+        first active setter wins for the same channel at this point.
+        """
+        set_value = self.level_target_arrays[level_index][:, target_index]
+        device_channels = {}
+
+        for setter_index, setter_channel in enumerate(self.level_setters[level_index]):
+            value = set_value[setter_index]
+            if np.isnan(value):
+                continue
+
+            device_name, variable = self.extract_device_from_channel(setter_channel)
+            if device_name in (None, "", "none"):
+                continue
+
+            if device_name not in device_channels:
+                device_channels[device_name] = {}
+
+            # First active setter wins if same channel appears more than once.
+            if variable in device_channels[device_name]:
+                continue
+            device_channels[device_name][variable] = value
+
+        return device_channels
+
+    def multi_thread_write(self, level_index, target_index):
+        writing_device_channels = self._build_write_payload(level_index, target_index)
+        if len(writing_device_channels) == 0:
+            return
+
+        with ThreadPoolExecutor(max_workers=len(writing_device_channels)) as executor:
+            futures = [
+                executor.submit(
+                    self.write_single_device_all_channels,
+                    device,
+                    channel_value_list,
+                    level_index,
+                    target_index,
+                )
+                for device, channel_value_list in writing_device_channels.items()
+            ]
+            for future in futures:
+                future.result()
 
     def generate_file_for_save(self):
-        d = {}
-        levels = len(self.setters_FEL)
-        for l in range(levels):
-            d[f"level{l}_setter"] = self.setters_FEL[l]
+        """
+        Generate a dictionary containing all scan data formatted for file saving.
+        
+        Returns:
+            dict: Complete scan data including setters, targets, getters, and results
+        """
+        save_data = {}
+        num_levels = len(self.level_setters)
+        
+        # Package data for each scanning level
+        for level_index in range(num_levels):
+            # Save setter channel names
+            save_data[f"level{level_index}_setter"] = self.level_setters[level_index]
 
-            for i in range(len(self.setters_FEL[l])):
-                d[f"level{l}_index{i}_targets"] = np.array(
-                    self.targets_array_FEL[l][i])  # need array?
+            # Save target parameter arrays for each setter
+            for setter_index in range(len(self.level_setters[level_index])):
+                save_data[f"level{level_index}_index{setter_index}_targets"] = np.array(
+                    self.level_target_arrays[level_index][setter_index])
 
-            if self.getters_FEL[l]:
-                d[f"level{l}_getter"] = self.getters_FEL[l]
-                d[f"level{l}_result"] = self.results[l]
-        d["comments"] = self.comments
-        return d
+            # Save getter information and measurement results
+            if self.level_getters[level_index]:
+                save_data[f"level{level_index}_getter"] = self.level_getters[level_index]
+                save_data[f"level{level_index}_result"] = self.results[level_index]
+                
+        save_data["comments"] = self.comments
+        return save_data
 
     def scan(self):
-        # self.initilize_data()
-        # self.sig_set_image_source.emit(self.results)
+        """
+        Execute the complete scanning sequence.
+        
+        This method starts the recursive scanning process and handles cleanup
+        when the scan completes or is interrupted.
+        """
         try:
+            # Start recursive scanning from the outermost level
+            self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
             self.looping(self.max_level)
+        except Exception as exc:
+            error_message = f"{type(exc).__name__}: {exc}"
+            self.sig_scan_error.emit(error_message)
         finally:
+            # Ensure proper cleanup regardless of how scan ends
             self.reset_flags()
-            print("scan finished here")
+            self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
+            
+            # Re-enable equipment that was stopped for scanning
             self.main_window.start_equipments()
+            
+            # Notify GUI that scan is complete
             self.sig_scan_finished.emit()
 
     def run(self):
+        """
+        Main thread execution method (QThread override).
+        
+        This method is called when the thread starts. It checks the go_scan flag
+        and initiates scanning if requested.
+        """
         if self.go_scan:
-            print("start scanning")
             self.scan()
 
+        # Reset flags when thread execution completes
         self.reset_flags()
 
+    def check_auto_backup_trigger(self):
+        """
+        Trigger auto-backup once when crossing each elapsed whole-hour mark.
+        """
+        if self.scan_start_time is None:
+            return
+
+        elapsed_hours = int((time.time() - self.scan_start_time) // 3600)
+        if elapsed_hours >= 1 and elapsed_hours > self.last_auto_hour_triggered:
+            self.last_auto_hour_triggered = elapsed_hours
+            self.sig_auto_backup.emit(True)
+
     def update_remaining_time_estimate(self):
+        """
+        Calculate and emit time/progress estimates for user feedback.
+        
+        This method computes:
+        - Average time per measurement point
+        - Estimated remaining time
+        - Percentage completion
+        - Total estimated scan time
+        
+        Results are emitted via Qt signals for GUI display.
+        """
         if self.completed_points == 0:
             return
             
-        avg_time_per_point = self.time_spend / self.completed_points
-        remaining_points = self.total_points - self.completed_points
-        completed_precentage = round(self.completed_points / self.total_points * 100)
-        remaining_seconds = remaining_points * avg_time_per_point
+        # Calculate timing statistics
+        avg_time_per_point = self.elapsed_time / self.completed_points
+        remaining_points = max(0, self.total_points - self.completed_points)  # Ensure non-negative
+        completed_percentage = round(min(100, self.completed_points / self.total_points * 100))  # Cap at 100%
+        remaining_seconds = max(0, remaining_points * avg_time_per_point)  # Ensure non-negative
         total_time = self.total_points * avg_time_per_point
         
-        # Format remaining time as HH:MM:SS
+        # Format time strings as HH:MM:SS
         remaining_time_str = f"{datetime.timedelta(seconds=int(remaining_seconds))} / {datetime.timedelta(seconds=int(total_time))}"
-        remaining_points_str = f"{self.completed_points} / {self.total_points} ({completed_precentage}%)"
+        remaining_points_str = f"{self.completed_points} / {self.total_points} ({completed_percentage}%)"
+        
+        # Emit signals for GUI updates
         self.sig_update_remaining_time.emit(remaining_time_str)
         self.sig_update_remaining_points.emit(remaining_points_str)
 
-
+# Test/demo code for standalone execution
 if __name__ == "__main__":
-    
-    a = ScanLogic()
-    a.initilize_data(ScanInfo)
-    a.scan()
+    # Create and test scan logic with sample configuration
+    scan_logic = ScanLogic()
+    scan_logic.initialize_scan_data(ScanInfo)
+    scan_logic.scan()
     
