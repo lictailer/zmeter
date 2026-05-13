@@ -413,7 +413,14 @@ class ScanLogic(QtCore.QThread):
                 return
 
             # read
-            if self.main_window.artificial_channel_logic.consume_skip_read_for_scan():
+            skip_by_artificial = self.main_window.artificial_channel_logic.consume_skip_read_for_scan()
+            skip_by_global_limit = False
+            if hasattr(self.main_window, "consume_skip_read_for_scan_from_global_limit"):
+                skip_by_global_limit = (
+                    self.main_window.consume_skip_read_for_scan_from_global_limit()
+                )
+
+            if skip_by_artificial or skip_by_global_limit:
                 measurements = self.build_nan_measurements(reading_device_channels)
             else:
                 measurements = self.multi_thread_read(
@@ -765,6 +772,8 @@ class ScanLogic(QtCore.QThread):
         try:
             # Start recursive scanning from the outermost level
             self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
+            if hasattr(self.main_window, "reset_skip_next_scan_read_from_global_limit"):
+                self.main_window.reset_skip_next_scan_read_from_global_limit()
             self.looping(self.max_level)
         except Exception as exc:
             error_message = f"{type(exc).__name__}: {exc}"
@@ -773,6 +782,8 @@ class ScanLogic(QtCore.QThread):
             # Ensure proper cleanup regardless of how scan ends
             self.reset_flags()
             self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
+            if hasattr(self.main_window, "reset_skip_next_scan_read_from_global_limit"):
+                self.main_window.reset_skip_next_scan_read_from_global_limit()
             
             # Re-enable equipment that was stopped for scanning
             self.main_window.start_equipments()

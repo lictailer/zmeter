@@ -1,4 +1,5 @@
 import inspect
+import json
 import os
 import re
 import sys
@@ -21,11 +22,14 @@ from .scanlist import ScanList
 from .artificial_channel_logic import ArtificialChannelLogic
 from .artificial_channel_2d_main import ArtificialChannel2D
 from .device_command_router import DeviceCommandRouter
+from .scan_range_main import ScanRangeWindow
 
 
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):
     print("Initiating the Program")
+    SCAN_RANGE_CONFIG_FILENAME = "scan_range_limits.json"
+
     def __init__(
         self,
         info=None,
@@ -61,11 +65,14 @@ class MainWindow(QtWidgets.QWidget):
         self.ppt_path.setPlainText(os.path.join(self.save_path, "log.pptx"))
         self.save_info_path.setPlainText(self.save_path)
 
+        # Keep a live alias used by Scan._backup_subfolder(), so user edits in
+        # the UI are always read at save time.
+        self.backup_path = self.backup_Path
         if self.backup_bool:
-            self.backup_path = os.path.join(
+            default_backup_path = os.path.join(
                 self.backup_main_path, os.path.basename(os.getcwd())
             )
-            self.backup_Path.setPlainText(self.backup_path)
+            self.backup_Path.setPlainText(default_backup_path)
 
         # Equipment instances (already connected) provided by caller.
         # Fall back to an empty dict for headless usage/testing.
@@ -87,6 +94,9 @@ class MainWindow(QtWidgets.QWidget):
         # {equipment : [list of variable name]}
         self.getter_equipment_info = {}
         self.device_channel_catalog = {}
+        self.scan_range_limits = {}
+        self._skip_next_scan_read_from_global_limit = False
+        self.scan_range_limits_path = self._default_scan_range_limits_path()
 
         self.make_equipment_info()
         self.setup_default_channel_info()
@@ -103,18 +113,52 @@ class MainWindow(QtWidgets.QWidget):
         )
         self.scanlist.show()
         self.scanlist.setWindowTitle("Scan List")
-        self.scan_list_button.clicked.connect(self.scanlist.show)
+        self.scan_list_button.clicked.connect(self.open_scan_list_window_clicked)
+        self.scan_range_button.clicked.connect(self.open_scan_range_window_clicked)
+        self.scan_range_window = ScanRangeWindow(
+            limits_path=self.scan_range_limits_path,
+            on_reload_clicked=self.reload_scan_range_limits,
+            parent=None,
+        )
         self.update_serial_counter()              # set it once on start-up
+        self.reload_scan_range_limits()
+
+        if not hasattr(self, "devices_grid_layout"):
+            # Backward-compatible fallback for older UI files.
+            self.devices_grid_layout = QtWidgets.QGridLayout()
+            self.horizontalLayout_3.addLayout(self.devices_grid_layout)
+
+        self.devices_grid_layout.setHorizontalSpacing(6)
+        self.devices_grid_layout.setVerticalSpacing(4)
 
         self.open_equipment_buttons = []
-        for equipment_name, equipment in self.equips.items():
+        for index, (equipment_name, equipment) in enumerate(self.equips.items()):
             # equipment.show()
             equipment.setWindowTitle(equipment_name)
             open_button = QtWidgets.QPushButton()
             open_button.setText(equipment_name)
             self.open_equipment_buttons.append(open_button)
-            self.open_button_layout.addWidget(open_button)
-            open_button.clicked.connect(equipment.show)
+            row = index // 6
+            column = index % 6
+            self.devices_grid_layout.addWidget(open_button, row, column)
+            open_button.clicked.connect(
+                lambda _checked=False, window=equipment: self._show_and_focus_window(window)
+            )
+
+    def _show_and_focus_window(self, window):
+        if window is None:
+            return
+
+        window.show()
+        if hasattr(window, "isMinimized") and window.isMinimized():
+            window.showNormal()
+        if hasattr(window, "raise_"):
+            window.raise_()
+        if hasattr(window, "activateWindow"):
+            window.activateWindow()
+
+    def open_scan_list_window_clicked(self):
+        self._show_and_focus_window(self.scanlist)
 
     # artificial channels
 
@@ -134,19 +178,12 @@ class MainWindow(QtWidgets.QWidget):
             on_config_applied=self.on_artificial_channel_config_applied,
             parent=None,
         )
-
-        self.open_artificial_channel_button = QtWidgets.QPushButton(
-            "artificial channel 2D"
-        )
-        self.open_button_layout.addWidget(self.open_artificial_channel_button)
-        self.open_artificial_channel_button.clicked.connect(
+        self.artificialChanne2D_button.clicked.connect(
             self.open_artificial_channel_2d_window
         )
 
     def open_artificial_channel_2d_window(self):
-        self.artificial_channel_2d.show()
-        self.artificial_channel_2d.raise_()
-        self.artificial_channel_2d.activateWindow()
+        self._show_and_focus_window(self.artificial_channel_2d)
 
     def update_artificial_channel_scan_info(self):
         self.equations = dict(self.artificial_channel_logic.equations)
@@ -179,6 +216,137 @@ class MainWindow(QtWidgets.QWidget):
 
     def _set_default_count(self, _val):
         time.sleep(0.01)
+
+    def _default_scan_range_limits_path(self) -> str:
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        return os.path.join(root_dir, self.SCAN_RANGE_CONFIG_FILENAME)
+
+    def open_scan_range_window_clicked(self):
+        self._show_and_focus_window(self.scan_range_window)
+
+    def mark_skip_next_scan_read_from_global_limit(self):
+        self._skip_next_scan_read_from_global_limit = True
+
+    def consume_skip_read_for_scan_from_global_limit(self) -> bool:
+        skip = bool(self._skip_next_scan_read_from_global_limit)
+        self._skip_next_scan_read_from_global_limit = False
+        return skip
+
+    def reset_skip_next_scan_read_from_global_limit(self) -> None:
+        self._skip_next_scan_read_from_global_limit = False
+
+    def _parse_scan_range_bound(self, value, default):
+        if value is None:
+            return float(default)
+
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text == "":
+                return float(default)
+            if text in {"+inf", "inf", "+infinity", "infinity"}:
+                return float("inf")
+            if text in {"-inf", "-infinity"}:
+                return float("-inf")
+            return float(text)
+
+        return float(value)
+
+    def _parse_scan_range_entries(self, payload):
+        if isinstance(payload, dict):
+            entries = payload.get("limits", [])
+        elif isinstance(payload, list):
+            entries = payload
+        else:
+            raise ValueError("scan-range JSON must be a list or a dict with a 'limits' list.")
+
+        if not isinstance(entries, list):
+            raise ValueError("'limits' must be a list.")
+
+        parsed_limits = {}
+        warnings = []
+
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                warnings.append(f"entry[{index}] ignored: not an object.")
+                continue
+
+            device_name = str(entry.get("device_name", "")).strip()
+            channel = str(entry.get("channel", "")).strip()
+            if device_name == "" or channel == "":
+                warnings.append(
+                    f"entry[{index}] ignored: device_name/channel is required."
+                )
+                continue
+
+            try:
+                low_limit = self._parse_scan_range_bound(
+                    entry.get("low_limit"), default=float("-inf")
+                )
+                high_limit = self._parse_scan_range_bound(
+                    entry.get("high_limit"), default=float("inf")
+                )
+            except (TypeError, ValueError) as exc:
+                warnings.append(f"entry[{index}] ignored: invalid bound value ({exc}).")
+                continue
+
+            if low_limit > high_limit:
+                warnings.append(
+                    f"entry[{index}] ignored: low_limit {low_limit} > high_limit {high_limit}."
+                )
+                continue
+
+            parsed_limits[(device_name, channel)] = (low_limit, high_limit)
+
+        return parsed_limits, warnings
+
+    def _set_scan_range_status(self, message):
+        if hasattr(self, "scan_range_window"):
+            self.scan_range_window.set_status(message)
+
+    def reload_scan_range_limits(self):
+        file_path = self.scan_range_limits_path
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except FileNotFoundError:
+            message = (
+                f"[ScanRange] Config file not found at '{file_path}'. "
+                "Keeping previous limits."
+            )
+            print(message)
+            self._set_scan_range_status(message)
+            return False
+        except (json.JSONDecodeError, OSError) as exc:
+            message = (
+                f"[ScanRange] Failed to read '{file_path}': {exc}. "
+                "Keeping previous limits."
+            )
+            print(message)
+            self._set_scan_range_status(message)
+            return False
+
+        try:
+            parsed_limits, warnings = self._parse_scan_range_entries(payload)
+        except Exception as exc:
+            message = (
+                f"[ScanRange] Invalid config format in '{file_path}': {exc}. "
+                "Keeping previous limits."
+            )
+            print(message)
+            self._set_scan_range_status(message)
+            return False
+
+        for warning in warnings:
+            print(f"[ScanRange] {warning}")
+
+        self.scan_range_limits = parsed_limits
+        message = (
+            f"[ScanRange] Loaded {len(parsed_limits)} limit entries from '{file_path}'."
+        )
+        print(message)
+        self._set_scan_range_status(message)
+        return True
 
     def on_artificial_channel_config_applied(self):
         self.update_artificial_channel_scan_info()
@@ -419,6 +587,18 @@ class MainWindow(QtWidgets.QWidget):
             # exact prefix match: label followed by an underscore
             if master.startswith(f"{label}_"): #elif
                 variable = self.get_variable(master, label)
+                scan_range_limits = getattr(self, "scan_range_limits", {})
+                limits = scan_range_limits.get((label, variable))
+                if limits is not None:
+                    low_limit, high_limit = limits
+                    numeric_val = float(val)
+                    if numeric_val < low_limit or numeric_val > high_limit:
+                        print(
+                            f"[ScanRange] Denied write '{master}'={numeric_val} "
+                            f"outside [{low_limit}, {high_limit}]."
+                        )
+                        self.mark_skip_next_scan_read_from_global_limit()
+                        return
                 try:
                     setters[variable](val)
                 except KeyError:
@@ -552,6 +732,8 @@ class MainWindow(QtWidgets.QWidget):
             # proceed with the regular shutdown
             if hasattr(self, "artificial_channel_2d"):
                 self.artificial_channel_2d.close()
+            if hasattr(self, "scan_range_window"):
+                self.scan_range_window.close()
             self.scanlist.shutdown()
             self.force_stop_equipments()
             self.stop_equipments_for_scanning()

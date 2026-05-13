@@ -13,15 +13,15 @@ from core.mainWindow import MainWindow
 # from opticool.opticool_main import OptiCool
 from montana2.montana2_main import Montana2
 
-# from sr830_v2.sr830_main import SR830 #please use sr830_v2 instead of the original sr830, please report the bugs to Xuguo
-# from sr860.sr860_main import SR860
-# from keithley24xx.keithley24xx_main import Keithley24xx
+from sr830_v2.sr830_main import SR830 #please use sr830_v2 instead of the original sr830, please report the bugs to Xuguo
+from sr860.sr860_main import SR860
+from keithley24xx.keithley24xx_main import Keithley24xx
 # from hp34401a.hp34401a_main import HP34401A
 
-# from nidaq.nidaq_main import NIDAQ
+from nidaq.nidaq_main import NIDAQ
 from ni6423.ni6423_main import NI6423
 
-# from k10cr1.k10cr1_main import K10CR1
+from k10cr1.k10cr1_main import K10CR1
 # from tlpm.tlpm_main import TLPM
 
 # from auto_focus.autofocus_main import autofocus_main
@@ -38,16 +38,18 @@ def create_equipment():
     """Instantiate and connect to all equipment required for the session."""
 
     equips = {
-        # "lockin_0": SR830(),
-        # "lockin_1": SR830(),
-        # "lockin_2": SR860(),
-        # "nidaq_0": NIDAQ(),
-        # "ni6423_0": NI6423(),
+        "SR860_0": SR860(),
+        "SR860_1": SR860(),
+        "SR830_2": SR830(),
+        "SR830_3": SR830(),
+        "SR830_4": SR830(),
+        # "nidaq": NIDAQ(),
+        # "ni6423": NI6423(),
         # "DMM_A": HP34401A(),
-        # "HWP": K10CR1(),
-        # "HWP_1": K10CR1(),
-        # "Keithley_0": Keithley24xx(),
-        # "Keithley_1": Keithley24xx(),
+        "HWP_exc": K10CR1(),
+        "HWP_det": K10CR1(),
+        "Keithley_bg": Keithley24xx(),
+        "Keithley_tg": Keithley24xx(),
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
         "montana2": Montana2(),
@@ -57,17 +59,23 @@ def create_equipment():
     # ------------------------------------------------------------
     # Connection commands – adjust to match your instrument addresses.
     # ------------------------------------------------------------
-    # equips["nidaq_0"].connect("Dev1")
-    # equips["ni6423_0"].connect("Dev2")
-    # equips["nidaq_1"].connect("Dev2")
-    # equips["HWP"].connect(serial="55369504")
-    # equips["HWP_1"].connect(serial="55243324")
-    # equips["lockin_1"].connect_visa("GPIB0::8::INSTR")
-    # equips["lockin_2"].connect_visa("GPIB0::9::INSTR")
+    # equips["nidaq"].connect("Dev1")
+    # equips["ni6423"].connect("Dev2")
+
+    # equips["HWP_exc"].connect(serial="55369504")
+    # equips["HWP_det"].connect(serial="55243324")
+
+    # equips["SR860_0"].connect_visa("GPIB0::7::INSTR")
+    # equips["SR860_1"].connect_visa("GPIB0::8::INSTR")
+    # equips["SR830_2"].connect_visa("GPIB0::9::INSTR")
+    # equips["SR830_3"].connect_visa("GPIB0::10::INSTR")
+    # equips["SR830_4"].connect_visa("GPIB0::11::INSTR")
+
+    # equips["Keithley_bg"].connect_visa("GPIB2::17::INSTR")
+    # equips["Keithley_tg"].connect_visa("GPIB2::18::INSTR")
+
     # equips["DMM_A"].connect_visa("GPIB0::21::INSTR")
-    # equips["Keithley_0"].connect_visa("GPIB2::17::INSTR")
-    # equips["Keithley_1"].connect_visa("GPIB2::18::INSTR")
-    # equips["sr860_test"].connect_visa("GPIB0::2::INSTR")
+
     # equips["tlpm_0"].connect()
 
     # Optional scan-channel filters by equipment label.
@@ -75,10 +83,10 @@ def create_equipment():
     # Unknown channel names are silently skipped.
     # Only ni6423 support this function so far
     equips_set_channels = {
-        "ni6423_0": ["AO0", "AO1"],
+        "ni6423": ["AO0", "AO1"],
     }
     equips_get_channels = {
-        "ni6423_0": ["AI0", "AI1", "AI4", "counter0"],
+        "ni6423": ["AI0", "AI1", "AI4", "counter0"],
     }
 
     return equips, equips_set_channels, equips_get_channels

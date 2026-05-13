@@ -98,6 +98,7 @@ class Scan(QtWidgets.QWidget):
         self._run_stop_reason = None
         self._run_error_message = None
         self._stop_intent_logged = False
+        self._finalize_outputs_scheduled = False
         self.logStatus_textEdit.setReadOnly(True)
         self.logStatus_textEdit.document().setMaximumBlockCount(self.MAX_UI_LOG_LINES)
         self._replace_current_scan_log(self.info.get("scan_log", []))
@@ -108,6 +109,16 @@ class Scan(QtWidgets.QWidget):
         self.all_level_setting.sig_info_changed.connect(self.all_plot_setting.set_level_info_slot)
         self.lineEdit.textChanged.connect(self.when_name_changed)
         self.all_level_setting.sig_info_changed.emit(self.all_level_setting.all_level_info)
+        # When Scan is instantiated from an existing info dict (e.g. drag-copy
+        # across scan-list areas), rehydrate persisted UI choices.
+        ppp_val = self.info.get("plots_per_page", None)
+        if ppp_val is not None:
+            idx = self.PlotsPerPage.findText(str(ppp_val))
+            if idx != -1:
+                self.PlotsPerPage.setCurrentIndex(idx)
+        plots_info = self.info.get("plots", None)
+        if isinstance(plots_info, dict):
+            self.all_plot_setting.update_ui(plots_info)
         self.logic.sig_scan_finished.connect(self.scan_finished)
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
@@ -215,15 +226,30 @@ class Scan(QtWidgets.QWidget):
         if self._run_error_message:
             self._log_error(f"Error summary: {self._run_error_message}")
 
-        self.when_save_plots_clicked()
-        self.when_save_clicked()
-        current_serial = self.main_window.scanlist.serial.value()
-        self.main_window.scanlist.serial.setValue(current_serial + 1)
+        if self._finalize_outputs_scheduled:
+            self._log_warning("Scan finalize already scheduled; skipping duplicate finish handling.")
+            return
 
-        # If user clicked "Scan" while paused, we queued a fresh scan start
-        if getattr(self, "_start_new_scan_after_stop", False):
-            self._start_new_scan_after_stop = False
-            self._start_scan_now()
+        self._finalize_outputs_scheduled = True
+        QtCore.QTimer.singleShot(0, self._finalize_scan_outputs)
+
+    def _finalize_scan_outputs(self):
+        """
+        Defer heavyweight save/export work by one event-loop turn so the
+        last plot repaint can be processed before GUI-thread save operations.
+        """
+        try:
+            self.when_save_plots_clicked()
+            self.when_save_clicked()
+            current_serial = self.main_window.scanlist.serial.value()
+            self.main_window.scanlist.serial.setValue(current_serial + 1)
+
+            # If user clicked "Scan" while paused, we queued a fresh scan start
+            if getattr(self, "_start_new_scan_after_stop", False):
+                self._start_new_scan_after_stop = False
+                self._start_scan_now()
+        finally:
+            self._finalize_outputs_scheduled = False
 
     def handle_scan_error(self, error_message: str):
         self._run_error_message = error_message
@@ -255,6 +281,12 @@ class Scan(QtWidgets.QWidget):
             for i in range(layout.count()):
                 layout.setStretch(i, 0)
             layout.setStretch(0, 1)
+
+    def _focus_plot_tab_1_for_scan_start(self, maximize=False):
+        if maximize:
+            self.showMaximized()
+        if hasattr(self, "ScanTab") and hasattr(self, "Plots1Tab"):
+            self.ScanTab.setCurrentWidget(self.Plots1Tab)
 
     def _timestamp_now(self) -> str:
         return _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -433,6 +465,7 @@ class Scan(QtWidgets.QWidget):
         if hasattr(self, "unique_data_name"):
             del self.unique_data_name
 
+        self._focus_plot_tab_1_for_scan_start(maximize=False)
         self._start_new_scan_log_session()
 
         self.main_window.stop_equipments_for_scanning()
@@ -591,6 +624,8 @@ class Scan(QtWidgets.QWidget):
         type it is: QPlainTextEdit, QLineEdit, or a plain string attribute.
         """
         widget = getattr(self.main_window, "backup_path", None)
+        if widget is None:
+            widget = getattr(self.main_window, "backup_Path", None)
         if widget is None:
             return ""                                # not found
 

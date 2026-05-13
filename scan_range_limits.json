@@ -1,0 +1,16 @@
+{
+  "limits": [
+    {
+      "device_name": "ni6423_0",
+      "channel": "AO0",
+      "low_limit": -1.0,
+      "high_limit": 1.0
+    },
+    {
+      "device_name": "ni6423_0",
+      "channel": "AO1",
+      "low_limit": "-inf",
+      "high_limit": "+inf"
+    }
+  ]
+}
