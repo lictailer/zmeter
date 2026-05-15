@@ -65,6 +65,7 @@ ScanInfo = {
             "setting_method": "[AB]",  # Method identifier for how to apply settings
             "getters": ['lockin_0_X'],  # Channels to read measurements from
             "settle_time": 0.0,  # Delay after write and before read at this level (seconds)
+            "start_wait_time": 0.0,  # One-time extra wait after first successful set in this level loop
             # 2D array: [setter_values][point_index] - NaN values skip that setter
             "setting_array": [[0,1,2,3,4,5,6,7,8,9,10],
                               [-1,1,0,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,np.nan]]
@@ -91,6 +92,7 @@ ScanInfo = {
             "setting_method": "A+B,CL",
             "getters": ['lockin_0_Y'],
             "settle_time": 0.0,
+            "start_wait_time": 0.0,
             "setting_array": [[0,1,2]]
         }
     },
@@ -196,6 +198,7 @@ class ScanLogic(QtCore.QThread):
         self.level_getter_counts = []      # Number of measurement channels per level
         self.level_manual_settings = []    # Manual settings before/after each level
         self.level_settle_times = []       # Delay between write and read for each level
+        self.level_start_wait_times = []   # One-time extra wait on first successful set per level loop
         self.stop_scan = False             # Flag for graceful scan termination
         
         # Extract configuration data for each scanning level
@@ -232,6 +235,7 @@ class ScanLogic(QtCore.QThread):
                               scan_config['levels'][f'level{level_index}']['manual_set_after']]
             self.level_manual_settings.append(temp_manual_set)
             self.level_settle_times.append(float(scan_config['levels'][f'level{level_index}'].get('settle_time', 0.0)))
+            self.level_start_wait_times.append(float(scan_config['levels'][f'level{level_index}'].get('start_wait_time', 0.0)))
 
         # Count getter channels for each level
         for getters in self.level_getters:
@@ -394,6 +398,8 @@ class ScanLogic(QtCore.QThread):
                     )
 
         reading_device_channels = self.group_reading_device_channels(current_level)
+        first_success_wait_done = False
+        start_wait_time = self.level_start_wait_times[current_level]
 
         for target_index in range(self.level_target_counts[current_level]):
             if self._pause_gate() or self.received_stop:
@@ -401,6 +407,23 @@ class ScanLogic(QtCore.QThread):
 
             # write
             self.multi_thread_write(current_level, target_index)
+
+            if self._pause_gate() or self.received_stop:
+                return
+
+            skip_by_artificial = self.main_window.artificial_channel_logic.consume_skip_read_for_scan()
+            skip_by_global_limit = False
+            if hasattr(self.main_window, "consume_skip_read_for_scan_from_global_limit"):
+                skip_by_global_limit = (
+                    self.main_window.consume_skip_read_for_scan_from_global_limit()
+                )
+            skip_current_point = bool(skip_by_artificial or skip_by_global_limit)
+
+            if (not skip_current_point) and (not first_success_wait_done) and start_wait_time > 0:
+                time.sleep(start_wait_time)
+                first_success_wait_done = True
+            elif not skip_current_point:
+                first_success_wait_done = True
 
             if self._pause_gate() or self.received_stop:
                 return
@@ -413,14 +436,7 @@ class ScanLogic(QtCore.QThread):
                 return
 
             # read
-            skip_by_artificial = self.main_window.artificial_channel_logic.consume_skip_read_for_scan()
-            skip_by_global_limit = False
-            if hasattr(self.main_window, "consume_skip_read_for_scan_from_global_limit"):
-                skip_by_global_limit = (
-                    self.main_window.consume_skip_read_for_scan_from_global_limit()
-                )
-
-            if skip_by_artificial or skip_by_global_limit:
+            if skip_current_point:
                 measurements = self.build_nan_measurements(reading_device_channels)
             else:
                 measurements = self.multi_thread_read(

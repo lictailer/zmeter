@@ -51,6 +51,7 @@ class IndividualLevel(QtWidgets.QWidget):
         self.manual_set_after_remove_last_pb.clicked.connect(self.when_remove_last_manual_set_after_clicked)
         self.manual_set_clear_all_pb.clicked.connect(self.when_clear_all_manual_set_clicked)
         self.settle_time_spinbox.valueChanged.connect(self.when_settle_time_changed)
+        self.startWaitTime_spinbox.valueChanged.connect(self.when_start_wait_time_changed)
         
     def set_record_equipment_info(self):
         self.getter_nested_menu = NestedMenu()
@@ -65,6 +66,8 @@ class IndividualLevel(QtWidgets.QWidget):
     def set_info(self, info,):
         if 'settle_time' not in info:
             info['settle_time'] = 0.0
+        if 'start_wait_time' not in info:
+            info['start_wait_time'] = 0.0
         if 'manual_set_before' not in info:
             info['manual_set_before'] = []
         if 'manual_set_after' not in info:
@@ -104,6 +107,9 @@ class IndividualLevel(QtWidgets.QWidget):
         self.settle_time_spinbox.blockSignals(True)
         self.settle_time_spinbox.setValue(float(self.individual_level_info['settle_time']))
         self.settle_time_spinbox.blockSignals(False)
+        self.startWaitTime_spinbox.blockSignals(True)
+        self.startWaitTime_spinbox.setValue(float(self.individual_level_info.get('start_wait_time', 0.0)))
+        self.startWaitTime_spinbox.blockSignals(False)
         self.update_manual_set_labels()
             
         self.sig_info_changed.emit([self, self.individual_level_info])
@@ -242,6 +248,10 @@ class IndividualLevel(QtWidgets.QWidget):
 
     def when_settle_time_changed(self, value):
         self.individual_level_info['settle_time'] = float(value)
+        self.sig_info_changed.emit([self, self.individual_level_info])
+
+    def when_start_wait_time_changed(self, value):
+        self.individual_level_info['start_wait_time'] = float(value)
         self.sig_info_changed.emit([self, self.individual_level_info])
 
 

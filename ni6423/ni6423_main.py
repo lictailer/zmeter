@@ -287,7 +287,7 @@ class NI6423(QtWidgets.QWidget):
         if channel == self.active_monitor_channel:
             self._plot_channel(channel)
             if channel.startswith("counter"):
-                self.currentread_label.setText(f"{value:,.5f}")
+                self.currentread_label.setText(f"{value:,.1f}")
             else:
                 self.currentread_label.setText(f"{value:+.5f}")
 
