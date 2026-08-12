@@ -77,6 +77,9 @@ class ArtificialChannelLogic(QtCore.QObject):
             self.artificial_channel_x_name: 0.0,
             self.artificial_channel_y_name: 0.0,
         }
+        self._scan_target_artificial_values = dict(
+            self._commanded_artificial_values
+        )
         self._skip_next_scan_read = False
 
         if coordinate_pairs is None:
@@ -125,6 +128,9 @@ class ArtificialChannelLogic(QtCore.QObject):
             self.artificial_channel_x_name: 0.0,
             self.artificial_channel_y_name: 0.0,
         }
+        self._scan_target_artificial_values = dict(
+            self._commanded_artificial_values
+        )
         self._skip_next_scan_read = False
 
         self.construct_coordinate_relation(coordinate_pairs)
@@ -255,6 +261,35 @@ class ArtificialChannelLogic(QtCore.QObject):
     ) -> dict[str, Any]:
         target_x = float(artificial_channel_x_value)
         target_y = float(artificial_channel_y_value)
+        if is_scan_write:
+            self._scan_target_artificial_values = {
+                self.artificial_channel_x_name: target_x,
+                self.artificial_channel_y_name: target_y,
+            }
+
+        target_original_x, target_original_y = self._artificial_to_original_coordinate(
+            target_x,
+            target_y,
+        )
+        if not self._is_original_coordinate_within_limits(
+            target_original_x,
+            target_original_y,
+        ):
+            print(
+                "[ArtificialChannelLogic] Skip set: mapped original channels out of limit. "
+                f"{self.original_channel_x_name}={target_original_x:.6f}, "
+                f"{self.original_channel_y_name}={target_original_y:.6f}."
+            )
+            if is_scan_write:
+                self._skip_next_scan_read = True
+            else:
+                self._sync_scan_target_to_commanded()
+            return {
+                "skipped": True,
+                "reason": "original_limit_exceeded",
+                "state": dict(self.state),
+            }
+
         start_x = float(self._commanded_artificial_values[self.artificial_channel_x_name])
         start_y = float(self._commanded_artificial_values[self.artificial_channel_y_name])
 
@@ -273,6 +308,7 @@ class ArtificialChannelLogic(QtCore.QObject):
             if self._should_abort_ramp():
                 print("[ArtificialChannelLogic] Ramp aborted by force-stop request.")
                 self._skip_next_scan_read = False
+                self._sync_scan_target_to_commanded()
                 return {
                     "skipped": False,
                     "aborted": True,
@@ -293,6 +329,8 @@ class ArtificialChannelLogic(QtCore.QObject):
                 )
                 if is_scan_write:
                     self._skip_next_scan_read = True
+                else:
+                    self._sync_scan_target_to_commanded()
                 return {
                     "skipped": True,
                     "reason": "original_limit_exceeded",
@@ -324,6 +362,7 @@ class ArtificialChannelLogic(QtCore.QObject):
                 time.sleep(self.RAMP_INTER_STEP_DELAY_S)
 
         self._skip_next_scan_read = False
+        self._sync_scan_target_to_commanded()
         return {
             "skipped": False,
             "state": dict(self.state),
@@ -335,7 +374,10 @@ class ArtificialChannelLogic(QtCore.QObject):
         value = float(value)
 
         if self.has_artificial_channel(channel_name):
-            target_values = dict(self._commanded_artificial_values)
+            if is_scan_write:
+                target_values = dict(self._scan_target_artificial_values)
+            else:
+                target_values = dict(self._commanded_artificial_values)
             target_values[channel_name] = value
             return self.set_artificial_channel_values(
                 target_values[self.artificial_channel_x_name],
@@ -409,6 +451,7 @@ class ArtificialChannelLogic(QtCore.QObject):
         self._commanded_artificial_values[self.artificial_channel_y_name] = (
             artificial_channel_y_value
         )
+        self._sync_scan_target_to_commanded()
 
         self.state = self._make_state(
             artificial_channel_x_value,
@@ -424,6 +467,12 @@ class ArtificialChannelLogic(QtCore.QObject):
 
     def reset_skip_next_scan_read(self) -> None:
         self._skip_next_scan_read = False
+        self._sync_scan_target_to_commanded()
+
+    def _sync_scan_target_to_commanded(self) -> None:
+        self._scan_target_artificial_values = dict(
+            self._commanded_artificial_values
+        )
 
     def _make_state(
         self,

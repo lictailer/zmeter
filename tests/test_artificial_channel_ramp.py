@@ -48,6 +48,28 @@ def make_logic(
     return logic
 
 
+def make_coupled_logic(
+    write_channel,
+    *,
+    read_channel=None,
+    should_abort=None,
+):
+    logic = ArtificialChannelLogic(
+        write_channel=write_channel,
+        read_channel=read_channel or (lambda _channel: 0.0),
+        original_channel_x_name="device_A",
+        original_channel_y_name="device_B",
+        artificial_channel_x_name="n",
+        artificial_channel_y_name="E",
+        original_channel_x_limits=(-1.0, 1.0),
+        original_channel_y_limits=(-1.0, 1.0),
+        should_abort_ramp=should_abort,
+        resolve_device_label=lambda _channel: "shared_device",
+    )
+    logic.RAMP_INTER_STEP_DELAY_S = 0.0
+    return logic
+
+
 class ArtificialChannelRampTests(unittest.TestCase):
     def test_single_axis_write_uses_current_position_as_ramp_start(self):
         writes = []
@@ -124,8 +146,99 @@ class ArtificialChannelRampTests(unittest.TestCase):
 
         self.assertTrue(result["skipped"])
         self.assertEqual(result["reason"], "original_limit_exceeded")
-        self.assertTrue(all(-0.05 <= value <= 0.05 for _channel, value in writes))
+        self.assertEqual(writes, [])
+        self.assertEqual(logic._commanded_artificial_values, {"x": 0.0, "y": 0.0})
         self.assertTrue(logic.consume_skip_read_for_scan())
+
+    def test_scan_skip_retains_target_for_complementary_channel(self):
+        writes = []
+        logic = make_coupled_logic(
+            lambda value, channel: writes.append((channel, value))
+        )
+        logic.set_artificial_channel_values(2.0, 0.0)
+        writes.clear()
+
+        skipped = logic.set_channel_value("E", 0.2, is_scan_write=True)
+
+        self.assertTrue(skipped["skipped"])
+        self.assertEqual(writes, [])
+        self.assertEqual(logic._commanded_artificial_values, {"n": 2.0, "E": 0.0})
+        self.assertEqual(
+            logic._scan_target_artificial_values,
+            {"n": 2.0, "E": 0.2},
+        )
+
+        completed = logic.set_channel_value("n", -1.8, is_scan_write=True)
+
+        self.assertFalse(completed["skipped"])
+        self.assertEqual(logic._commanded_artificial_values, {"n": -1.8, "E": 0.2})
+        self.assertEqual(
+            logic._scan_target_artificial_values,
+            logic._commanded_artificial_values,
+        )
+
+    def test_manual_skip_discards_the_rejected_target(self):
+        writes = []
+        logic = make_coupled_logic(
+            lambda value, channel: writes.append((channel, value))
+        )
+        logic.set_artificial_channel_values(2.0, 0.0)
+        writes.clear()
+
+        skipped = logic.set_channel_value("E", 0.2)
+
+        self.assertEqual(writes, [])
+        self.assertEqual(logic._commanded_artificial_values, {"n": 2.0, "E": 0.0})
+
+        completed = logic.set_channel_value("n", -1.8)
+
+        self.assertTrue(skipped["skipped"])
+        self.assertFalse(completed["skipped"])
+        self.assertEqual(logic._commanded_artificial_values, {"n": -1.8, "E": 0.0})
+        self.assertEqual(
+            logic._scan_target_artificial_values,
+            logic._commanded_artificial_values,
+        )
+
+    def test_read_reset_and_configuration_clear_pending_target(self):
+        readings = {"device_A": 0.25, "device_B": -0.25}
+        logic = make_coupled_logic(
+            lambda _value, _channel: None,
+            read_channel=lambda channel: readings[channel],
+        )
+        logic.set_artificial_channel_values(2.0, 0.0)
+        logic.set_channel_value("E", 0.2, is_scan_write=True)
+
+        logic.read_all_channel_values()
+
+        self.assertEqual(logic._commanded_artificial_values, {"n": 0.0, "E": 0.5})
+        self.assertEqual(
+            logic._scan_target_artificial_values,
+            logic._commanded_artificial_values,
+        )
+
+        logic.set_channel_value("E", 2.0, is_scan_write=True)
+        logic.apply_configuration(
+            original_channel_x_name="device_A",
+            original_channel_y_name="device_B",
+            artificial_channel_x_name="n",
+            artificial_channel_y_name="E",
+            coordinate_pairs=logic.default_coordinate_pairs,
+            original_channel_x_limits=(-1.0, 1.0),
+            original_channel_y_limits=(-1.0, 1.0),
+        )
+        self.assertEqual(logic._commanded_artificial_values, {"n": 0.0, "E": 0.0})
+        self.assertEqual(
+            logic._scan_target_artificial_values,
+            logic._commanded_artificial_values,
+        )
+
+        logic.set_channel_value("n", 2.0, is_scan_write=True)
+        logic.reset_skip_next_scan_read()
+        self.assertEqual(
+            logic._scan_target_artificial_values,
+            logic._commanded_artificial_values,
+        )
 
     def test_force_stop_preserves_the_last_completed_waypoint(self):
         writes = []
@@ -147,6 +260,10 @@ class ArtificialChannelRampTests(unittest.TestCase):
 
         self.assertTrue(result["aborted"])
         self.assertEqual(logic._commanded_artificial_values, {"x": 0.02, "y": 0.0})
+        self.assertEqual(
+            logic._scan_target_artificial_values,
+            logic._commanded_artificial_values,
+        )
         self.assertEqual(result["state"]["x"], 0.02)
         self.assertEqual(
             [value for channel, value in writes if channel == "device_x_output"],

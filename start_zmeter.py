@@ -11,22 +11,24 @@ from core.mainWindow import MainWindow
 # devices that are not required in your particular setup.
 # ------------------------------------------------------------
 # from opticool.opticool_main import OptiCool
-from montana2.montana2_main import Montana2
+# from montana2.montana2_main import Montana2
 
-from sr830_v2.sr830_main import SR830 #please use sr830_v2 instead of the original sr830, please report the bugs to Xuguo
-from sr860.sr860_main import SR860
-from keithley24xx.keithley24xx_main import Keithley24xx
+# from sr830_v2.sr830_main import SR830 #please use sr830_v2 instead of the original sr830, please report the bugs to Xuguo
+# from sr860.sr860_main import SR860
+# from keithley24xx.keithley24xx_main import Keithley24xx
 # from hp34401a.hp34401a_main import HP34401A
 
-from nidaq.nidaq_main import NIDAQ
-from ni6423.ni6423_main import NI6423
+# from nidaq.nidaq_main import NIDAQ
+# from ni6423.ni6423_main import NI6423
 
-from k10cr1.k10cr1_main import K10CR1
+# from k10cr1.k10cr1_main import K10CR1
 # from tlpm.tlpm_main import TLPM
 
 # from auto_focus.autofocus_main import autofocus_main
 # from auto_focus.autofocus_logic import stepper_and_galvo_xyz
 # from autofocus_xuguo.autofocusXZ_main import AutofocusXZMain
+
+from mockDevice.mock_device_main import MockDevice
 
 
 save_path = os.path.join(os.getcwd(), "data")
@@ -38,21 +40,23 @@ def create_equipment():
     """Instantiate and connect to all equipment required for the session."""
 
     equips = {
-        "SR860_0": SR860(),
-        "SR860_1": SR860(),
-        "SR830_2": SR830(),
-        "SR830_3": SR830(),
-        "SR830_4": SR830(),
+        # "SR860_0": SR860(),
+        # "SR860_1": SR860(),
+        # "SR830_2": SR830(),
+        # "SR830_3": SR830(),
+        # "SR830_4": SR830(),
         # "nidaq": NIDAQ(),
         # "ni6423": NI6423(),
         # "DMM_A": HP34401A(),
-        "HWP_exc": K10CR1(),
-        "HWP_det": K10CR1(),
-        "Keithley_bg": Keithley24xx(),
-        "Keithley_tg": Keithley24xx(),
+        # "HWP_exc": K10CR1(),
+        # "HWP_det": K10CR1(),
+        # "Keithley_bg": Keithley24xx(),
+        # "Keithley_tg": Keithley24xx(),
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
-        "montana2": Montana2(),
+        # "montana2": Montana2(),
+        "mock_device_1": MockDevice(),
+        "mock_device_2": MockDevice(),
         # "autofocusXZ": AutofocusXZMain(),
     }
 

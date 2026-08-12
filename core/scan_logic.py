@@ -474,10 +474,12 @@ class ScanLogic(QtCore.QThread):
                 ]
             )
 
-            # Skip lower/faster levels when an artificial-channel write was skipped.
-            # if not skip_lower_level:
-                # self.looping(current_level - 1)
-            self.looping(current_level - 1)
+            continue_lower_scan = (
+                not skip_by_artificial
+                or self._lower_level_completes_artificial_pair(current_level)
+            )
+            if continue_lower_scan:
+                self.looping(current_level - 1)
 
             average_changed_getter_indices = []
             for getter_index, getter_spec in enumerate(self.level_getter_specs[current_level]):
@@ -526,6 +528,27 @@ class ScanLogic(QtCore.QThread):
                     )
 
         self.current_target_indices[current_level] = 0
+
+    def _lower_level_completes_artificial_pair(self, current_level):
+        if current_level <= 0:
+            return False
+
+        artificial_channels = tuple(
+            self.main_window.artificial_channel_logic.artificial_channels
+        )
+        if len(artificial_channels) != 2:
+            return False
+
+        first_channel = f"artificial_channel_{artificial_channels[0]}"
+        second_channel = f"artificial_channel_{artificial_channels[1]}"
+        current_setters = set(self.level_setters[current_level])
+        lower_setters = set(self.level_setters[current_level - 1])
+
+        return (
+            first_channel in current_setters and second_channel in lower_setters
+        ) or (
+            second_channel in current_setters and first_channel in lower_setters
+        )
 
     def store_getter_value(self, level_index, getter_index, value):
         indices_slice = slice(self.max_level, level_index, -1)
