@@ -685,11 +685,14 @@ class ScanLogic(QtCore.QThread):
             full_channel = f"{device}_{channel}"
             try:
                 if self.main_window.artificial_channel_logic.has_artificial_channel(channel):
-                    self.main_window.artificial_channel_logic.set_channel_value(
+                    result = self.main_window.artificial_channel_logic.set_channel_value(
                         channel,
                         value,
                         is_scan_write=True,
                     )
+                    if result.get("aborted", False):
+                        self.received_stop = True
+                        return
                 else:
                     self.main_window.write_info(value, full_channel)
             except Exception as exc:

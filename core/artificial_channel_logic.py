@@ -1,3 +1,7 @@
+import math
+import time
+from concurrent.futures import ThreadPoolExecutor
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable
 
 import numpy as np
@@ -6,6 +10,8 @@ from PyQt6 import QtCore
 
 class ArtificialChannelLogic(QtCore.QObject):
     sig_state_changed = QtCore.pyqtSignal(object)
+    RAMP_DIVISOR = 100
+    RAMP_INTER_STEP_DELAY_S = 0.02
 
     DEFAULT_ORIGINAL_CHANNEL_X_NAME = "nidaq_0_AO0"
     DEFAULT_ORIGINAL_CHANNEL_Y_NAME = "nidaq_0_AO1"
@@ -35,10 +41,14 @@ class ArtificialChannelLogic(QtCore.QObject):
         ] | None = None,
         original_channel_x_limits: tuple[float, float] = (-10.0, 10.0),
         original_channel_y_limits: tuple[float, float] = (-10.0, 10.0),
+        should_abort_ramp: Callable[[], bool] | None = None,
+        resolve_device_label: Callable[[str], str] | None = None,
     ):
         super().__init__(parent)
         self._write_channel = write_channel
         self._read_channel = read_channel
+        self._should_abort_ramp_cb = should_abort_ramp
+        self._resolve_device_label_cb = resolve_device_label
 
         self.original_channel_x_name = original_channel_x_name
         self.original_channel_y_name = original_channel_y_name
@@ -243,54 +253,77 @@ class ArtificialChannelLogic(QtCore.QObject):
         artificial_channel_y_value: float,
         is_scan_write: bool = False,
     ) -> dict[str, Any]:
-        artificial_channel_x_value = float(artificial_channel_x_value)
-        artificial_channel_y_value = float(artificial_channel_y_value)
+        target_x = float(artificial_channel_x_value)
+        target_y = float(artificial_channel_y_value)
+        start_x = float(self._commanded_artificial_values[self.artificial_channel_x_name])
+        start_y = float(self._commanded_artificial_values[self.artificial_channel_y_name])
 
-        original_channel_x_value, original_channel_y_value = (
-            self._artificial_to_original_coordinate(
-                artificial_channel_x_value, artificial_channel_y_value
+        step_x, step_y = self._compute_artificial_step_sizes()
+        waypoints = self._build_artificial_ramp_waypoints(
+            start_x,
+            start_y,
+            target_x,
+            target_y,
+            step_x,
+            step_y,
+        )
+
+        last_state = dict(self.state)
+        for waypoint_index, (ax_value, ay_value) in enumerate(waypoints):
+            if self._should_abort_ramp():
+                print("[ArtificialChannelLogic] Ramp aborted by force-stop request.")
+                self._skip_next_scan_read = False
+                return {
+                    "skipped": False,
+                    "aborted": True,
+                    "state": last_state,
+                }
+
+            original_channel_x_value, original_channel_y_value = (
+                self._artificial_to_original_coordinate(ax_value, ay_value)
             )
-        )
 
-        if not self._is_original_coordinate_within_limits(
-            original_channel_x_value, original_channel_y_value
-        ):
-            print(
-                "[ArtificialChannelLogic] Skip set: mapped original channels out of limit. "
-                f"{self.original_channel_x_name}={original_channel_x_value:.6f}, "
-                f"{self.original_channel_y_name}={original_channel_y_value:.6f}."
+            if not self._is_original_coordinate_within_limits(
+                original_channel_x_value, original_channel_y_value
+            ):
+                print(
+                    "[ArtificialChannelLogic] Skip set: mapped original channels out of limit. "
+                    f"{self.original_channel_x_name}={original_channel_x_value:.6f}, "
+                    f"{self.original_channel_y_name}={original_channel_y_value:.6f}."
+                )
+                if is_scan_write:
+                    self._skip_next_scan_read = True
+                return {
+                    "skipped": True,
+                    "reason": "original_limit_exceeded",
+                    "state": dict(self.state),
+                }
+
+            try:
+                self._write_original_channel_pair(
+                    original_channel_x_value,
+                    original_channel_y_value,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to write original channels '{self.original_channel_x_name}'/'{self.original_channel_y_name}': {exc}"
+                ) from exc
+
+            self._commanded_artificial_values[self.artificial_channel_x_name] = ax_value
+            self._commanded_artificial_values[self.artificial_channel_y_name] = ay_value
+            self.state = self._make_state(
+                ax_value,
+                ay_value,
+                original_channel_x_value,
+                original_channel_y_value,
             )
-            if is_scan_write:
-                self._skip_next_scan_read = True
-            return {
-                "skipped": True,
-                "reason": "original_limit_exceeded",
-                "state": dict(self.state),
-            }
+            last_state = dict(self.state)
+            self.sig_state_changed.emit(self.state)
 
-        try:
-            self._write_channel(original_channel_x_value, self.original_channel_x_name)
-            self._write_channel(original_channel_y_value, self.original_channel_y_name)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to write original channels '{self.original_channel_x_name}'/'{self.original_channel_y_name}': {exc}"
-            ) from exc
+            if waypoint_index < len(waypoints) - 1:
+                time.sleep(self.RAMP_INTER_STEP_DELAY_S)
 
-        self._commanded_artificial_values[self.artificial_channel_x_name] = (
-            artificial_channel_x_value
-        )
-        self._commanded_artificial_values[self.artificial_channel_y_name] = (
-            artificial_channel_y_value
-        )
-
-        self.state = self._make_state(
-            artificial_channel_x_value,
-            artificial_channel_y_value,
-            original_channel_x_value,
-            original_channel_y_value,
-        )
         self._skip_next_scan_read = False
-        self.sig_state_changed.emit(self.state)
         return {
             "skipped": False,
             "state": dict(self.state),
@@ -302,10 +335,11 @@ class ArtificialChannelLogic(QtCore.QObject):
         value = float(value)
 
         if self.has_artificial_channel(channel_name):
-            self._commanded_artificial_values[channel_name] = value
+            target_values = dict(self._commanded_artificial_values)
+            target_values[channel_name] = value
             return self.set_artificial_channel_values(
-                self._commanded_artificial_values[self.artificial_channel_x_name],
-                self._commanded_artificial_values[self.artificial_channel_y_name],
+                target_values[self.artificial_channel_x_name],
+                target_values[self.artificial_channel_y_name],
                 is_scan_write=is_scan_write,
             )
 
@@ -445,6 +479,167 @@ class ArtificialChannelLogic(QtCore.QObject):
             f"+{rhs_y_coeff:.9g}*{rhs_y_name}"
             f"+{bias:.9g}"
         )
+
+    def _compute_artificial_step_sizes(self) -> tuple[float, float]:
+        ax_low, ax_high = self.artificial_channel_limits[self.artificial_channel_x_name]
+        ay_low, ay_high = self.artificial_channel_limits[self.artificial_channel_y_name]
+        step_x = self._ceil_to_one_significant_digit(
+            max(0.0, ax_high - ax_low) / float(self.RAMP_DIVISOR)
+        )
+        step_y = self._ceil_to_one_significant_digit(
+            max(0.0, ay_high - ay_low) / float(self.RAMP_DIVISOR)
+        )
+        return step_x, step_y
+
+    def _build_artificial_ramp_waypoints(
+        self,
+        start_x: float,
+        start_y: float,
+        target_x: float,
+        target_y: float,
+        step_x: float,
+        step_y: float,
+    ) -> list[tuple[float, float]]:
+        delta_x = target_x - start_x
+        delta_y = target_y - start_y
+
+        intervals_x = self._calculate_interval_count(delta_x, step_x)
+        intervals_y = self._calculate_interval_count(delta_y, step_y)
+        master_intervals = max(intervals_x, intervals_y)
+        if master_intervals == 0:
+            return [(start_x, start_y)]
+
+        x_is_master = intervals_x >= intervals_y
+        decimals_x = self._count_decimal_places(step_x)
+        decimals_y = self._count_decimal_places(step_y)
+
+        waypoints = [(start_x, start_y)]
+        for step_index in range(1, master_intervals):
+            if x_is_master:
+                ax_value = self._axis_value_from_step(
+                    start=start_x,
+                    target=target_x,
+                    step_size=step_x,
+                    step_index=step_index,
+                    total_steps=master_intervals,
+                )
+                progress = 0.0
+                if not np.isclose(delta_x, 0.0):
+                    progress = (ax_value - start_x) / delta_x
+                ay_value = start_y + delta_y * progress
+            else:
+                ay_value = self._axis_value_from_step(
+                    start=start_y,
+                    target=target_y,
+                    step_size=step_y,
+                    step_index=step_index,
+                    total_steps=master_intervals,
+                )
+                progress = 0.0
+                if not np.isclose(delta_y, 0.0):
+                    progress = (ay_value - start_y) / delta_y
+                ax_value = start_x + delta_x * progress
+
+            ax_value = self._round_to_decimal_places(ax_value, decimals_x)
+            ay_value = self._round_to_decimal_places(ay_value, decimals_y)
+            waypoints.append((ax_value, ay_value))
+
+        waypoints.append((target_x, target_y))
+        return waypoints
+
+    def _axis_value_from_step(
+        self,
+        start: float,
+        target: float,
+        step_size: float,
+        step_index: int,
+        total_steps: int,
+    ) -> float:
+        delta = target - start
+        if np.isclose(delta, 0.0):
+            return start
+
+        if step_size <= 0:
+            return start + delta * (step_index / float(total_steps))
+
+        direction = 1.0 if delta > 0 else -1.0
+        return start + direction * step_size * float(step_index)
+
+    def _calculate_interval_count(self, delta: float, step_size: float) -> int:
+        distance = abs(float(delta))
+        if np.isclose(distance, 0.0):
+            return 0
+        if step_size <= 0:
+            return 1
+        return max(1, int(math.floor((distance / step_size) + 1e-12)))
+
+    @staticmethod
+    def _count_decimal_places(value: float) -> int:
+        if value <= 0:
+            return 6
+        text = f"{float(value):.12f}".rstrip("0").rstrip(".")
+        if "." not in text:
+            return 0
+        return len(text.split(".")[1])
+
+    @staticmethod
+    def _round_to_decimal_places(value: float, decimal_places: int) -> float:
+        quantum = Decimal(1).scaleb(-decimal_places)
+        return float(Decimal(str(float(value))).quantize(quantum, rounding=ROUND_HALF_UP))
+
+    @staticmethod
+    def _ceil_to_one_significant_digit(value: float) -> float:
+        value = abs(float(value))
+        if np.isclose(value, 0.0):
+            return 0.0
+        exponent = math.floor(math.log10(value))
+        base = 10 ** exponent
+        return math.ceil(value / base) * base
+
+    def _should_abort_ramp(self) -> bool:
+        if self._should_abort_ramp_cb is None:
+            return False
+        try:
+            return bool(self._should_abort_ramp_cb())
+        except Exception:
+            return False
+
+    def _resolve_device_label_for_channel(self, channel_name: str) -> str:
+        if self._resolve_device_label_cb is not None:
+            try:
+                label = str(self._resolve_device_label_cb(channel_name))
+                if label != "":
+                    return label
+            except Exception:
+                pass
+        if "_" in channel_name:
+            return channel_name.rsplit("_", 1)[0]
+        return channel_name
+
+    def _write_original_channel_pair(
+        self,
+        original_channel_x_value: float,
+        original_channel_y_value: float,
+    ) -> None:
+        x_device = self._resolve_device_label_for_channel(self.original_channel_x_name)
+        y_device = self._resolve_device_label_for_channel(self.original_channel_y_name)
+
+        if x_device == y_device:
+            self._write_channel(original_channel_x_value, self.original_channel_x_name)
+            self._write_channel(original_channel_y_value, self.original_channel_y_name)
+            return
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(
+                    self._write_channel, original_channel_x_value, self.original_channel_x_name
+                ),
+                executor.submit(
+                    self._write_channel, original_channel_y_value, self.original_channel_y_name
+                ),
+            ]
+            for future in futures:
+                future.result()
 
     @staticmethod
     def _normalize_limit(

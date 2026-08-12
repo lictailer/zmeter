@@ -96,6 +96,7 @@ class MainWindow(QtWidgets.QWidget):
         self.device_channel_catalog = {}
         self.scan_range_limits = {}
         self._skip_next_scan_read_from_global_limit = False
+        self._force_stop_requested = False
         self.scan_range_limits_path = self._default_scan_range_limits_path()
 
         self.make_equipment_info()
@@ -169,6 +170,8 @@ class MainWindow(QtWidgets.QWidget):
             parent=self,
             original_channel_x_limits=(-1.0, 1.0),
             original_channel_y_limits=(-1.0, 1.0),
+            should_abort_ramp=self.should_abort_artificial_ramp,
+            resolve_device_label=self.resolve_device_label_for_channel,
         )
         self.update_artificial_channel_scan_info()
 
@@ -226,6 +229,20 @@ class MainWindow(QtWidgets.QWidget):
 
     def mark_skip_next_scan_read_from_global_limit(self):
         self._skip_next_scan_read_from_global_limit = True
+
+    def should_abort_artificial_ramp(self) -> bool:
+        return bool(getattr(self, "_force_stop_requested", False))
+
+    def resolve_device_label_for_channel(self, channel_name: str) -> str:
+        for label in self.setter_equipment_info_for_scanning.keys():
+            if channel_name.startswith(f"{label}_"):
+                return label
+        for label in self.getter_equipment_info_for_scanning.keys():
+            if channel_name.startswith(f"{label}_"):
+                return label
+        if "_" in channel_name:
+            return channel_name.rsplit("_", 1)[0]
+        return channel_name
 
     def consume_skip_read_for_scan_from_global_limit(self) -> bool:
         skip = bool(self._skip_next_scan_read_from_global_limit)
@@ -708,11 +725,13 @@ class MainWindow(QtWidgets.QWidget):
                 equipment.stop_scan()
 
     def start_equipments(self):
+        self._force_stop_requested = False
         for name, equipment in self.equips.items():
             if hasattr(equipment, "start_scan"):
                 equipment.start_scan()
 
     def force_stop_equipments(self):
+        self._force_stop_requested = True
         for name, equipment in self.equips.items():
             if hasattr(equipment, "force_stop"):
                 equipment.force_stop()
