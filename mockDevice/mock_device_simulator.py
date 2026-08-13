@@ -4,6 +4,7 @@ import math
 import random
 import threading
 from collections import deque
+from collections.abc import Callable
 from datetime import datetime
 
 
@@ -146,7 +147,12 @@ class MockDeviceSimulator:
             self._log_failure("GET_RANDOM_CHANNEL", exc)
             raise
 
-    def ramp_channel(self, channel: str, target: float) -> tuple[float, bool]:
+    def ramp_channel(
+        self,
+        channel: str,
+        target: float,
+        progress_callback: Callable[[float], None] | None = None,
+    ) -> tuple[float, bool]:
         channel = self._normalize_channel(channel)
         operation = f"RAMP_CHANNEL_{channel}"
         try:
@@ -182,6 +188,8 @@ class MockDeviceSimulator:
                             )
                         self._channel_values[channel] = current
                         self._last_set_values[channel] = current
+                    if progress_callback is not None:
+                        progress_callback(current)
 
             finally:
                 with self._lock:

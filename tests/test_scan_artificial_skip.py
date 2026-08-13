@@ -105,6 +105,7 @@ def make_coupled_scan_config():
                 "getters": [
                     "mock_device_1_channel_A",
                     "mock_device_2_channel_B",
+                    "artificial_channel_n",
                 ],
                 "setting_array": np.array([targets]),
                 "settle_time": 0.0,
@@ -164,7 +165,12 @@ class ScanArtificialSkipTests(unittest.TestCase):
 
         channel_a = logic.level_data_arrays[0][0]
         channel_b = logic.level_data_arrays[0][1]
-        finite_mask = np.isfinite(channel_a) & np.isfinite(channel_b)
+        artificial_n = logic.level_data_arrays[0][2]
+        finite_mask = (
+            np.isfinite(channel_a)
+            & np.isfinite(channel_b)
+            & np.isfinite(artificial_n)
+        )
         targets = config["levels"]["level0"]["setting_array"][0]
         expected_mask = np.zeros_like(finite_mask)
 
@@ -189,6 +195,10 @@ class ScanArtificialSkipTests(unittest.TestCase):
                 self.assertAlmostEqual(
                     channel_a[e_index, n_index] - channel_b[e_index, n_index],
                     e_value,
+                )
+                self.assertAlmostEqual(
+                    artificial_n[e_index, n_index],
+                    n_value,
                 )
 
         self.assertTrue(np.array_equal(finite_mask, expected_mask))

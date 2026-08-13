@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6 import QtCore, QtGui, QtWidgets, uic
+from PyQt6 import QtCore, QtWidgets, uic
 
 from .mock_device_logic import MockDeviceLogic
 
@@ -164,7 +164,3 @@ class MockDevice(QtWidgets.QWidget):
     @staticmethod
     def _set_value_label(label: QtWidgets.QLabel, value: object) -> None:
         label.setText("--" if value is None else f"{float(value):.9g}")
-
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        self.terminate_dev()
-        event.accept()

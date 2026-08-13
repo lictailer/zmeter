@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from .mock_device_simulator import MockDeviceSimulator
 
 
@@ -54,11 +56,19 @@ class MockDeviceHardware:
     def read_random_channel(self) -> float:
         return self.simulator.read_random_channel()
 
-    def ramp_channel_A(self, target: float) -> tuple[float, bool]:
-        return self.simulator.ramp_channel("A", target)
+    def ramp_channel_A(
+        self,
+        target: float,
+        progress_callback: Callable[[float], None] | None = None,
+    ) -> tuple[float, bool]:
+        return self.simulator.ramp_channel("A", target, progress_callback)
 
-    def ramp_channel_B(self, target: float) -> tuple[float, bool]:
-        return self.simulator.ramp_channel("B", target)
+    def ramp_channel_B(
+        self,
+        target: float,
+        progress_callback: Callable[[float], None] | None = None,
+    ) -> tuple[float, bool]:
+        return self.simulator.ramp_channel("B", target, progress_callback)
 
     def activate_fail_after(self, command_count: int) -> None:
         self.simulator.activate_fail_after(command_count)

@@ -193,17 +193,19 @@ class MockDeviceLogic(QtCore.QThread):
         self,
         channel: str,
         target: float,
-        ramp: Callable[[float], tuple[float, bool]],
+        ramp: Callable[[float, Callable[[float], None]], tuple[float, bool]],
     ) -> float:
         self.sig_ramp_active.emit(True)
         try:
-            value, aborted = self._execute(
-                f"Ramp channel {channel}", ramp, float(target)
+            progress_signal = (
+                self.sig_last_set_A if channel == "A" else self.sig_last_set_B
             )
-            if channel == "A":
-                self.sig_last_set_A.emit(value)
-            else:
-                self.sig_last_set_B.emit(value)
+            value, aborted = self._execute(
+                f"Ramp channel {channel}",
+                ramp,
+                float(target),
+                progress_signal.emit,
+            )
             if aborted:
                 self.sig_status.emit(
                     f"Ramp {channel} stopped at {value:.9g}"

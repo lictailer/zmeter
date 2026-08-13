@@ -10,6 +10,7 @@ from PyQt6 import QtCore
 
 class ArtificialChannelLogic(QtCore.QObject):
     sig_state_changed = QtCore.pyqtSignal(object)
+    sig_target_changed = QtCore.pyqtSignal(object)
     RAMP_DIVISOR = 100
     RAMP_INTER_STEP_DELAY_S = 0.02
 
@@ -135,6 +136,12 @@ class ArtificialChannelLogic(QtCore.QObject):
 
         self.construct_coordinate_relation(coordinate_pairs)
         self.state = self._make_state("Unknown", "Unknown", "Unknown", "Unknown")
+        self.sig_target_changed.emit(
+            {
+                self.artificial_channel_x_name: "Unknown",
+                self.artificial_channel_y_name: "Unknown",
+            }
+        )
         self.sig_state_changed.emit(self.state)
         return dict(self.state)
 
@@ -261,6 +268,12 @@ class ArtificialChannelLogic(QtCore.QObject):
     ) -> dict[str, Any]:
         target_x = float(artificial_channel_x_value)
         target_y = float(artificial_channel_y_value)
+        self.sig_target_changed.emit(
+            {
+                self.artificial_channel_x_name: target_x,
+                self.artificial_channel_y_name: target_y,
+            }
+        )
         if is_scan_write:
             self._scan_target_artificial_values = {
                 self.artificial_channel_x_name: target_x,
@@ -423,6 +436,8 @@ class ArtificialChannelLogic(QtCore.QObject):
                 f"Unknown channel '{channel_name}'. Supported artificial channels: {self.artificial_channels}; "
                 f"supported original channels: {self.original_channels}."
             )
+        if self.has_artificial_channel(channel_name):
+            return float(self._commanded_artificial_values[channel_name])
         state = self.read_all_channel_values()
         return float(state[channel_name])
 

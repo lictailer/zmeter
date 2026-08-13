@@ -2,7 +2,6 @@ import inspect
 import math
 import os
 import threading
-import time
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -62,27 +61,37 @@ class MockDeviceSimulatorTests(unittest.TestCase):
         self.assertEqual(self.simulator.RAMP_STEP, 0.01)
         self.assertEqual(self.simulator.RAMP_INTERVAL_SECONDS, 0.001)
 
-        value, aborted = self.simulator.ramp_channel("A", 0.025)
+        progress_values = []
+        log_length_before_ramp = len(self.simulator.command_log)
+        value, aborted = self.simulator.ramp_channel(
+            "A", 0.025, progress_values.append
+        )
         reverse_value, reverse_aborted = self.simulator.ramp_channel("A", -0.014)
 
         self.assertFalse(aborted)
         self.assertFalse(reverse_aborted)
         self.assertEqual(value, 0.025)
         self.assertEqual(reverse_value, -0.014)
+        self.assertEqual(progress_values, [0.01, 0.02, 0.025])
+        self.assertEqual(len(self.simulator.command_log) - log_length_before_ramp, 4)
 
     def test_emergency_stop_preserves_last_completed_ramp_step(self):
         result = {}
+        progress_values = []
+        first_step_completed = threading.Event()
+
+        def report_progress(value):
+            progress_values.append(value)
+            first_step_completed.set()
 
         def run_ramp():
             result["value"], result["aborted"] = self.simulator.ramp_channel(
-                "A", 2.0
+                "A", 2.0, report_progress
             )
 
         worker = threading.Thread(target=run_ramp)
         worker.start()
-        deadline = time.monotonic() + 0.5
-        while not self.simulator.ramp_active and time.monotonic() < deadline:
-            time.sleep(0.001)
+        self.assertTrue(first_step_completed.wait(timeout=0.5))
 
         self.assertTrue(self.simulator.force_stop())
         worker.join(timeout=1.0)
@@ -91,6 +100,7 @@ class MockDeviceSimulatorTests(unittest.TestCase):
         self.assertTrue(result["aborted"])
         self.assertGreaterEqual(result["value"], 0.0)
         self.assertLess(result["value"], 2.0)
+        self.assertEqual(result["value"], progress_values[-1])
 
     def test_start_scan_clears_an_old_ramp_stop_request(self):
         self.simulator._ramp_stop.set()
@@ -199,6 +209,15 @@ class MockDeviceLogicTests(unittest.TestCase):
         self.assertIsInstance(self.logic.get_random_channel(), float)
         self.assertEqual(self.logic.set_ramp_channel_A(1.27), 1.27)
 
+    def test_ramp_emits_each_step_and_the_final_actual_value(self):
+        emitted_values = []
+        self.logic.sig_last_set_A.connect(emitted_values.append)
+
+        result = self.logic.set_ramp_channel_A(0.025)
+
+        self.assertEqual(result, 0.025)
+        self.assertEqual(emitted_values, [0.01, 0.02, 0.025])
+
     @staticmethod
     def _has_scan_signature(method, name):
         positional = [
@@ -229,6 +248,43 @@ class MockDeviceWidgetTests(unittest.TestCase):
         finally:
             widget.terminate_dev()
 
+        self.assertFalse(widget.logic.hardware.connected)
+
+    def test_closing_window_preserves_connection_and_state(self):
+        widget = MockDevice()
+        try:
+            widget.connect("MOCK::WINDOW")
+            widget.logic.set_channel_A(1.25)
+            log_before_close = widget.logic.hardware.command_log
+
+            widget.show()
+            self.app.processEvents()
+            widget.close()
+            self.app.processEvents()
+
+            self.assertFalse(widget.isVisible())
+            self.assertTrue(widget.logic.hardware.connected)
+            self.assertEqual(widget.logic.hardware.command_log, log_before_close)
+
+            widget.show()
+            self.app.processEvents()
+            self.assertTrue(widget.isVisible())
+            self.assertTrue(widget.logic.hardware.connected)
+            self.assertEqual(widget.last_set_A_label.text(), "1.25")
+
+            widget.disconnect()
+            self.assertFalse(widget.logic.hardware.connected)
+        finally:
+            widget.terminate_dev()
+
+    def test_terminate_device_disconnects_after_window_close(self):
+        widget = MockDevice()
+        widget.connect("MOCK::SHUTDOWN")
+
+        widget.close()
+        self.assertTrue(widget.logic.hardware.connected)
+
+        widget.terminate_dev()
         self.assertFalse(widget.logic.hardware.connected)
 
 

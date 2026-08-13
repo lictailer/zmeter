@@ -1,8 +1,11 @@
+import os
 import sys
 import threading
 import types
 import unittest
 from types import SimpleNamespace
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 if "win32com" not in sys.modules:
     win32com_module = types.ModuleType("win32com")
@@ -11,6 +14,9 @@ if "win32com" not in sys.modules:
     sys.modules["win32com"] = win32com_module
     sys.modules["win32com.client"] = win32com_client_module
 
+from PyQt6 import QtWidgets
+
+from core.artificial_channel_2d_main import ArtificialChannel2D
 from core.artificial_channel_logic import ArtificialChannelLogic
 from core.mainWindow import MainWindow
 from core.scan_logic import ScanLogic
@@ -71,6 +77,95 @@ def make_coupled_logic(
 
 
 class ArtificialChannelRampTests(unittest.TestCase):
+    def test_artificial_getters_return_commanded_values_without_hardware_reads(self):
+        def unexpected_read(_channel):
+            raise AssertionError("Artificial getter must not read original channels")
+
+        logic = make_coupled_logic(
+            lambda _value, _channel: None,
+            read_channel=unexpected_read,
+        )
+
+        self.assertEqual(logic.read_channel_value("n"), 0.0)
+        self.assertEqual(logic.read_channel_value("E"), 0.0)
+
+        logic.set_artificial_channel_values(0.4, -0.2)
+
+        self.assertEqual(logic.read_channel_value("n"), 0.4)
+        self.assertEqual(logic.read_channel_value("E"), -0.2)
+
+    def test_noisy_boundary_read_cannot_corrupt_the_next_ramp(self):
+        writes = []
+        read_count = 0
+
+        def noisy_boundary_read(channel):
+            nonlocal read_count
+            read_count += 1
+            return {
+                "device_A": -0.999565,
+                "device_B": 1.000435,
+            }[channel]
+
+        logic = make_coupled_logic(
+            lambda value, channel: writes.append((channel, value)),
+            read_channel=noisy_boundary_read,
+        )
+        logic.set_artificial_channel_values(0.0, -2.0)
+        writes.clear()
+
+        measured_n = logic.read_channel_value("n")
+        result = logic.set_artificial_channel_values(0.0, -1.9, is_scan_write=True)
+
+        self.assertEqual(measured_n, 0.0)
+        self.assertEqual(read_count, 0)
+        self.assertFalse(result["skipped"])
+        self.assertTrue(writes)
+        self.assertEqual(logic._commanded_artificial_values, {"n": 0.0, "E": -1.9})
+
+    def test_target_is_emitted_before_each_applied_waypoint(self):
+        logic = make_logic(
+            lambda _value, _channel: None,
+            resolve_device_label=lambda _channel: "shared_device",
+        )
+        events = []
+        logic.sig_target_changed.connect(
+            lambda target: events.append(("target", dict(target)))
+        )
+        logic.sig_state_changed.connect(
+            lambda state: events.append(("state", dict(state)))
+        )
+
+        logic.set_artificial_channel_values(0.08, 0.04)
+
+        self.assertEqual(events[0], ("target", {"x": 0.08, "y": 0.04}))
+        applied_states = [payload for event, payload in events if event == "state"]
+        self.assertGreater(len(applied_states), 1)
+        for state in applied_states:
+            self.assertEqual(state["x"], state["device_x_output"])
+            self.assertEqual(state["y"], state["device_y_output"])
+        self.assertEqual(applied_states[-1]["x"], 0.08)
+        self.assertEqual(applied_states[-1]["y"], 0.04)
+
+    def test_rejected_target_emits_no_applied_state(self):
+        writes = []
+        logic = make_logic(
+            lambda value, channel: writes.append((channel, value)),
+            limits_x=(-0.05, 0.05),
+            limits_y=(-0.05, 0.05),
+        )
+        targets = []
+        applied_states = []
+        logic.sig_target_changed.connect(lambda target: targets.append(dict(target)))
+        logic.sig_state_changed.connect(lambda state: applied_states.append(dict(state)))
+
+        result = logic.set_artificial_channel_values(0.10, 0.0)
+
+        self.assertTrue(result["skipped"])
+        self.assertEqual(targets, [{"x": 0.10, "y": 0.0}])
+        self.assertEqual(applied_states, [])
+        self.assertEqual(writes, [])
+        self.assertEqual(logic.read_channel_value("x"), 0.0)
+
     def test_single_axis_write_uses_current_position_as_ramp_start(self):
         writes = []
         logic = make_logic(lambda value, channel: writes.append((channel, value)))
@@ -242,6 +337,7 @@ class ArtificialChannelRampTests(unittest.TestCase):
 
     def test_force_stop_preserves_the_last_completed_waypoint(self):
         writes = []
+        applied_states = []
         abort_checks = 0
 
         def should_abort():
@@ -255,6 +351,9 @@ class ArtificialChannelRampTests(unittest.TestCase):
             should_abort=should_abort,
             resolve_device_label=lambda _channel: "shared_device",
         )
+        logic.sig_state_changed.connect(
+            lambda state: applied_states.append(dict(state))
+        )
 
         result = logic.set_channel_value("x", 0.10, is_scan_write=True)
 
@@ -265,10 +364,44 @@ class ArtificialChannelRampTests(unittest.TestCase):
             logic._commanded_artificial_values,
         )
         self.assertEqual(result["state"]["x"], 0.02)
+        self.assertEqual(logic.read_channel_value("x"), 0.02)
+        self.assertEqual(applied_states[-1], result["state"])
         self.assertEqual(
             [value for channel, value in writes if channel == "device_x_output"],
             [0.0, 0.02],
         )
+
+
+class ArtificialChannelWidgetTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    def test_target_and_current_labels_update_independently(self):
+        logic = make_logic(lambda _value, _channel: None)
+        widget = ArtificialChannel2D(
+            logic,
+            {"device_x": ["output"], "device_y": ["output"]},
+        )
+        try:
+            logic.sig_target_changed.emit({"x": 0.5, "y": -0.25})
+            logic.sig_state_changed.emit(
+                {
+                    "x": 0.1,
+                    "y": -0.05,
+                    "device_x_output": 0.1,
+                    "device_y_output": -0.05,
+                }
+            )
+
+            self.assertEqual(widget.ACx_value_label.text(), "0.500000")
+            self.assertEqual(widget.ACy_value_label.text(), "-0.250000")
+            self.assertEqual(widget.ACx_currentvalue_label.text(), "0.100000")
+            self.assertEqual(widget.ACy_currentvalue_label.text(), "-0.050000")
+            self.assertEqual(widget.OCx_value_label.text(), "0.100000")
+            self.assertEqual(widget.OCy_value_label.text(), "-0.050000")
+        finally:
+            widget.close()
 
 
 class ScanAbortTests(unittest.TestCase):

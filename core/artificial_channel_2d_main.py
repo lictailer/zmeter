@@ -29,6 +29,7 @@ class ArtificialChannel2D(QtWidgets.QWidget):
         self._install_nested_menus(setter_equipment_info)
         self._connect_signals()
         self._load_from_logic_config()
+        self._update_target_labels(self.logic.state)
         self._update_state_labels(self.logic.state)
         self.setWindowTitle("artificial channel 2D")
 
@@ -66,6 +67,7 @@ class ArtificialChannel2D(QtWidgets.QWidget):
             self.saveconfig_pushButton.clicked.connect(self._on_save_config_clicked)
         if hasattr(self, "loadconfig_pushButton"):
             self.loadconfig_pushButton.clicked.connect(self._on_load_config_clicked)
+        self.logic.sig_target_changed.connect(self._update_target_labels)
         self.logic.sig_state_changed.connect(self._update_state_labels)
 
     def _load_from_logic_config(self):
@@ -438,17 +440,28 @@ class ArtificialChannel2D(QtWidgets.QWidget):
         self.ACy_setvalue_doubleSpinBox.setRange(y_low, y_high)
 
     def _update_state_labels(self, state: dict):
-        self._update_config_labels()
-
         acx = state.get(self.logic.artificial_channel_x_name, "Unknown")
         acy = state.get(self.logic.artificial_channel_y_name, "Unknown")
         ocx = state.get(self.logic.original_channel_x_name, "Unknown")
         ocy = state.get(self.logic.original_channel_y_name, "Unknown")
 
-        self.ACx_value_label.setText(self._format_value(acx))
-        self.ACy_value_label.setText(self._format_value(acy))
+        self.ACx_currentvalue_label.setText(self._format_value(acx))
+        self.ACy_currentvalue_label.setText(self._format_value(acy))
         self.OCx_value_label.setText(self._format_value(ocx))
         self.OCy_value_label.setText(self._format_value(ocy))
+        self.ACx_currentvalue_label.repaint()
+        self.ACy_currentvalue_label.repaint()
+        self.OCx_value_label.repaint()
+        self.OCy_value_label.repaint()
+
+    def _update_target_labels(self, target: dict):
+        acx = target.get(self.logic.artificial_channel_x_name, "Unknown")
+        acy = target.get(self.logic.artificial_channel_y_name, "Unknown")
+
+        self.ACx_value_label.setText(self._format_value(acx))
+        self.ACy_value_label.setText(self._format_value(acy))
+        self.ACx_value_label.repaint()
+        self.ACy_value_label.repaint()
 
     @staticmethod
     def _format_value(value):
