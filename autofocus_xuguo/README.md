@@ -1,149 +1,43 @@
-# AutoFocusXZ / AutoPositionXZ
+# Autofocus XZ and Autoposition XY
 
-This folder contains a combined drift-compensation module for scanning experiments:
+## Purpose and status
 
-- `autoposition (X/Y)`: compensate lateral drift by map registration
-- `autofocus (Z)`: compensate focus drift by two-pass peak search
+This package combines two coordination paths:
 
-The module is designed to run as a device in `zmeter` and communicate with other devices through the command bus.
+- XY autoposition drives two scan channels through ZMeter's device command router, reads a routed reference channel, maps a square grid, and estimates image offset by phase correlation;
+- Z autofocus drives an Arduino stepper over serial, reads a routed reference channel, performs coarse/fine height scans, and fits a Gaussian peak.
 
-## Purpose
+It is the most complete autofocus implementation in the tree, but it remains hardware-facing and has no focused automated tests or recorded bench-validation matrix. Long UI actions currently run synchronously and call `processEvents`; they can occupy the Qt UI thread and should be moved to a worker before production use.
 
-During long scans, sample position and focus can drift (temperature, mechanical drift, etc.).
-This module periodically measures drift and updates software offsets:
+## Router and hardware configuration
 
-- `xy_offset` for beam/sample lateral alignment
-- `z_offset` for focus alignment
+The widget accepts the shared command router and uses the catalog to select X output, Y output, XY reference, and Z reference channels. This avoids direct imports of other device modules. Router writes still pass through ZMeter's configured global output limits.
 
-These offsets are then applied by `set_x_with_offset`, `set_y_with_offset`, and `set_z_with_offset`.
+The stepper defaults are COM7, 115200 baud, 0.2 s read polling, 120 s command timeout, and a 2 s startup delay. Connection performs a `PING`/`OK PONG` handshake. Height conversion defaults to 500 micrometers of translator travel per revolution and a `100/30` motor-to-translator gear ratio. All of these values require lab-specific verification.
 
-## Device Structure
+## Scan discovery
 
-The implementation is split into 4 layers.
+Current exact setter signatures expose:
 
-1. UI layer: `autofocusXZ_main.py`
-- Loads `autofocusXZ.ui`
-- Binds all buttons/signals
-- Uses nested menus for channel selection (`device -> channel`)
-- Shows status/progress/log text
+- `x_with_offset`, `y_with_offset`, and `z_with_offset` for logical positions;
+- `autoposition` and `autofocus_abs_maximum` as numeric triggers or JSON/dictionary setting updates.
 
-2. Logic layer: `autofocusXZ_logic.py`
-- Owns workflow state (`xy_offset`, `z_offset`, references, history)
-- Runs autoposition/autofocus algorithms
-- Emits Qt signals for status/progress/offset updates
-- Handles stop requests for long operations
+`set_autoposition` requires a loaded reference map. Default XY settings are a 0.1-unit span, 51 points per line, zero settle time, 0.6 quality threshold, and 20x registration upsampling. Default Z search limits are -20 to +20 micrometers with 1 micrometer coarse steps, 0.5 micrometer fine steps, and 0.1 s settling.
 
-3. Hardware wrappers: `autofocusXZ_hardware.py`
-- `AutofocusXZHardware`: Z stage via Arduino stepper + routed reference read
-- `AutoPositionXZHardware`: routed XY writes + routed reference read
-- Uses `DeviceCommandClient` with injected `command_router`
+Discovery also finds `get_available_channels()` and `get_report_paths()`. Both return dictionaries rather than numeric measurement scalars and must be filtered from scan acquisition.
 
-4. Helper algorithms: `autopositionXZ_helpers.py`
-- Square XY map acquisition and scan-compatible JSON save
-- XY offset fitting via `phase_cross_correlation`
-- Z profile scan and Gaussian peak fitting
-- PPT slide generation (with Windows COM fallback for force-save behavior)
+## Coordinates, outputs, and recovery
 
-Arduino side:
-- `stepper_driver/stepper_driver.ino` handles serial stepper commands and degree-step conversion.
+Logical XY/Z values add stored offsets before reaching physical outputs. “Offset home” moves logical coordinates to zero; “absolute home” moves the underlying physical axes to zero. Zeroing and homing have materially different meanings and must be reviewed before use.
 
-## Command Bus Integration
+The package writes mapping JSON, offset-history CSV, status logs, and `autoposition_report.pptx`/`autofocus_report.pptx` below the configured save path. Treat these as measurement records and verify filenames, failure handling, and recovery.
 
-Channel control is routed through `MainWindow` command router.
+The stop request is polled by mapping/focus helpers, but the widget has no standard `start_scan`, `stop_scan`, or `force_stop`, and `terminate_dev` disconnects without first requesting an active operation to stop. Review partial motion, partial maps, router failures, timeout, and teardown before enabling it.
 
-Workflow:
-1. `list_available_channels()`
-2. Select `device_channel` from nested menu
-3. Apply config (`X out`, `Y out`, `XY ref`, `Z ref`)
-4. Read/write through routed requests
+Agents must not enumerate serial ports, open the Arduino, move/home/zero any axis, route real-device reads/writes, acquire a map, or run autofocus/autoposition. See [device_contract.md](../documents/device_contract.md), [data_format.md](../documents/data_format.md), and [hardware_safety.md](../documents/hardware_safety.md).
 
-## AutoPosition Algorithm (X/Y)
+## Validation
 
-Reference setup:
-1. User defines center `(x, y)`, span, points-per-line.
-2. Module scans a square map (X fast axis, Y slow axis).
-3. Map is saved to JSON (`save_path/autoposition/...`), and can be loaded later.
+Hardware-independent syntax check: `python -B -m py_compile autofocus_xuguo/autofocusXZ_hardware.py autofocus_xuguo/autofocusXZ_logic.py autofocus_xuguo/autofocusXZ_main.py autofocus_xuguo/autopositionXZ_helpers.py`. Algorithm tests should inject simulated router and stepper transports and write only to a temporary directory; none are present yet.
 
-Compensation run:
-1. Scan a new XY map around current center + existing offset.
-2. Fit shift between reference and new map with `phase_cross_correlation`.
-3. Convert pixel shift to physical XY offsets.
-4. Validate fit quality threshold.
-5. If accepted, update:
-- `xy_offset <- xy_offset + delta_offset`
-6. Save current map JSON and append a comparison slide to autoposition PPT.
-
-## AutoFocus Algorithm (Z)
-
-Input:
-- focus reference point `(x, y)`
-- threshold
-- down/up limits
-- coarse/fine step settings
-
-Procedure:
-1. Move XY to focus reference (with XY offset applied).
-2. Coarse Z sweep between limits and measure reference value at each point.
-3. Gaussian-fit coarse profile to estimate peak.
-4. Fine Z sweep around coarse peak with smaller step.
-5. Gaussian-fit fine profile.
-6. Validate fit consistency:
-- coarse/fine peak distance limit
-- fine/coarse peak ratio limit
-- threshold condition
-7. If valid, move to fine peak and update:
-- `z_offset <- current_physical_z`
-8. Append coarse/fine plot slide to autofocus PPT.
-
-## Home and Offset Behavior
-
-- `Move XY Abs Home`: moves hardware XY to `(0, 0)`.
-- `Move XY Home (Offset)`: moves logical XY to `(0, 0)`, hardware to `(xy_offset_x, xy_offset_y)`.
-- `Move Z Abs Home`: moves hardware Z to absolute home (`0`).
-- `Move Z Home (Offset)`: moves logical Z to `0`, hardware to `z_offset`.
-
-## Data and Reports
-
-Saved under `save_path`:
-
-- `autoposition/`: reference and current map JSON files
-- `autofocus/`: Z offset history CSV exports
-- `autofocusXZ_reports/`:
-  - `autoposition_report.pptx`
-  - `autofocus_report.pptx`
-
-Status logs can also be exported from the UI (`Save Log`).
-
-## Stop / Safety
-
-- UI `Stop` button sets a stop request flag.
-- Long scans check this flag between points/lines.
-- If requested, operation exits with a controlled stop message.
-
-## Main Public Logic APIs
-
-Common UI-facing methods include:
-
-- Reference and maps:
-  - `scan_xy_reference_mapping(...)`
-  - `load_xy_reference_mapping(path)`
-  - `set_autoposition(settings)`
-
-- Focus:
-  - `set_autofocus_abs_maximum(settings)`
-
-- Offsets/history:
-  - `read_xy_current_offset()`
-  - `set_xy_offset(x, y, source=...)`
-  - `read_z_current_offset()`
-  - `current_z_to_zero()`
-  - `clear_*_offset_history()`
-  - `export_*_offset_history(...)`
-
-- Motion:
-  - `set_x_with_offset(v)`
-  - `set_y_with_offset(v)`
-  - `set_z_with_offset(v)`
-  - `move_xy_to_home()`, `move_xy_to_abs_home()`
-  - `move_z_to_home()`, `move_z_to_abs_home()`
-
+No production bench test should run until long work is moved off the UI thread and shutdown is made coherent. After that, the **User-executed hardware test** is: mechanically clear and limit all axes; connect the explicit stepper port and verify the handshake/current position; route X/Y and reference channels with restrictive limits; command current positions first; make one small approved X, Y, and Z move; acquire a minimal 3-by-3 reference/current map; stop during a second map; verify offsets and partial output files; perform a bounded Z profile without applying a fitted move; terminate; and confirm all routed devices and the serial port remain in their intended states.

@@ -1,50 +1,35 @@
-# TLPM - Thorlabs Power Meter Module
+# Thorlabs Optical Power Meter
 
-A Python interface for Thorlabs power meters with GUI support.
+## Purpose and status
 
-## Overview
+`tlpm` wraps the Thorlabs TLPM C driver for supported PM100/PM160/PM200/PM400-family devices. The ZMeter logic currently uses only resource discovery, first-resource connection, wavelength setting, power measurement, periodic reads, and disconnect, although the generated hardware wrapper exposes much more of the vendor API.
 
-This module provides an interface for controlling and reading from Thorlabs power meters.
+The package has no focused automated tests or recorded hardware-validation matrix. Constructing the hardware wrapper loads `TLPM_64.dll`; connecting discovers devices and opens the first resource with identity query and reset enabled.
 
-Verified model: PM100D
+## Scan channels
 
-## Installation
+- getter: `get_power()` returns the driver's power value, normally watts under the default driver unit;
+- setters: none. `set_wavelength_target(value)` only stores a target and does not itself write the device, so discovery does not expose wavelength setting as a scan action.
 
-1. Ensure you have zmeter environment installed
-2. **Install the [Thorlabs Optical Power Monitor (Must)](https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=OPM)**
-3. Connect your Thorlabs power meter via USB
+The UI wavelength value is in nanometers. Indefinite display reads default to 20 Hz.
 
-## Usage
+## Setup
 
-### Standalone GUI Application
-```python
-python tlpm_main.py
-```
+- Python: PyQt6, NumPy, pyqtgraph, and `ctypes` from the standard library;
+- system: Thorlabs optical power meter driver/VISA components matching 64-bit Python;
+- native library: `TLPM_64.dll` and all of its runtime dependencies;
+- configuration: approved device identity/resource, sensor model, wavelength range, power unit, averaging, and measurement range.
 
-### Programmatic Use
-```python
-from tlpm.tlpm_logic import TLPMLogic
+Do not assume the first discovered resource is the intended instrument. Production use should select and verify an explicit resource and sensor identity.
 
-# Create logic instance
-logic = TLPMLogic()
+## Lifecycle and safety gaps
 
-# Connect to device
-logic.do_connect = True
-logic.start()
+`force_stop()` is empty and `terminate_dev()` only prints a message. The indefinite-read stop flag is not the same as final device cleanup, and no `start_scan`/`stop_scan` hooks coordinate monitoring with scans. Implement deterministic stop, join, and disconnect before relying on shutdown.
 
-# Read power measurement
-power = logic.get_power()
-print(f"Power: {power} W")
+Agents must not load/run resource discovery, open/reset a meter, change wavelength, read power, or disconnect it. See [device_contract.md](../documents/device_contract.md) and [hardware_safety.md](../documents/hardware_safety.md). Any bench procedure is a **User-executed hardware test**.
 
-# Disconnect
-logic.do_disconnect = True
-logic.start()
-```
+## Validation
 
-## Notes
+Hardware-independent syntax check: `python -B -m py_compile tlpm/tlpm_hardware.py tlpm/tlpm_logic.py tlpm/tlpm_main.py`. It checks syntax only and does not load `TLPM_64.dll`.
 
-- Requires Thorlabs power meter hardware connected via USB
-- Requires Thorlabs Optical Power Monitor (Not Thorlabs' Power Meter Software)
-- Automatic device discovery scans for available instruments
-- Supports wavelength calibration for accurate measurements
-- Real-time plotting shows last 1000 measurement points
+**User-executed hardware test:** connect only the intended meter so first-resource selection is unambiguous; verify model, serial, sensor, calibration message, and power unit; set a wavelength within the attached sensor's calibrated range; measure a blocked sensor and a known stable optical source; start and stop the 20 Hz monitor; disconnect; and verify the driver session closes. Do not expose the meter to an unknown or over-range source.
