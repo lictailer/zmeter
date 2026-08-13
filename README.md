@@ -127,7 +127,7 @@ The source tree contains integrations or experimental work for several equipment
 | Source meters and multimeters | `keithley24xx`, `hp34401a` |
 | Lock-in amplifiers | `sr830`, `sr830_v2`, `sr860` |
 | Cryostats/environment control | `opticool`, `montana2` |
-| Optical power and motion | `tlpm`, `k10cr1` |
+| Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X` |
 | Positioning/autofocus | `auto_focus`, `auto_position`, `autofocus_xuguo`, `ANC300` |
 
 Treat this as a source inventory, not a compatibility or validation matrix. Check the current module, its dependencies, and its lifecycle behavior before selecting it for a lab profile.

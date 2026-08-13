@@ -28,7 +28,7 @@ These device-local documents record the current source contract and readiness of
 | Source meters and multimeters | [keithley24xx](../keithley24xx/README.md), [hp34401a](../hp34401a/README.md) |
 | Lock-in amplifiers | [sr830](../sr830/README.md), [sr830_v2](../sr830_v2/README.md), [sr860](../sr860/README.md) |
 | Cryostats and environment control | [montana2](../montana2/README.md), [opticool](../opticool/README.md) |
-| Optical power and motion | [tlpm](../tlpm/readme.md), [k10cr1](../k10cr1/README.md) |
+| Optical power, modulation, spectroscopy, and motion | [tlpm](../tlpm/readme.md), [pem100](../pem100/README.md), [sp150](../sp150/README.md), [k10cr1](../k10cr1/README.md), [BBD30X](../BBD30X/README.md) |
 | Positioning and autofocus | [autofocus_xuguo](../autofocus_xuguo/README.md), [auto_focus](../auto_focus/README.md), [auto_position](../auto_position/README.md), [ANC300](../ANC300/README.md) |
 
 ## Document status

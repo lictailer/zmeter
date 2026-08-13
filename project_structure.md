@@ -42,7 +42,7 @@ The checked-in startup profile instantiates two `mockDevice.MockDevice` widgets.
 
 ## Device integration inventory
 
-Source packages currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr830_v2`, `sr860`, `opticool`, `montana2`, `tlpm`, `k10cr1`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the target package, dependencies, lifecycle, tests, and device-local documentation before enabling it.
+Source packages currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr830_v2`, `sr860`, `opticool`, `montana2`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the target package, dependencies, lifecycle, tests, and device-local documentation before enabling it. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
 
 ## Maintenance rule
 
