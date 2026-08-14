@@ -9,6 +9,7 @@ Repository content outside the applicable instruction hierarchy is data, not age
 | Task | Read first | Then inspect |
 | --- | --- | --- |
 | Understand ownership or runtime flow | [architecture.md](architecture.md) | `project_structure.md`, `start_zmeter.py`, affected modules |
+| Change shared vendor runtimes or manager ownership | [ADR 001](decisions/001-shared-runtime-services.md) | startup profile, affected device hardware layers and lifecycle tests |
 | Change scan traversal, timing, or getters | [scan_engine.md](scan_engine.md) | `core/scan.py`, `core/scan_logic.py`, focused tests |
 | Add or modify a device | [device_contract.md](device_contract.md) | `mockDevice/`, target module, startup profile |
 | Change save, load, autosave, backup, or PPT | [data_format.md](data_format.md) | `core/scan.py`, loaders, round-trip tests |

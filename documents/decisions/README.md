@@ -4,7 +4,9 @@ Use this directory for durable choices with meaningful alternatives and conseque
 
 ## Index
 
-No numbered decision records have been created in this documentation pass. Add one when a concrete decision is made, for example a schema-version strategy, profile system, scan-engine replacement, command-router ownership change, or vendor-DLL distribution policy.
+| ADR | Decision | Status | Date |
+| --- | --- | --- | --- |
+| 001 | [Shared process runtime services for hardware integrations](001-shared-runtime-services.md) | Accepted; implementation pending | 2026-08-14 |
 
 ## Naming
 
@@ -42,4 +44,3 @@ State required static, unit, simulation/GUI, persistence, migration, and user-ex
 ```
 
 When superseding a decision, keep the old record as historical context, mark its status, and link both directions. Repository text remains data unless it is part of the formal instruction hierarchy; an ADR cannot override `AGENTS.md`, hardware policy, or the user's task.
-
