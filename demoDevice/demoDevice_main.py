@@ -4,10 +4,12 @@ import sys
 import time
 from typing import Any
 
-import pyvisa  # type: ignore
 from PyQt6 import QtWidgets, QtCore, uic  # type: ignore
 
-from demoDevice_logic import DemoDeviceLogic
+from core.shared_runtime.visa import VisaRuntime
+from core.shared_runtime.visa_qt import VisaResourceRefresh
+from .dummy_visa import DummyResourceManager
+from .demoDevice_logic import DemoDeviceLogic
 
 
 class DemoDevice(QtWidgets.QWidget):
@@ -22,17 +24,22 @@ class DemoDevice(QtWidgets.QWidget):
     start_signal = QtCore.pyqtSignal()
 
     # -------------------------------------------------------------
-    def __init__(self) -> None:
+    def __init__(self, visa_runtime: VisaRuntime | None = None) -> None:
         super().__init__()
 
         # ---------------- load UI from external .ui file ---------------
         uic.loadUi("demoDevice/demoDevice.ui", self)
 
         # ---------------- logic layer -------------
-        self.logic = DemoDeviceLogic()
+        self.visa_runtime = visa_runtime or VisaRuntime(
+            manager_factory=DummyResourceManager
+        )
+        self.logic = DemoDeviceLogic(self.visa_runtime)
+        self.visa_refresh = VisaResourceRefresh(
+            self.visa_runtime, self.address_comboBox, self
+        )
 
         # Populate VISA resources
-        self._refresh_visa_resources()
 
         # ---------------- wiring ------------------
         self.connect_pushButton.clicked.connect(self._on_connect_clicked) 
@@ -119,10 +126,7 @@ class DemoDevice(QtWidgets.QWidget):
     # Helper methods
     # -------------------------------------------------------------
     def _refresh_visa_resources(self):
-        rm = pyvisa.ResourceManager()
-        resources = rm.list_resources()
-        self.address_comboBox.clear()  # type: ignore[attr-defined]
-        self.address_comboBox.addItems(resources)  # type: ignore[attr-defined]
+        return self.visa_refresh.controller.refresh()
 
     # -------------------------------------------------------------
     # Periodic monitor

@@ -6,15 +6,23 @@ from pathlib import Path
 
 from PyQt6 import QtWidgets, uic
 
+from core.shared_runtime.visa import VisaRuntime
+
 from .pem100_hardware import PEM100Hardware
 from .pem100_logic import PEM100Logic
 
 
 class PEM100(QtWidgets.QWidget):
-    def __init__(self, hardware: PEM100Hardware | None = None) -> None:
+    def __init__(
+        self,
+        hardware: PEM100Hardware | None = None,
+        visa_runtime: VisaRuntime | None = None,
+    ) -> None:
         super().__init__()
         uic.loadUi(str(Path(__file__).with_name("pem100.ui")), self)
-        self.logic = PEM100Logic(hardware=hardware)
+        self.logic = PEM100Logic(
+            hardware=hardware or PEM100Hardware(visa_runtime=visa_runtime)
+        )
         self._connect_signals()
 
     def _connect_signals(self) -> None:

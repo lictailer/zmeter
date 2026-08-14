@@ -9,6 +9,7 @@ This file is the maintained source for current project structure, module relatio
 ```text
 start_zmeter.py
   -> PyQt6 QApplication
+  -> core.shared_runtime.RuntimeServices
   -> create_equipment()
   -> core.mainWindow.MainWindow
        -> core.scanlist.ScanList
@@ -28,6 +29,8 @@ The checked-in startup profile instantiates two `mockDevice.MockDevice` widgets.
 | `core/scan.py` | Scan editor/window, plot updates, run logging, save/load/PPT/autosave UI integration |
 | `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing |
+| `core/shared_runtime/` | Lazy typed VISA/Kinesis ownership, leases, diagnostics, shutdown, fake injection, and local vendor manifests |
+| `core/shared_runtime/vendor/thorlabs_kinesis/` | Ignored local Kinesis 1.14.58.26351 files plus tracked manifest/setup instructions |
 | `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |
 | `core/all_plot_settings.py`, `core/all_plots.py` | Plot configuration and presentation |
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
@@ -43,6 +46,12 @@ The checked-in startup profile instantiates two `mockDevice.MockDevice` widgets.
 ## Device integration inventory
 
 Source packages currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr830_v2`, `sr860`, `opticool`, `montana2`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the target package, dependencies, lifecycle, tests, and device-local documentation before enabling it. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
+
+Maintained VISA packages (`pem100`, `sp150`, `hp34401a`, `keithley24xx`,
+`sr830_v2`, and `sr860`) use `VisaRuntime`; legacy `sr830/` is explicitly
+excluded. K10CR1 and BBD30X use one injected `KinesisRuntime` and the same local
+manifest-validated DLL directory. `demoDevice` uses an injected fake VISA
+manager and does not patch PyVISA globally.
 
 ## Maintenance rule
 

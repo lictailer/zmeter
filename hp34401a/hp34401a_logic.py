@@ -2,6 +2,7 @@ from PyQt6 import QtCore  # type: ignore
 import time
 import logging
 from .hp34401a_hardware import HP34401A_Hardware, HP34401AError
+from core.shared_runtime.visa import VisaRuntime
 
 
 class HP34401A_Logic(QtCore.QThread):
@@ -23,7 +24,7 @@ class HP34401A_Logic(QtCore.QThread):
     sig_connected = QtCore.pyqtSignal(object)
 
     # -----------------------------------------------
-    def __init__(self) -> None:
+    def __init__(self, visa_runtime: VisaRuntime | None = None) -> None:
         super().__init__()
 
         # queued instruction name processed in run()
@@ -38,6 +39,7 @@ class HP34401A_Logic(QtCore.QThread):
         self.reject_signal: bool = False #reject signal is to prevent multiple jobs from running at the same time
 
         self._hardware: HP34401A_Hardware | None = None
+        self.visa_runtime = visa_runtime or VisaRuntime()
 
         # Setup logging
         self._logger = logging.getLogger(__name__)
@@ -50,7 +52,9 @@ class HP34401A_Logic(QtCore.QThread):
             return False
         try:
             self._logger.info(f"Connecting to HP34401A at {address}")
-            self._hardware = HP34401A_Hardware(address)
+            self._hardware = HP34401A_Hardware(
+                address, visa_runtime=self.visa_runtime
+            )
 
             self.idn = self.get_idn()
             self._logger.info(f"Connected to: {self.idn}")
@@ -206,18 +210,7 @@ class HP34401A_Logic(QtCore.QThread):
 # Example usage – runs only when file is executed directly
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    ADDRESS = 'GPIB0::21::INSTR'
-    logic = HP34401A_Logic()
-    logic.connect_visa(ADDRESS)
-    print('Connected')
-    # Query identification string
-    print(logic.get_idn())
-
-    # Example: change operating mode then voltage
-    #logic.setpoint_operating_mode = "remote"
-    #logic.set_operating_mode()
-
-    for i in range(100):
-        print(logic.get_dc_voltage())
-    # Clean up
-    logic.disconnect()
+    raise SystemExit(
+        "Direct hardware demonstrations are disabled; use a reviewed ZMeter "
+        "profile with an injected VisaRuntime."
+    )

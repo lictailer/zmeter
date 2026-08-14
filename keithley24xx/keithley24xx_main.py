@@ -3,20 +3,23 @@ import sys
 from keithley24xx.keithley24xx_logic import Keithley24xxLogic
 import numpy as np
 import pyqtgraph as pg
-import pyvisa
 import time
+
+from core.shared_runtime.visa import VisaRuntime
+from core.shared_runtime.visa_qt import VisaResourceRefresh
 
 
 class Keithley24xx(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, visa_runtime: VisaRuntime | None = None):
         super(Keithley24xx, self).__init__()
         uic.loadUi("keithley24xx/keithley24xx.ui", self)
-        self.logic = Keithley24xxLogic()
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self.logic = Keithley24xxLogic(self.visa_runtime)
         self.connect_sig_slot()
         self.is_connected = False
-        resource_manager = pyvisa.ResourceManager()
-        ls = resource_manager.list_resources()
-        self.address_cb.addItems(ls)
+        self.visa_refresh = VisaResourceRefresh(
+            self.visa_runtime, self.address_cb, self
+        )
         self.ramp_rate_label.setText(
             f"Current ramp rate: {self.logic.ramp_rate:.2e} V/s"
         )
@@ -178,6 +181,3 @@ if __name__ == "__main__":
     window = Keithley24xx()
     window.show()
     app.exec()
-    # resource_manager = pyvisa.ResourceManager()
-    # ls = resource_manager.list_resources()
-    # print(ls)

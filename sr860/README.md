@@ -2,9 +2,9 @@
 
 ## Purpose and status
 
-This package controls an SRS SR860 lock-in amplifier through PyVISA. It covers demodulated outputs, reference/source settings, input configuration, sensitivity/time constant, filters, display/status values, and auxiliary I/O. It has no focused automated tests or recorded bench-validation matrix.
+This package controls an SRS SR860 lock-in amplifier through the shared `VisaRuntime`. It covers demodulated outputs, reference/source settings, input configuration, sensitivity/time constant, filters, display/status values, and auxiliary I/O. Shared-session lifecycle and offscreen construction have fake coverage; bench validation remains pending.
 
-Constructing the widget enumerates VISA resources. Do not instantiate it during hardware-independent tests.
+Constructing the widget does not create a ResourceManager or enumerate. The operator must click **Refresh VISA** for worker-thread discovery. Disconnect closes only its session lease.
 
 ## Current scan discovery
 

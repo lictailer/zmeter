@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
 from typing import Any
+
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
 
 class SP150Error(RuntimeError):
@@ -25,14 +26,13 @@ class SP150Hardware:
     MIN_WAVELENGTH_NM = 0.0
     MAX_WAVELENGTH_NM = 3000.0
 
-    def __init__(
-        self, resource_manager_factory: Callable[[], Any] | None = None
-    ) -> None:
-        self._resource_manager_factory = resource_manager_factory
-        self.resource_manager: Any | None = None
+    def __init__(self, visa_runtime: VisaRuntime | None = None) -> None:
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self._visa_lease: VisaResourceLease | None = None
         self.instrument: Any | None = None
         self.address: str | None = None
         self.query_delay_s = 1.0
+        self._visa_owner = f"SP150:{id(self):x}"
 
     @property
     def connected(self) -> bool:
@@ -59,26 +59,21 @@ class SP150Hardware:
                 f"SP150 is already connected at {self.address}; disconnect first"
             )
 
-        resource_manager = None
-        instrument = None
+        lease = None
         try:
-            if self._resource_manager_factory is None:
-                import pyvisa
-
-                resource_manager = pyvisa.ResourceManager()
-            else:
-                resource_manager = self._resource_manager_factory()
-            instrument = resource_manager.open_resource(address)
+            lease = self.visa_runtime.open_resource(self._visa_owner, address)
+            instrument = lease.resource
             instrument.read_termination = "\n"
             instrument.write_termination = "\r"
             instrument.timeout = int(timeout_ms)
         except Exception as exc:
-            self._close_partial(instrument, resource_manager)
+            if lease is not None:
+                lease.close()
             raise SP150ConnectionError(
                 f"Could not connect SP150 at {address}: {exc}"
             ) from exc
 
-        self.resource_manager = resource_manager
+        self._visa_lease = lease
         self.instrument = instrument
         self.address = address
         self.query_delay_s = query_delay
@@ -86,11 +81,17 @@ class SP150Hardware:
 
     def disconnect(self) -> None:
         instrument = self.instrument
-        resource_manager = self.resource_manager
+        lease = self._visa_lease
         self.instrument = None
-        self.resource_manager = None
+        self._visa_lease = None
         self.address = None
-        self._close_partial(instrument, resource_manager)
+        if lease is not None:
+            lease.close()
+        elif instrument is not None:
+            try:
+                instrument.close()
+            except Exception:
+                pass
 
     close = disconnect
 
@@ -144,16 +145,3 @@ class SP150Hardware:
         if not math.isfinite(converted):
             raise ValueError(f"SP150 {label} must be finite")
         return converted
-
-    @staticmethod
-    def _close_partial(instrument: Any | None, resource_manager: Any | None) -> None:
-        if instrument is not None:
-            try:
-                instrument.close()
-            except Exception:
-                pass
-        if resource_manager is not None:
-            try:
-                resource_manager.close()
-            except Exception:
-                pass

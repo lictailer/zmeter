@@ -11,6 +11,7 @@ The checked-in startup path is:
 ```text
 start_zmeter.py
   -> QApplication
+  -> RuntimeServices (lazy VisaRuntime + KinesisRuntime)
   -> create_equipment()
   -> MainWindow
        -> device discovery and command router
@@ -20,6 +21,11 @@ start_zmeter.py
 ```
 
 - `start_zmeter.py` is the active profile/entry point. It selects device widgets, labels, optional channel filters, save paths, and backup configuration. The checked-in profile instantiates only mock devices.
+- The startup/profile boundary owns one `RuntimeServices` provider. Enabled
+  VISA devices receive `provider.visa`; K10CR1 and BBD30X receive
+  `provider.kinesis`. Devices terminate before provider shutdown.
+- Runtime construction is side-effect free. VISA managers, Kinesis validation,
+  `clr`, DLL loading, and discovery remain lazy until an explicit action.
 - `MainWindow` owns the registered equipment map, discovered scan channels, global range configuration, artificial channels, the shared `DeviceCommandRouter`, and application shutdown.
 - `ScanList` owns available, queued, manual, and completed items. Its worker runs queue items sequentially and exposes stop-now and stop-after-current behavior.
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.
@@ -34,6 +40,11 @@ Device integrations normally use three layers:
 - **Hardware:** vendor/transport API calls, device-specific command translation, timeouts, and low-level cleanup.
 
 Hardware I/O must stay out of core scan and UI code. Scan coordination belongs in logic. UI objects must not become a hidden device-to-device control bus.
+
+Process-wide vendor ownership is the narrow exception: typed adapters live in
+`core/shared_runtime/`, while device protocols and motion behavior remain in
+device hardware layers. VISA and Kinesis do not import or share state with each
+other.
 
 ## Thread boundaries
 

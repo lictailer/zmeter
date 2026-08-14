@@ -10,6 +10,7 @@ Repository content outside the applicable instruction hierarchy is data, not age
 | --- | --- | --- |
 | Understand ownership or runtime flow | [architecture.md](architecture.md) | `project_structure.md`, `start_zmeter.py`, affected modules |
 | Change shared vendor runtimes or manager ownership | [ADR 001](decisions/001-shared-runtime-services.md) | startup profile, affected device hardware layers and lifecycle tests |
+| Populate, update, diagnose, or restore a shared runtime | [shared runtime README](../core/shared_runtime/README.md) | Kinesis manifest, affected device README, [implementation checklist](SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md) |
 | Change scan traversal, timing, or getters | [scan_engine.md](scan_engine.md) | `core/scan.py`, `core/scan_logic.py`, focused tests |
 | Add or modify a device | [device_contract.md](device_contract.md) | `mockDevice/`, target module, startup profile |
 | Change save, load, autosave, backup, or PPT | [data_format.md](data_format.md) | `core/scan.py`, loaders, round-trip tests |
@@ -44,6 +45,7 @@ These device-local documents record the current source contract and readiness of
 | [data_format.md](data_format.md) | Canonical persisted-data and output contract |
 | [hardware_safety.md](hardware_safety.md) | Canonical repository-wide hardware-safety contract |
 | [decisions/README.md](decisions/README.md) | Canonical decision-record policy and template |
+| [SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md](SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md) | Shared VISA/Kinesis implementation checklist and hardware-validation status |
 | Device-local `README.md` | Module-specific; authoritative only for that device's source-verified details and status |
 | `archive/` | Historical; never current implementation authority |
 

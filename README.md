@@ -38,6 +38,12 @@ Optional components depend on the selected laboratory equipment:
 
 Do not install every vendor package by default. Start with the mock configuration, then add only the drivers required by the intended laboratory profile after checking device, driver, Windows, and Python compatibility.
 
+Maintained VISA devices share one lazy `VisaRuntime` manager while retaining
+exclusive instrument sessions. K10CR1 and BBD30X share one lazy,
+manifest-validated `KinesisRuntime`. Local vendor binaries live only in the
+ignored `core/shared_runtime/vendor/thorlabs_kinesis/` folder; see its README
+before enabling either motion device.
+
 ## Installation
 
 Open **Anaconda Prompt**, **Miniconda Prompt**, or a PowerShell session where `conda` is available.
@@ -104,6 +110,8 @@ Laboratory equipment is currently selected in `start_zmeter.py`. Configuration i
 - connection calls and addresses or serial numbers;
 - optional setter/getter channel filters;
 - local measurement and backup paths.
+- one `RuntimeServices` provider whose `.visa` or `.kinesis` service is passed
+  to every enabled device in that family.
 
 Before enabling hardware:
 
@@ -185,6 +193,7 @@ These checks provide static, unit, mock/simulation, or offscreen-GUI evidence on
 ```text
 start_zmeter.py                 Startup configuration and application entry point
 core/                           Scan UI, queue, execution, plotting, routing, and persistence
+core/shared_runtime/            Shared VISA/Kinesis ownership and local vendor manifests
 mockDevice/                     Hardware-independent simulated instrument and its tests
 <device>/                       Device-specific widget, logic, hardware, and UI files
 tests/                          Hardware-independent core regression tests

@@ -9,6 +9,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
+from core.shared_runtime.visa import VisaRuntime
+
 from sp150.sp150_hardware import (
     SP150ConnectionError,
     SP150Hardware,
@@ -80,7 +82,12 @@ class SP150HardwareTests(unittest.TestCase):
         instrument = FakeInstrument(responses)
         manager = FakeResourceManager(instrument)
         factory = CountingFactory(manager)
-        return SP150Hardware(factory), instrument, manager, factory
+        return (
+            SP150Hardware(VisaRuntime(manager_factory=factory)),
+            instrument,
+            manager,
+            factory,
+        )
 
     def test_explicit_connection_configures_resource(self):
         hardware, instrument, manager, factory = self.make_hardware()
@@ -127,9 +134,12 @@ class SP150HardwareTests(unittest.TestCase):
 
     def test_failed_connection_and_repeated_disconnect_clean_up(self):
         manager = FakeResourceManager(open_error=RuntimeError("open failed"))
-        hardware = SP150Hardware(CountingFactory(manager))
+        runtime = VisaRuntime(manager_factory=CountingFactory(manager))
+        hardware = SP150Hardware(runtime)
         with self.assertRaises(SP150ConnectionError):
             hardware.connect("GPIB0::11::INSTR")
+        self.assertEqual(manager.closed, 0)
+        runtime.shutdown()
         self.assertEqual(manager.closed, 1)
 
         hardware, instrument, manager, _factory = self.make_hardware()
@@ -137,6 +147,8 @@ class SP150HardwareTests(unittest.TestCase):
         hardware.disconnect()
         hardware.disconnect()
         self.assertEqual(instrument.closed, 1)
+        self.assertEqual(manager.closed, 0)
+        hardware.visa_runtime.shutdown()
         self.assertEqual(manager.closed, 1)
 
 
@@ -145,7 +157,7 @@ class SP150LogicTests(unittest.TestCase):
         instrument = FakeInstrument(responses)
         manager = FakeResourceManager(instrument)
         factory = CountingFactory(manager)
-        hardware = SP150Hardware(factory)
+        hardware = SP150Hardware(VisaRuntime(manager_factory=factory))
         logic = SP150Logic(
             hardware,
             poll_interval_s=0,
@@ -223,7 +235,9 @@ class SP150WidgetTests(unittest.TestCase):
     def test_widget_construction_does_not_create_resource_manager(self):
         manager = FakeResourceManager()
         factory = CountingFactory(manager)
-        widget = SP150(SP150Hardware(factory))
+        widget = SP150(
+            SP150Hardware(VisaRuntime(manager_factory=factory))
+        )
         try:
             self.assertEqual(factory.calls, 0)
             self.assertFalse(widget.logic.connected)

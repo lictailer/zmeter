@@ -2,6 +2,7 @@ from PyQt6 import QtCore
 import time
 
 from .sr860_hardware import SR860_Hardware
+from core.shared_runtime.visa import VisaRuntime
 
 
 class SR860_Logic(QtCore.QThread):
@@ -58,7 +59,7 @@ class SR860_Logic(QtCore.QThread):
     sig_log = QtCore.pyqtSignal(object)
 
     # -------------------------------------------
-    def __init__(self):
+    def __init__(self, visa_runtime: VisaRuntime | None = None):
         super().__init__()
 
         # queued instruction executed in run()
@@ -102,6 +103,7 @@ class SR860_Logic(QtCore.QThread):
         self.reject_signal = False
 
         self.hardware: SR860_Hardware | None = None
+        self.visa_runtime = visa_runtime or VisaRuntime()
 
     def _emit_log(self, message: str, level: str = "INFO"):
         self.sig_log.emit((level, str(message)))
@@ -130,7 +132,9 @@ class SR860_Logic(QtCore.QThread):
 
         temp_hardware: SR860_Hardware | None = None
         try:
-            temp_hardware = SR860_Hardware(address)
+            temp_hardware = SR860_Hardware(
+                address, visa_runtime=self.visa_runtime
+            )
             idn = temp_hardware.idn()
             if not idn:
                 raise RuntimeError("No response to *IDN? query.")

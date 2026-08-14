@@ -3,8 +3,9 @@ import sys
 from datetime import datetime
 import numpy as np
 import pyqtgraph as pg
-import pyvisa
 
+from core.shared_runtime.visa import VisaRuntime
+from core.shared_runtime.visa_qt import VisaResourceRefresh
 from .sr860_logic import SR860_Logic
 
 
@@ -20,7 +21,7 @@ class SR860(QtWidgets.QWidget):
     stop_signal = QtCore.pyqtSignal()
     start_signal = QtCore.pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, visa_runtime: VisaRuntime | None = None):
         super().__init__()
 
         # ----- load UI -----
@@ -40,12 +41,12 @@ class SR860(QtWidgets.QWidget):
         # *graph_xyrt* is a QVBoxLayout placeholder defined in the .ui file
         self.graph_xyrt.addWidget(w)
 
-        # ----- VISA resource list -----
-        resource_manager = pyvisa.ResourceManager()
-        self.address_cb.addItems(resource_manager.list_resources())
-
         # ----- logic / model layer -----
-        self.logic = SR860_Logic()
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self.logic = SR860_Logic(self.visa_runtime)
+        self.visa_refresh = VisaResourceRefresh(
+            self.visa_runtime, self.address_cb, self
+        )
         self.monitor_enabled = False
 
         # circular buffers for live plot

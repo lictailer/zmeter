@@ -73,6 +73,10 @@ The commands are canonical, but successful execution requires the maintained env
 - For threading changes, use deterministic barriers/events and bounded waits; never rely on long sleeps or real transport timing.
 - For optional-device imports, test in a process where the vendor dependency is absent and ensure unrelated mock-only startup remains usable.
 - Prefer deterministic seeds for simulated noise/fault behavior.
+- Shared-runtime tests must inject fake manager/load functions. They must not
+  instantiate a real PyVISA manager, import `clr`, call `AddReference`, load a
+  vendor DLL, or enumerate hardware. Run the shared-runtime, migrated VISA,
+  K10CR1, and BBD30X fake suites before broader core/mock regressions.
 
 ## User-executed hardware tests
 

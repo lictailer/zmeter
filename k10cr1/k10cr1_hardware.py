@@ -1,9 +1,8 @@
 "Bindings for Thorlabs Integrated Stepper Motor DLL"
 # flake8: noqa
-import os
+import threading
 from ctypes import (
     Structure,
-    cdll,
     c_bool,
     c_short,
     c_int,
@@ -19,21 +18,65 @@ from ctypes import (
     CFUNCTYPE,
 )
 
+from core.shared_runtime.kinesis import KinesisRuntime
+
 from .thorlabs_utilities import (
     c_word,
     c_dword,
     bind
 )
 
-source_dir = r"C:\Users\QMLab\Desktop\Xuguo_local\zmeter_local\v2025.04\zmeter_venv"
+_runtime = None
+_runtime_lock = threading.Lock()
 
-try: 
-    lib = cdll.LoadLibrary(r"k10cr1\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
-except:
-    if os.path.isfile(source_dir+ r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
-        lib = cdll.LoadLibrary(r"Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
-    elif os.path.isfile(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll"):
-        lib = cdll.LoadLibrary(source_dir + r"\Kinesis\Thorlabs.MotionControl.IntegratedStepperMotors.dll")
+
+def configure_runtime(runtime: KinesisRuntime):
+    """Select the one process Kinesis runtime before any native call."""
+    global _runtime
+    with _runtime_lock:
+        if _runtime is None:
+            _runtime = runtime
+        elif _runtime is not runtime:
+            raise RuntimeError(
+                "K10CR1 is already bound to another KinesisRuntime; inject one "
+                "shared RuntimeServices provider into every Kinesis device"
+            )
+
+
+def _native_library():
+    if _runtime is None:
+        raise RuntimeError(
+            "K10CR1 Kinesis runtime is not configured; connect through K10CR1Logic"
+        )
+    return _runtime.load_native("k10cr1")
+
+
+class _LazyFunction:
+    def __init__(self, name):
+        self.name = name
+        self.argtypes = None
+        self.restype = None
+
+    def __call__(self, *args):
+        function = getattr(_native_library(), self.name)
+        function.argtypes = self.argtypes
+        function.restype = self.restype
+        return function(*args)
+
+
+class _LazyLibrary:
+    def __init__(self):
+        self._functions = {}
+
+    def __getattr__(self, name):
+        if name not in self._functions:
+            self._functions[name] = _LazyFunction(name)
+        return self._functions[name]
+
+
+# Existing structure and command bindings below remain unchanged. Binding now
+# creates lazy function proxies and performs no DLL load during module import.
+lib = _LazyLibrary()
 
 
 # enum FT_Status

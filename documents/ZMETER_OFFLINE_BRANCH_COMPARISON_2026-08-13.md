@@ -4,7 +4,7 @@ Date: 2026-08-13
 
 ## Integration status update
 
-The current local integration work ports PEM100, SP150, and BBD30X into the `merge_offline_branches` checkout as optional device packages. PEM100 and SP150 use the current lifecycle contract and fake-VISA tests. BBD30X is a minimal-behavior port with lazy Kinesis loading, fake-driver tests, and a device README that records preserved safety and lifecycle debt. The changes remain local and unstaged for maintainer review; none of these devices is hardware-validated.
+The current local integration work ports PEM100, SP150, and BBD30X into the `merge_offline_branches` checkout as optional device packages. A later local pass implemented independent shared VISA and Kinesis services under `core/shared_runtime/`. Maintained VISA devices now share manager ownership without sharing sessions; K10CR1 and BBD30X use one manifest-validated Kinesis 1.14.58.26351 directory. The changes remain local and unstaged for maintainer review; none of these devices is hardware-validated.
 
 The maintainer clarified the remaining scope:
 
@@ -12,7 +12,15 @@ The maintainer clarified the remaining scope:
 - BBD30X is locally integrated for review; safety and lifecycle remediation is deferred.
 - The PowerPoint fallback is intentionally ignored.
 - Andor/Shamrock plus the required core array/spectrum work is the next integration phase.
-- `start_zmeter.py` remains the mock-only checked-in profile and is not changed by this pass.
+- `start_zmeter.py` remains mock-only, but now constructs the two lazy runtime services, documents injection in disabled examples, and shuts the services down after device termination.
+- Legacy `sr830/` remains unchanged and is excluded from shared-VISA profiles.
+- Removed paths include migrated-device `ResourceManager` ownership,
+  constructor enumeration, demoDevice's global PyVISA patch, K10CR1's
+  import-time/machine-specific loader, BBD30X's search/PATH loader, and five
+  package-local Kinesis DLL copies. Canonical local DLLs remain ignored.
+- After user bench validation and one stable lab-use cycle, consider removing
+  legacy `sr830/`, pruning unused K10CR1 bindings, and folding its remaining
+  small lazy binding helper into the maintained adapter.
 
 ## Executive conclusion
 

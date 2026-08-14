@@ -5,6 +5,7 @@ from PyQt6 import QtWidgets
 
 from core.scan_info import ScanInfo
 from core.mainWindow import MainWindow
+from core.shared_runtime import RuntimeServices
 
 # ------------------------------------------------------------
 # Import the equipment modules you plan to use below.  Comment out any
@@ -22,7 +23,11 @@ from core.mainWindow import MainWindow
 # from ni6423.ni6423_main import NI6423
 
 # from k10cr1.k10cr1_main import K10CR1
+# from BBD30X.BBD30X_main import BBD30X
 # from tlpm.tlpm_main import TLPM
+
+# from pem100.pem100_main import PEM100
+# from sp150.sp150_main import SP150
 
 # from auto_focus.autofocus_main import autofocus_main
 # from auto_focus.autofocus_logic import stepper_and_galvo_xyz
@@ -36,22 +41,25 @@ save_path = os.path.join(os.getcwd(), "data")
 backup_main_path = None
 
 
-def create_equipment():
+def create_equipment(runtime_services: RuntimeServices):
     """Instantiate and connect to all equipment required for the session."""
 
     equips = {
-        # "SR860_0": SR860(),
-        # "SR860_1": SR860(),
-        # "SR830_2": SR830(),
+        # "SR860_0": SR860(runtime_services.visa),
+        # "SR860_1": SR860(runtime_services.visa),
+        # "SR830_2": SR830(runtime_services.visa),
         # "SR830_3": SR830(),
         # "SR830_4": SR830(),
         # "nidaq": NIDAQ(),
         # "ni6423": NI6423(),
-        # "DMM_A": HP34401A(),
-        # "HWP_exc": K10CR1(),
-        # "HWP_det": K10CR1(),
-        # "Keithley_bg": Keithley24xx(),
-        # "Keithley_tg": Keithley24xx(),
+        # "DMM_A": HP34401A(runtime_services.visa),
+        # "HWP_exc": K10CR1(runtime_services.kinesis),
+        # "HWP_det": K10CR1(runtime_services.kinesis),
+        # "delay_stage": BBD30X(kinesis_runtime=runtime_services.kinesis),
+        # "Keithley_bg": Keithley24xx(runtime_services.visa),
+        # "Keithley_tg": Keithley24xx(runtime_services.visa),
+        # "pem": PEM100(visa_runtime=runtime_services.visa),
+        # "monochromator": SP150(visa_runtime=runtime_services.visa),
         # "tlpm_0": TLPM(),
         #"opticool": OptiCool(),
         # "montana2": Montana2(),
@@ -106,9 +114,12 @@ def main():
     # equipment such as SR860().
     # ------------------------------------------------------------
     app = QtWidgets.QApplication(sys.argv)
+    runtime_services = RuntimeServices()
 
     # Hardware setup (widgets can be created safely now)
-    equips, equips_set_channels, equips_get_channels = create_equipment()
+    equips, equips_set_channels, equips_get_channels = create_equipment(
+        runtime_services
+    )
 
     window = MainWindow(
         info=ScanInfo,
@@ -120,8 +131,15 @@ def main():
     )
     window.show()
     window.setWindowTitle("Main Window")
-    app.exec()
+    try:
+        return app.exec()
+    finally:
+        diagnostics = runtime_services.shutdown()
+        for family in ("visa", "kinesis"):
+            error = diagnostics.get(f"{family}_error")
+            if error:
+                print(f"Shared {family} shutdown warning: {error}")
 
 
 if __name__ == "__main__":
-    main() 
+    sys.exit(main())

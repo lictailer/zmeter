@@ -1,10 +1,8 @@
 import logging
 import time
-import pyvisa
 
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
-from dummy_visa import patch_pyvisa
-patch_pyvisa() # To overwrite the pyvisa module with the dummy visa module, do not include this line in the actual code
 
 class DemoDeviceHardware:
     """
@@ -31,7 +29,7 @@ class DemoDeviceHardware:
     """
 
     # ---------------- initialisation ----------------
-    def __init__(self, address: str):
+    def __init__(self, address: str, visa_runtime: VisaRuntime):
         """Connect to the instrument.
 
         Parameters
@@ -40,12 +38,20 @@ class DemoDeviceHardware:
             VISA resource string, e.g. ``'USB0::0x1AB1::0x0588::DS1ZA00000001::INSTR'``
         """
         self._address = address
-        rm = pyvisa.ResourceManager()
-        self._visaInstrument = rm.open_resource(self._address)  # type: ignore[attr-defined]
-        # Configure terminators (adjust if your instrument differs)
-        self._visaInstrument.write_termination = "\n"  # type: ignore[attr-defined]
-        self._visaInstrument.read_termination = "\n"  # type: ignore[attr-defined]
-        self._visaInstrument.timeout = 100  # milliseconds
+        self.visa_runtime = visa_runtime
+        self._visa_owner = f"DemoDevice:{id(self):x}"
+        self._visa_lease: VisaResourceLease | None = None
+        lease = self.visa_runtime.open_resource(self._visa_owner, self._address)
+        try:
+            self._visaInstrument = lease.resource
+            self._visaInstrument.write_termination = "\n"  # type: ignore[attr-defined]
+            self._visaInstrument.read_termination = "\n"  # type: ignore[attr-defined]
+            self._visaInstrument.timeout = 100  # milliseconds
+        except Exception:
+            lease.close()
+            self._visaInstrument = None
+            raise
+        self._visa_lease = lease
 
     # -------------- low-level helpers ---------------
     def _write(self, cmd: str):
@@ -146,12 +152,16 @@ class DemoDeviceHardware:
         except Exception:
             pass  # ignore buffer clear issues
 
-        try:
-            self._visaInstrument.close()  # type: ignore[attr-defined]
-        except Exception:
-            pass  # ignore if already closed
+        if self._visa_lease is not None:
+            self._visa_lease.close()
+        else:
+            try:
+                self._visaInstrument.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass  # ignore if already closed
 
         self._visaInstrument = None
+        self._visa_lease = None
 
 
 # -----------------------------------------------------------------------------
@@ -178,13 +188,11 @@ class DemoDeviceHardware:
 # # -----------------------------------------------------------------------------
 # # Stand-alone test with the dummy VISA layer
 if __name__ == "__main__":
-    # 1) Activate the dummy VISA backend *before* any pyvisa calls
-    # from . import dummy_visa
-    patch_pyvisa()  # type: ignore[attr-defined]
+    from demoDevice.dummy_visa import DummyResourceManager
 
-    # 2) Instantiate the driver (uses the patched ResourceManager)
+    runtime = VisaRuntime(manager_factory=DummyResourceManager)
     ADDRESS = "DUMMY::INSTR"  # the dummy layer accepts any address string
-    dev = DemoDeviceHardware(ADDRESS)
+    dev = DemoDeviceHardware(ADDRESS, runtime)
 
     print("IDN :", dev.idn())  # → DemoDevice,Simulated,1.0
 

@@ -9,6 +9,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
+from core.shared_runtime.visa import VisaRuntime
+
 from pem100.pem100_hardware import (
     PEM100ConnectionError,
     PEM100Hardware,
@@ -74,7 +76,9 @@ class PEM100HardwareTests(unittest.TestCase):
         instrument = FakeInstrument(responses)
         manager = FakeResourceManager(instrument)
         factory = CountingFactory(manager)
-        hardware = PEM100Hardware(factory, sleep=lambda _seconds: None)
+        hardware = PEM100Hardware(
+            VisaRuntime(manager_factory=factory), sleep=lambda _seconds: None
+        )
         return hardware, instrument, manager, factory
 
     def test_explicit_connection_configures_serial_resource(self):
@@ -142,9 +146,12 @@ class PEM100HardwareTests(unittest.TestCase):
 
     def test_failed_connection_and_repeated_disconnect_clean_up(self):
         manager = FakeResourceManager(open_error=RuntimeError("open failed"))
-        hardware = PEM100Hardware(CountingFactory(manager))
+        runtime = VisaRuntime(manager_factory=CountingFactory(manager))
+        hardware = PEM100Hardware(runtime)
         with self.assertRaises(PEM100ConnectionError):
             hardware.connect("ASRL9::INSTR")
+        self.assertEqual(manager.closed, 0)
+        runtime.shutdown()
         self.assertEqual(manager.closed, 1)
 
         hardware, instrument, manager, _factory = self.make_hardware()
@@ -152,6 +159,8 @@ class PEM100HardwareTests(unittest.TestCase):
         hardware.disconnect()
         hardware.disconnect()
         self.assertEqual(instrument.closed, 1)
+        self.assertEqual(manager.closed, 0)
+        hardware.visa_runtime.shutdown()
         self.assertEqual(manager.closed, 1)
 
 
@@ -160,7 +169,9 @@ class PEM100LogicTests(unittest.TestCase):
         instrument = FakeInstrument(responses)
         manager = FakeResourceManager(instrument)
         factory = CountingFactory(manager)
-        hardware = PEM100Hardware(factory, sleep=lambda _seconds: None)
+        hardware = PEM100Hardware(
+            VisaRuntime(manager_factory=factory), sleep=lambda _seconds: None
+        )
         return PEM100Logic(hardware), instrument, factory
 
     def test_scan_discovery_exposes_only_intended_channels(self):
@@ -229,7 +240,12 @@ class PEM100WidgetTests(unittest.TestCase):
     def test_widget_construction_does_not_create_resource_manager(self):
         manager = FakeResourceManager()
         factory = CountingFactory(manager)
-        widget = PEM100(PEM100Hardware(factory, sleep=lambda _seconds: None))
+        widget = PEM100(
+            PEM100Hardware(
+                VisaRuntime(manager_factory=factory),
+                sleep=lambda _seconds: None,
+            )
+        )
         try:
             self.assertEqual(factory.calls, 0)
             self.assertFalse(widget.logic.connected)

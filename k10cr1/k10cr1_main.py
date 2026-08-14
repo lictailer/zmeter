@@ -4,12 +4,14 @@ from k10cr1.k10cr1_logic import K10CR1Logic
 import numpy as np
 import pyqtgraph as pg
 
+from core.shared_runtime.kinesis import KinesisRuntime
+
 
 class K10CR1(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, kinesis_runtime: KinesisRuntime | None = None):
         super(K10CR1, self).__init__()
         uic.loadUi(r"k10cr1/k10cr1.ui", self)
-        self.logic = K10CR1Logic()
+        self.logic = K10CR1Logic(kinesis_runtime)
 
         self.connect_button.clicked.connect(self.connect)
         self.disconnect_button.clicked.connect(self.disconnect)
@@ -61,6 +63,8 @@ class K10CR1(QtWidgets.QWidget):
         pass
 
     def terminate_dev(self):
+        if self.logic.is_connected:
+            self.logic.disconnect()
         print("K10cr10 terminated.")
 
 if __name__ == "__main__":

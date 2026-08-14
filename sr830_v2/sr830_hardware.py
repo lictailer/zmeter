@@ -1,7 +1,7 @@
 import logging
 import time
 
-import pyvisa
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
 
 class SR830_Hardware:
@@ -12,19 +12,28 @@ class SR830_Hardware:
     from the existing SR830 module.
     """
 
-    def __init__(self, address=None):
+    def __init__(self, address=None, visa_runtime: VisaRuntime | None = None):
         self._address = None
         self._vi = None
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self._visa_lease: VisaResourceLease | None = None
+        self._visa_owner = f"SR830v2:{id(self):x}"
         if address:
             self.connect_visa(address)
 
     def connect_visa(self, address):
         self._address = address
-        resource_manager = pyvisa.ResourceManager()
-        self._vi = resource_manager.open_resource(self._address)
-        self._vi.write_termination = "\n"
-        self._vi.read_termination = "\n"
-        self._vi.timeout = 1000
+        lease = self.visa_runtime.open_resource(self._visa_owner, self._address)
+        try:
+            self._vi = lease.resource
+            self._vi.write_termination = "\n"
+            self._vi.read_termination = "\n"
+            self._vi.timeout = 1000
+        except Exception:
+            lease.close()
+            self._vi = None
+            raise
+        self._visa_lease = lease
 
     def _write(self, cmd: str):
         if self._vi is None:
@@ -300,14 +309,13 @@ class SR830_Hardware:
         except Exception:
             pass
 
-        try:
-            self._vi.close()  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        if self._visa_lease is not None:
+            self._visa_lease.close()
+        else:
+            try:
+                self._vi.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
         self._vi = None
-
-
-if __name__ == "__main__":
-    rm = pyvisa.ResourceManager()
-    print(rm.list_resources())
+        self._visa_lease = None

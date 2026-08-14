@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from PyQt6 import QtCore  # type: ignore
 import time
-from demoDevice_hardware import DemoDeviceHardware
+from core.shared_runtime.visa import VisaRuntime
+from .demoDevice_hardware import DemoDeviceHardware
 
 
 class DemoDeviceLogic(QtCore.QThread):
@@ -29,7 +30,7 @@ class DemoDeviceLogic(QtCore.QThread):
 
 
     # -----------------------------------------------
-    def __init__(self) -> None:
+    def __init__(self, visa_runtime: VisaRuntime) -> None:
         super().__init__()
 
         # queued instruction name processed in run()
@@ -44,12 +45,13 @@ class DemoDeviceLogic(QtCore.QThread):
         self.reject_signal: bool = False #reject signal is to prevent multiple jobs from running at the same time
 
         self.hardware: DemoDeviceHardware | None = None
+        self.visa_runtime = visa_runtime
 
 
     # -------------- connection helpers --------------
     def connect_visa(self, address: str):
         """Instantiate *DemoDeviceHardware* and open VISA connection."""
-        self.hardware = DemoDeviceHardware(address)
+        self.hardware = DemoDeviceHardware(address, self.visa_runtime)
         self.idn = self.get_idn()
         self.connected = True
         self.sig_connected.emit(f"connected to {address}, {self.idn}")
@@ -154,9 +156,14 @@ class DemoDeviceLogic(QtCore.QThread):
 # Example usage – runs only when file is executed directly
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
+    from core.shared_runtime.visa import VisaRuntime
+    from demoDevice.dummy_visa import DummyResourceManager
+
     # ADDRESS = "GPIB0::1::INSTR"  # TODO: change to your VISA resource
     ADDRESS = "DUMMY::INSTR"
-    logic = DemoDeviceLogic()
+    logic = DemoDeviceLogic(
+        VisaRuntime(manager_factory=DummyResourceManager)
+    )
     logic.connect_visa(ADDRESS)
 
     # Query identification string

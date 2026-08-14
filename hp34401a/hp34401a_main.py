@@ -4,8 +4,9 @@ import time
 from typing import Any
 import numpy as np
 import pyqtgraph as pg
-import pyvisa  # type: ignore
 
+from core.shared_runtime.visa import VisaRuntime
+from core.shared_runtime.visa_qt import VisaResourceRefresh
 
 from .hp34401a_logic import HP34401A_Logic
 
@@ -22,7 +23,7 @@ class HP34401A(QtWidgets.QWidget):
     start_signal = QtCore.pyqtSignal()
 
     # -------------------------------------------------------------
-    def __init__(self) -> None:
+    def __init__(self, visa_runtime: VisaRuntime | None = None) -> None:
         super().__init__()
 
         # ---------------- load UI from external .ui file ---------------
@@ -37,17 +38,14 @@ class HP34401A(QtWidgets.QWidget):
         # *graph_dc_voltage* is a QVBoxLayout placeholder defined in the .ui file
         self.graph_dc_voltage.addWidget(w)
 
-        # ----- VISA resource list -----
-        resource_manager = pyvisa.ResourceManager()
-        self.address_comboBox.addItems(resource_manager.list_resources())
-
         # ---------------- logic layer -------------
-        self.logic = HP34401A_Logic()
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self.logic = HP34401A_Logic(self.visa_runtime)
+        self.visa_refresh = VisaResourceRefresh(
+            self.visa_runtime, self.address_comboBox, self
+        )
         # circular buffers for live plot
         self.dc_voltage_log = np.full(200, np.nan, dtype=float)
-
-        # Populate VISA resources
-        self._refresh_visa_resources()
 
         # ---------------- wiring ------------------
         self.connect_pushButton.clicked.connect(self._on_connect_clicked) 
@@ -182,10 +180,8 @@ class HP34401A(QtWidgets.QWidget):
     # Helper methods
     # -------------------------------------------------------------
     def _refresh_visa_resources(self):
-        rm = pyvisa.ResourceManager()
-        resources = rm.list_resources()
-        self.address_comboBox.clear()  # type: ignore[attr-defined]
-        self.address_comboBox.addItems(resources)  # type: ignore[attr-defined]
+        """Begin explicit background discovery (kept as a UI helper)."""
+        return self.visa_refresh.controller.refresh()
 
     # -------------------------------------------------------------
     # Periodic monitor

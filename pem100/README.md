@@ -15,9 +15,11 @@ The integration never enumerates VISA resources and has no default address. It c
 Example profile setup:
 
 ```python
+from core.shared_runtime import RuntimeServices
 from pem100.pem100_main import PEM100
 
-pem = PEM100()
+services = RuntimeServices()
+pem = PEM100(visa_runtime=services.visa)
 pem.connect("ASRL4::INSTR")  # Replace with the reviewed profile address.
 equips["pem100"] = pem
 ```
@@ -42,7 +44,7 @@ Repository-wide scan limits remain separate and are keyed by the stable equipmen
 - UI operations run through the logic worker and are rejected while another operation or a scan owns the device.
 - `stop_scan()` cancels a conflicting UI operation before scan access; `start_scan()` restores normal UI use after cleanup.
 - `force_stop()` is cooperative between VISA calls and protocol waits. A VISA read already in progress may remain pending until the configured VISA timeout.
-- `disconnect()` and `terminate_dev()` close both the VISA resource and ResourceManager idempotently. A pending I/O call is allowed to finish before deferred cleanup rather than closing the resource concurrently.
+- `disconnect()` and `terminate_dev()` close only this device's VISA lease/session idempotently. The shared ResourceManager stays alive until provider shutdown. A pending I/O call is allowed to finish before deferred cleanup rather than closing the resource concurrently.
 
 Malformed numeric replies, failed acknowledgements, timeouts, and connection failures are reported with PEM100 context. After a timeout or uncertain acknowledgement, the user must verify the physical value before continuing.
 
@@ -53,7 +55,7 @@ python -B -m py_compile pem100\pem100_hardware.py pem100\pem100_logic.py pem100\
 python -B -m unittest discover -s pem100\tests -p "test_*.py" -v
 ```
 
-The tests use injected fake VISA objects. They do not instantiate a real ResourceManager.
+The tests use an injected `VisaRuntime` with a fake manager. They do not instantiate a real ResourceManager.
 
 ## User-executed hardware test
 

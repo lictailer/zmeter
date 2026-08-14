@@ -2,9 +2,9 @@
 
 ## Purpose and status
 
-`sr830_v2` is the preferred SR830 integration in the checked-in startup profile. It retains the PyVISA widget/logic/hardware structure while improving connection cleanup, identity checking, resource-state checks, logging, and monitor coordination. It still has no focused automated tests or recorded bench-validation matrix.
+`sr830_v2` is the preferred SR830 integration. It uses the shared `VisaRuntime` while retaining its widget/logic/hardware protocol behavior, identity checking, logging, and monitor coordination. Shared-session lifecycle and offscreen construction have fake coverage; bench validation remains pending.
 
-Constructing the widget enumerates VISA resources. Do not instantiate it during hardware-independent tests.
+Constructing the widget does not create a ResourceManager or enumerate. The operator must click **Refresh VISA** for worker-thread discovery. Disconnect closes only its session lease.
 
 ## Current scan discovery
 

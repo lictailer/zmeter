@@ -9,14 +9,18 @@ from ctypes import (
 from PyQt6 import QtCore
 from collections import deque
 
+from core.shared_runtime.kinesis import KinesisRuntime, KinesisRuntimeLease
+
 
 class K10CR1Logic(QtCore.QThread):
     sig_last_pos = QtCore.pyqtSignal(object)
     sig_info = QtCore.pyqtSignal(object)
     sig_connect = QtCore.pyqtSignal(object)
 
-    def __init__(self):
+    def __init__(self, kinesis_runtime: KinesisRuntime | None = None):
         QtCore.QThread.__init__(self)
+        self.kinesis_runtime = kinesis_runtime or KinesisRuntime()
+        self._kinesis_lease: KinesisRuntimeLease | None = None
         self.is_connected = False
         self.target = 0
         self.last_deg = 0
@@ -30,54 +34,78 @@ class K10CR1Logic(QtCore.QThread):
         # print(info)
 
     def connect(self):
-        if not ism.TLI_BuildDeviceList() == 0:
-            self.pass_info("Can't build device list")
-            return False
-        if not ism.ISC_Open(self.serial_no) == 0:
-            self.pass_info("Can't open k10cr1.")
-            return False
-        hw_info = ism.TLI_HardwareInformation()  # container for hw info
-        err = ism.ISC_GetHardwareInfoBlock(self.serial_no, byref(hw_info))
-        if err != 0:
-            self.pass_info(f"Error getting HW Info Block. Error Code: {err}")
-        info = f"Serial No: {hw_info.serialNumber}\nModel No: {hw_info.modelNumber}\nFirmware Version: {hw_info.firmwareVersion}\nNumber of  Channels: {hw_info.numChannels}\nType: {hw_info.type}"
-        self.pass_info(info)
+        if self.is_connected:
+            return True
+        lease = self.kinesis_runtime.acquire(f"K10CR1:{id(self):x}")
+        opened = False
+        try:
+            ism.configure_runtime(self.kinesis_runtime)
+            result = self.kinesis_runtime.initialize_device_manager(
+                ism.TLI_BuildDeviceList
+            )
+            if result != 0:
+                self.pass_info("Can't build device list")
+                lease.close()
+                return False
+            if ism.ISC_Open(self.serial_no) != 0:
+                self.pass_info("Can't open k10cr1.")
+                lease.close()
+                return False
+            opened = True
+            hw_info = ism.TLI_HardwareInformation()  # container for hw info
+            err = ism.ISC_GetHardwareInfoBlock(self.serial_no, byref(hw_info))
+            if err != 0:
+                self.pass_info(f"Error getting HW Info Block. Error Code: {err}")
+            info = f"Serial No: {hw_info.serialNumber}\nModel No: {hw_info.modelNumber}\nFirmware Version: {hw_info.firmwareVersion}\nNumber of  Channels: {hw_info.numChannels}\nType: {hw_info.type}"
+            self.pass_info(info)
 
-        ############## set velocity ##############
-        inf = ism.MOT_VelocityParameters()
-        ism.ISC_GetVelParamsBlock(self.serial_no, byref(inf))
-        self.pass_info(f"minVelocity: {inf.minVelocity}")
-        self.pass_info(f"acceleration: {inf.acceleration}")
-        self.pass_info(f"maxVelocity: {inf.maxVelocity}")
+            ############## set velocity ##############
+            inf = ism.MOT_VelocityParameters()
+            ism.ISC_GetVelParamsBlock(self.serial_no, byref(inf))
+            self.pass_info(f"minVelocity: {inf.minVelocity}")
+            self.pass_info(f"acceleration: {inf.acceleration}")
+            self.pass_info(f"maxVelocity: {inf.maxVelocity}")
 
-        min_velocity = c_int(0)
-        acceleration = c_int(15020)
-        max_velocity = c_int(73300335)
-        inf.minVelocity = min_velocity
-        inf.acceleration = acceleration
-        inf.maxVelocity = max_velocity
+            min_velocity = c_int(0)
+            acceleration = c_int(15020)
+            max_velocity = c_int(73300335)
+            inf.minVelocity = min_velocity
+            inf.acceleration = acceleration
+            inf.maxVelocity = max_velocity
 
         # self.pass_info(f"minVelocity: {inf.minVelocity}")
         # self.pass_info(f"acceleration: {inf.acceleration}")
         # self.pass_info(f"maxVelocity: {inf.maxVelocity}")
 
-        self.pass_info(
-            f"Setting vel {ism.ISC_SetVelParamsBlock(self.serial_no, byref(inf))}"
-        )
+            self.pass_info(
+                f"Setting vel {ism.ISC_SetVelParamsBlock(self.serial_no, byref(inf))}"
+            )
 
-        ism.ISC_GetVelParamsBlock(self.serial_no, byref(inf))
-        self.pass_info(f"minVelocity: {inf.minVelocity}")
-        self.pass_info(f"acceleration: {inf.acceleration}")
-        self.pass_info(f"maxVelocity: {inf.maxVelocity}")
+            ism.ISC_GetVelParamsBlock(self.serial_no, byref(inf))
+            self.pass_info(f"minVelocity: {inf.minVelocity}")
+            self.pass_info(f"acceleration: {inf.acceleration}")
+            self.pass_info(f"maxVelocity: {inf.maxVelocity}")
 
-        ############## emit signal ##############
-        self.sig_connect.emit(True)
-        self.is_connected = True
-
-        return True
+            ############## emit signal ##############
+            self._kinesis_lease = lease
+            self.sig_connect.emit(True)
+            self.is_connected = True
+            return True
+        except Exception:
+            if opened:
+                try:
+                    ism.ISC_Close(self.serial_no)
+                except Exception:
+                    pass
+            lease.close()
+            raise
 
     def disconnect(self):
-        self.pass_info(f"Closing connection {ism.ISC_Close(self.serial_no)}")
+        if self.is_connected:
+            self.pass_info(f"Closing connection {ism.ISC_Close(self.serial_no)}")
+        if self._kinesis_lease is not None:
+            self._kinesis_lease.close()
+            self._kinesis_lease = None
         self.sig_connect.emit(False)
         self.is_connected = False
         
@@ -206,17 +234,4 @@ class K10CR1Logic(QtCore.QThread):
             self.home()
         self.job = ""
 
-
-if __name__ == "__main__":
-    a = K10CR1Logic()
-    a.assign_serial("55243324")
-    # a.assign_serial("55246024")
-    a.connect()
-    
-    deg = 10
-    a.set_angle(deg)
-    deg = 0
-    a.set_angle(deg)
-
-    a.home()
-    a.disconnect()
+# Direct hardware demonstration entry point intentionally removed.

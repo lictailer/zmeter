@@ -2,6 +2,8 @@ from pathlib import Path
 
 from PyQt6 import QtWidgets, uic
 
+from core.shared_runtime.kinesis import KinesisRuntime
+
 try:
     from .BBD30X_logic import BBD30X_Logic
 except ImportError:
@@ -10,11 +12,14 @@ except ImportError:
 
 class BBD30X(QtWidgets.QWidget):
 
-    def __init__(self, hardware=None):
+    def __init__(self, hardware=None, kinesis_runtime: KinesisRuntime | None = None):
 
         super(BBD30X, self).__init__()
         ui_path = Path(__file__).with_name("bbd30x.ui")
         uic.loadUi(str(ui_path), self)
+        if hardware is None:
+            from .BBD30X_hardware import BBD30x_hardware
+            hardware = BBD30x_hardware(kinesis_runtime)
         self.logic = BBD30X_Logic(hardware=hardware)
 
         self.connect_button.clicked.connect(self.connect)

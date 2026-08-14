@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-import tempfile
 import unittest
-import builtins
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -160,6 +157,38 @@ class FakeHardware:
         pass
 
 
+class FakeLease:
+    def __init__(self):
+        self.closed = 0
+
+    def close(self):
+        self.closed += 1
+
+
+class FakeKinesisRuntime:
+    def __init__(self, bindings=None, load_error=None):
+        self.bindings = bindings
+        self.load_error = load_error
+        self.leases = []
+        self.load_calls = []
+        self.initialize_calls = 0
+
+    def acquire(self, _owner):
+        lease = FakeLease()
+        self.leases.append(lease)
+        return lease
+
+    def load_managed(self, component):
+        self.load_calls.append(component)
+        if self.load_error is not None:
+            raise self.load_error
+        return self.bindings
+
+    def initialize_device_manager(self, callback):
+        self.initialize_calls += 1
+        return callback()
+
+
 class ScanDiscoveryHarness:
     make_variables_dictionary = MainWindow.make_variables_dictionary
     _is_valid_getter = MainWindow._is_valid_getter
@@ -195,10 +224,12 @@ class BBD30XTests(unittest.TestCase):
 
     def test_connection_sequence_uses_channel_one_and_preserves_polling(self):
         bindings, events, _channel = make_bindings()
-        hardware = BBD30x_hardware(kinesis_loader=lambda: bindings)
+        runtime = FakeKinesisRuntime(bindings)
+        hardware = BBD30x_hardware(runtime)
         with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
             hardware.connect("12345678")
         self.assertLess(events.index("build_device_list"), events.index(("connect", "12345678")))
+        self.assertEqual(runtime.initialize_calls, 1)
         self.assertIn(("get_channel", 1), events)
         self.assertIn(("wait_settings", 5000), events)
         self.assertIn(("start_polling", 50), events)
@@ -206,7 +237,7 @@ class BBD30XTests(unittest.TestCase):
 
     def test_dds220_file_settings_fallback_is_preserved(self):
         bindings, events, channel = make_bindings(fallback=True)
-        hardware = BBD30x_hardware(kinesis_loader=lambda: bindings)
+        hardware = BBD30x_hardware(FakeKinesisRuntime(bindings))
         with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
             hardware.connect("12345678")
         self.assertEqual(channel.configuration.DeviceSettingsName, "DDS220")
@@ -215,7 +246,7 @@ class BBD30XTests(unittest.TestCase):
 
     def test_move_and_position_use_millimeters(self):
         bindings, events, channel = make_bindings()
-        hardware = BBD30x_hardware(kinesis_loader=lambda: bindings)
+        hardware = BBD30x_hardware(FakeKinesisRuntime(bindings))
         hardware._ensure_bindings()
         hardware.channel = channel
         with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
@@ -225,7 +256,7 @@ class BBD30XTests(unittest.TestCase):
 
     def test_move_timeout_is_preserved(self):
         bindings, _events, channel = make_bindings()
-        hardware = BBD30x_hardware(kinesis_loader=lambda: bindings)
+        hardware = BBD30x_hardware(FakeKinesisRuntime(bindings))
         hardware._ensure_bindings()
         hardware.channel = channel
         with mock.patch.object(hardware, "get_position_mm", return_value=0.0), mock.patch(
@@ -236,52 +267,22 @@ class BBD30XTests(unittest.TestCase):
 
     def test_disconnect_stops_polling_and_disconnects_device(self):
         bindings, events, _channel = make_bindings()
-        hardware = BBD30x_hardware(kinesis_loader=lambda: bindings)
+        runtime = FakeKinesisRuntime(bindings)
+        hardware = BBD30x_hardware(runtime)
         with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
             hardware.connect("12345678")
         hardware.disconnect()
         self.assertEqual(events[-2:], ["stop_polling", "disconnect"])
         self.assertIsNone(hardware.channel)
         self.assertIsNone(hardware.device)
+        self.assertEqual(runtime.leases[0].closed, 1)
 
-    def test_missing_kinesis_runtime_has_actionable_error(self):
-        from BBD30X import BBD30X_hardware as hardware_module
-
-        with tempfile.TemporaryDirectory() as empty_dir, mock.patch.dict(
-            os.environ, {"THORLABS_KINESIS_DIR": empty_dir}, clear=False
-        ), mock.patch.object(
-            hardware_module,
-            "_candidate_kinesis_directories",
-            return_value=[empty_dir],
-        ):
-            with self.assertRaisesRegex(FileNotFoundError, "THORLABS_KINESIS_DIR"):
-                hardware_module._load_kinesis_cli()
-
-    def test_missing_pythonnet_has_actionable_error(self):
-        from BBD30X import BBD30X_hardware as hardware_module
-
-        real_import = builtins.__import__
-
-        def import_without_clr(name, *args, **kwargs):
-            if name == "clr":
-                raise ImportError("pythonnet unavailable")
-            return real_import(name, *args, **kwargs)
-
-        required_dlls = (
-            "Thorlabs.MotionControl.DeviceManagerCLI.dll",
-            "Thorlabs.MotionControl.GenericMotorCLI.dll",
-            "Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll",
-        )
-        with tempfile.TemporaryDirectory() as kinesis_dir:
-            for dll_name in required_dlls:
-                Path(kinesis_dir, dll_name).touch()
-            with mock.patch.object(
-                hardware_module,
-                "_candidate_kinesis_directories",
-                return_value=[kinesis_dir],
-            ), mock.patch("builtins.__import__", side_effect=import_without_clr):
-                with self.assertRaisesRegex(ImportError, "pythonnet"):
-                    hardware_module._load_kinesis_cli()
+    def test_shared_runtime_failure_releases_lease(self):
+        runtime = FakeKinesisRuntime(load_error=RuntimeError("runtime unavailable"))
+        hardware = BBD30x_hardware(runtime)
+        with self.assertRaisesRegex(RuntimeError, "runtime unavailable"):
+            hardware.connect("12345678")
+        self.assertEqual(runtime.leases[0].closed, 1)
 
     def test_logic_and_ui_preserve_micrometer_to_millimeter_conversion(self):
         fake = FakeHardware()

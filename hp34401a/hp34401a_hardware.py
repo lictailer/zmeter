@@ -1,7 +1,8 @@
 import logging
-import pyvisa
 import time
 from typing import Optional, List, Tuple, Union
+
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 '''
@@ -33,7 +34,12 @@ class HP34401A_Hardware:
     MAX_RETRY_ATTEMPTS = 3
     RETRY_DELAY = 0.01  # seconds
     
-    def __init__(self, address: str, timeout: Optional[int] = None):
+    def __init__(
+        self,
+        address: str,
+        timeout: Optional[int] = None,
+        visa_runtime: VisaRuntime | None = None,
+    ):
         """
         Initialize connection to HP34401A multimeter.
         
@@ -43,17 +49,24 @@ class HP34401A_Hardware:
         """
         self._address = address
         self._timeout = timeout or self.DEFAULT_TIMEOUT
-        self._rm = None
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self._visa_lease: VisaResourceLease | None = None
+        self._visa_owner = f"HP34401A:{id(self):x}"
         self._vi = None
-        
-        self._connect()
-        self._initialize_device()
+        try:
+            self._connect()
+            self._initialize_device()
+        except Exception:
+            self.disconnect()
+            raise
     
     def _connect(self):
         """Establish VISA connection to the instrument."""
         try:
-            self._rm = pyvisa.ResourceManager()
-            self._vi = self._rm.open_resource(self._address)
+            self._visa_lease = self.visa_runtime.open_resource(
+                self._visa_owner, self._address
+            )
+            self._vi = self._visa_lease.resource
             self._vi.timeout = self._timeout
             logging.info(f"Connected to HP34401A at {self._address}")
         except Exception as e:
@@ -215,14 +228,15 @@ class HP34401A_Hardware:
             logging.warning(f"Error during disconnect cleanup: {e}")
         
         try:
-            self._vi.close()
-            if self._rm:
-                self._rm.close()
+            if self._visa_lease is not None:
+                self._visa_lease.close()
+            else:
+                self._vi.close()
         except Exception as e:
             logging.warning(f"Error closing VISA resources: {e}")
         finally:
             self._vi = None
-            self._rm = None
+            self._visa_lease = None
 
 
 def main():
@@ -263,6 +277,4 @@ def main():
     except Exception as e:
         print(f"Unexpected error: {e}")
 
-
-if __name__ == "__main__":
-    main()
+# Direct hardware demonstration entry point intentionally removed.

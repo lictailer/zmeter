@@ -1,0 +1,17 @@
+{
+  "runtime": "Thorlabs Kinesis",
+  "release": "1.14.58.26351",
+  "architecture": "x64",
+  "source": "user-provided complete Kinesis folder",
+  "files": [
+    {"name": "Thorlabs.MotionControl.DeviceManager.dll", "size": 3247000, "version": "1.14.58.26351", "sha256": "6a554f0eb124c6ae0993a38ed94a522764f390c60b59beed011b9213fb2807ee"},
+    {"name": "Thorlabs.MotionControl.DeviceManagerCLI.dll", "size": 800152, "version": "1.14.58.26351", "sha256": "9d85efffc391ce3ff4a026c9ffeb9736a7c7f56b1a38ca85802d231cd9e8ef09"},
+    {"name": "Thorlabs.MotionControl.GenericMotorCLI.dll", "size": 535448, "version": "1.14.58.26351", "sha256": "1f0ad1806054650f75900e38ece969786629575672761296ff5c7039eaeb8530"},
+    {"name": "Thorlabs.MotionControl.Benchtop.BrushlessMotor.dll", "size": 565144, "version": "1.14.58.26351", "sha256": "0afee6ee25836aac710ea7cdad31b0780434696f87fdc74e952e29eed3cfd3f6"},
+    {"name": "Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll", "size": 261528, "version": "1.14.58.26351", "sha256": "1e6a1297f62492e63b61166e3687f96e9a6bbfaea5fdc3eff3d1f5497238e3ee"},
+    {"name": "Thorlabs.MotionControl.IntegratedStepperMotors.dll", "size": 539032, "version": "1.14.58.26351", "sha256": "31a6bcade506819a9af06d06f15fe1213208ce56c41b6a9882e2e17711a10d93"},
+    {"name": "ftd2xx.dll", "size": 323344, "version": "3.02.14", "sha256": "97a3a8ea6e20da7b64fe2aa4e94e855e1e3b64865122b6c4a1bf4c9c53e133a9"},
+    {"name": "BBD_Stages.xml", "size": 141297, "version": null, "sha256": "6ee53f5369a689420bb989f97c8b307fae626aafc2efc693fe66e548272564f9"},
+    {"name": "ThorlabsDefaultSettings.xml", "size": 443245, "version": null, "sha256": "e15d8e1e1c06be2ac48f67d9f73d46088ee5d574ee7bb995176e84ec8445c9a6"}
+  ]
+}

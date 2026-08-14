@@ -2,9 +2,9 @@
 
 ## Purpose and status
 
-This package controls an HP 34401A-compatible digital multimeter through PyVISA and exposes DC-voltage acquisition to ZMeter. The implementation has separate widget, logic, and hardware files, but it has no device-specific automated tests or recorded hardware validation in this repository.
+This package controls an HP 34401A-compatible digital multimeter through the shared `VisaRuntime` and exposes DC-voltage acquisition to ZMeter. The implementation has fake shared-session lifecycle and offscreen widget-construction coverage, but no recorded hardware validation.
 
-Constructing the widget creates a VISA resource manager and enumerates resources. Do not instantiate it during hardware-independent tests.
+Constructing the widget does not create a ResourceManager or enumerate. The operator must click **Refresh VISA**, which runs discovery in a worker thread. Connection owns one exclusive session lease; disconnect does not close other devices or the shared manager.
 
 ## Scan channels
 

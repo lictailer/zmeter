@@ -8,6 +8,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
+
 
 class PEM100Error(RuntimeError):
     """Base error for PEM100 operations."""
@@ -35,14 +37,15 @@ class PEM100Hardware:
 
     def __init__(
         self,
-        resource_manager_factory: Callable[[], Any] | None = None,
+        visa_runtime: VisaRuntime | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        self._resource_manager_factory = resource_manager_factory
+        self.visa_runtime = visa_runtime or VisaRuntime()
         self._sleep = sleep
-        self.resource_manager: Any | None = None
+        self._visa_lease: VisaResourceLease | None = None
         self.instrument: Any | None = None
         self.address: str | None = None
+        self._visa_owner = f"PEM100:{id(self):x}"
 
     @property
     def connected(self) -> bool:
@@ -61,52 +64,48 @@ class PEM100Hardware:
                 f"PEM100 is already connected at {self.address}; disconnect first"
             )
 
-        resource_manager = None
-        instrument = None
+        lease = None
         try:
-            if self._resource_manager_factory is None:
-                import pyvisa
-                from pyvisa import constants
+            from pyvisa import constants
 
-                resource_manager = pyvisa.ResourceManager()
-                parity_none = constants.Parity.none
-                stop_bits_one = constants.StopBits.one
-                flow_none = constants.VI_ASRL_FLOW_NONE
-            else:
-                resource_manager = self._resource_manager_factory()
-                parity_none = 0
-                stop_bits_one = 10
-                flow_none = 0
-
-            instrument = resource_manager.open_resource(
+            lease = self.visa_runtime.open_resource(
+                self._visa_owner,
                 address,
                 baud_rate=2400,
                 data_bits=8,
-                parity=parity_none,
-                stop_bits=stop_bits_one,
-                flow_control=flow_none,
+                parity=constants.Parity.none,
+                stop_bits=constants.StopBits.one,
+                flow_control=constants.VI_ASRL_FLOW_NONE,
             )
+            instrument = lease.resource
             instrument.read_termination = "\n\r*"
             instrument.write_termination = "\r\n"
             instrument.timeout = int(timeout_ms)
         except Exception as exc:
-            self._close_partial(instrument, resource_manager)
+            if lease is not None:
+                lease.close()
             raise PEM100ConnectionError(
                 f"Could not connect PEM100 at {address}: {exc}"
             ) from exc
 
-        self.resource_manager = resource_manager
+        self._visa_lease = lease
         self.instrument = instrument
         self.address = address
         return True
 
     def disconnect(self) -> None:
         instrument = self.instrument
-        resource_manager = self.resource_manager
+        lease = self._visa_lease
         self.instrument = None
-        self.resource_manager = None
+        self._visa_lease = None
         self.address = None
-        self._close_partial(instrument, resource_manager)
+        if lease is not None:
+            lease.close()
+        elif instrument is not None:
+            try:
+                instrument.close()
+            except Exception:
+                pass
 
     close = disconnect
 
@@ -215,16 +214,3 @@ class PEM100Hardware:
         if not math.isfinite(converted):
             raise ValueError(f"PEM100 {label} must be finite")
         return converted
-
-    @staticmethod
-    def _close_partial(instrument: Any | None, resource_manager: Any | None) -> None:
-        if instrument is not None:
-            try:
-                instrument.close()
-            except Exception:
-                pass
-        if resource_manager is not None:
-            try:
-                resource_manager.close()
-            except Exception:
-                pass

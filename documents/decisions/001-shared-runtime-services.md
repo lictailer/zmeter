@@ -1,12 +1,12 @@
 # 001: Shared process runtime services for hardware integrations
 
-- Status: Accepted
+- Status: Implemented locally; hardware validation pending
 - Date: 2026-08-14
 - Owners: ZMeter maintainers
 - Supersedes: none
 
-Implementation is pending. This record defines the intended architecture; current
-device code and tests remain authoritative until the migration is completed.
+The shared implementation is under `core/shared_runtime/`. Current device code,
+the runtime manifest, and tests remain authoritative for exact behavior.
 
 ## Context
 
@@ -50,7 +50,8 @@ exception is designed.
 ZMeter will introduce a small, typed runtime-service layer rather than allowing
 device packages to select and close process-wide runtimes independently.
 
-The implementation will use a dedicated top-level `runtime_services/` package.
+The implementation uses `core/shared_runtime/` so the application-owned service
+layer remains visibly separate from device packages.
 The startup/profile boundary will create one `RuntimeServices` provider, inject
 the required typed service into enabled devices, and arrange for provider
 shutdown only after device sessions have been terminated. Constructing the
@@ -90,8 +91,10 @@ hardware manager.
   unloaded or replaced;
 - remain loaded until process shutdown.
 
-The service will not distribute proprietary Kinesis binaries. The laboratory
-profile will supply or select the installed runtime.
+The service does not distribute proprietary Kinesis binaries. The laboratory
+populates the ignored repo-relative
+`core/shared_runtime/vendor/thorlabs_kinesis/` directory from one reviewed
+release. The tracked manifest validates the required local files before load.
 
 ### VisaRuntime
 
@@ -122,14 +125,20 @@ Migration will be incremental:
    activating hardware.
 2. Migrate K10CR1 and BBD30X to `KinesisRuntime` and remove their independent
    runtime selection.
-3. Migrate PEM100, SP150, HP34401A, Keithley24xx, SR830, SR830 v2, and SR860 to
+3. Migrate PEM100, SP150, HP34401A, Keithley24xx, SR830 v2, and SR860 to
    `VisaRuntime`, then route UI resource listing through the same service.
 4. Replace `demoDevice`'s global PyVISA monkey-patch with injected fake services.
-5. Evaluate additional typed adapters or reservation policies only when their
+5. Leave legacy `sr830/` unchanged and unsupported in shared-VISA profiles.
+6. Evaluate additional typed adapters or reservation policies only when their
    device packages are actively maintained.
 
 The initial change will not alter scan channels, device units, hardware limits,
 protocol commands, startup-profile activation, or persisted scan formats.
+
+Shared operation is the only maintained path for migrated packages. Old
+device-local loaders, manager factories, constructor enumeration, and hidden
+legacy switches are not retained. Each vendor family can be restored
+independently from Git history if user bench validation fails.
 
 ### Later candidates
 

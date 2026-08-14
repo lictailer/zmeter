@@ -1,18 +1,27 @@
-import pyvisa
 import time
+
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
 
 class Keithly24xxHardware():
-    def __init__(self):
-        addr='GPIB0::23::INSTR'
+    def __init__(self, visa_runtime: VisaRuntime | None = None):
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self._visa_lease: VisaResourceLease | None = None
+        self._visa_owner = f"Keithley24xx:{id(self):x}"
+        self.inst = None
         
     def initialize(self,addr):
-        resource_manager = pyvisa.ResourceManager()
-        inst = resource_manager.open_resource(addr)
+        lease = self.visa_runtime.open_resource(self._visa_owner, addr)
+        inst = lease.resource
         # inst.write('sense:current:protection 1e-7')
         # inst.write(':source:voltage:range 100')
-        inst.write(':source:delay 0.0')
-        inst.write(':OUTP ON')
+        try:
+            inst.write(':source:delay 0.0')
+            inst.write(':OUTP ON')
+        except Exception:
+            lease.close()
+            raise
+        self._visa_lease = lease
         self.inst=inst
         
     def set_sour_volt_to(self,val):
@@ -56,18 +65,27 @@ class Keithly24xxHardware():
 
     def close(self):
         """Safely close the VISA connection"""
+        lease = self._visa_lease
+        instrument = self.inst
         try:
-            if hasattr(self, 'inst') and self.inst is not None:
+            if instrument is not None:
                 # Turn off output
-                self.inst.write(':OUTP OFF')
+                instrument.write(':OUTP OFF')
                 # Clear any pending commands
-                self.inst.write('*CLS')
-                # Close the connection
-                self.inst.close()
-                self.inst = None
+                instrument.write('*CLS')
                 print("Keithley24xx Hardware connection closed safely")
         except Exception as e:
             print(f"Error closing hardware connection: {e}")
+        finally:
+            if lease is not None:
+                lease.close()
+            elif instrument is not None:
+                try:
+                    instrument.close()
+                except Exception:
+                    pass
+            self.inst = None
+            self._visa_lease = None
 
     def ramp_voltage(self, target_voltage: float, ramp_rate: float, step_time: float = 0.0):
         """Ramp the source voltage to ``target_voltage`` at a given ``ramp_rate``.
@@ -107,21 +125,5 @@ class Keithly24xxHardware():
 
         # Ensure we finish exactly at the target voltage
         self.set_sour_volt_to(target_voltage)
-
-
-if __name__=="__main__":
-
-    k=Keithly24xxHardware()
-    k.initialize(addr='GPIB1::19::INSTR')
-
-    k.set_sour_func_to_volt()
-    k.set_sour_volt_to(0.01)
-    k.set_sens_func_to_curr(compliance=1)
-    print(k.read())
-
-    k.set_sour_func_to_curr()
-    k.set_sour_curr_to()
-    k.set_sens_func_to_volt(compliance=20)
-    print(k.read())
 
 

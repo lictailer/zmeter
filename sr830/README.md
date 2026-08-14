@@ -4,6 +4,10 @@
 
 This is the original PyVISA integration for the SRS SR830 lock-in amplifier. The checked-in startup profile explicitly recommends `sr830_v2` instead. Keep this module for comparison or lab-specific compatibility; do not select it for new profiles without a concrete reason.
 
+This legacy package is intentionally excluded from `VisaRuntime`. It directly
+constructs and manages PyVISA resources and is unsupported in profiles that use
+the shared VISA service; enabling both ownership models can invalidate sessions.
+
 Constructing the widget enumerates VISA resources and starts a 50 ms UI monitor timer. Do not instantiate it during hardware-independent tests.
 
 ## Current scan discovery

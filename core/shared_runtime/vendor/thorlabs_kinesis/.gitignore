@@ -1,0 +1,5 @@
+*.dll
+*.xml
+!manifest.json
+!README.md
+!.gitignore

@@ -5,13 +5,16 @@ Light-weight stand-in for PyVISA that lets you run *DemoDeviceHardware* and
 of the VISA API used by our drivers: ``ResourceManager`` → ``open_resource``
 returning an object that exposes ``write`` and ``query``.
 
+The fake manager is injected into ``VisaRuntime`` and never monkey-patches the
+real :mod:`pyvisa` module or process-global imports.
+
 Usage example
 -------------
->>> import pyvisa
->>> from demo_device.dummy_visa import patch_pyvisa
->>> patch_pyvisa()  # monkey-patches the real pyvisa module
->>> from demo_device.demoDevice_hardware import DemoDeviceHardware
->>> dev = DemoDeviceHardware("DUMMY::INSTR")
+>>> from core.shared_runtime.visa import VisaRuntime
+>>> from demoDevice.dummy_visa import DummyResourceManager
+>>> from demoDevice.demoDevice_hardware import DemoDeviceHardware
+>>> runtime = VisaRuntime(manager_factory=DummyResourceManager)
+>>> dev = DemoDeviceHardware("DUMMY::INSTR", visa_runtime=runtime)
 >>> print(dev.idn())
 DemoDevice,Simulated,1.0
 >>> dev.operating_mode("remote", write=True)
@@ -89,27 +92,9 @@ class DummyResourceManager:
         return _DummyInstrument()
 
     # PyVISA returns a tuple of resource strings
-    def list_resources(self) -> Tuple[str, ...]:  # noqa: D401
+    def list_resources(self, _query="?*::INSTR") -> Tuple[str, ...]:  # noqa: D401
         return ("DUMMY::INSTR",)
 
-
-# -----------------------------------------------------------------------------
-# Helper to monkey-patch the *pyvisa* module in-place
-# -----------------------------------------------------------------------------
-
-def patch_pyvisa() -> None:
-    """Replace ``pyvisa.ResourceManager`` with :class:`DummyResourceManager`."""
-    import sys
-    import types
-
-    try:
-        import pyvisa  # type: ignore
-    except ModuleNotFoundError:
-        # create a fake *pyvisa* module so importers succeed
-        pyvisa = types.ModuleType("pyvisa")  # type: ignore
-        sys.modules["pyvisa"] = pyvisa  # type: ignore
-
-    pyvisa.ResourceManager = DummyResourceManager  # type: ignore[attr-defined]
-
-    # Ensure callers can instantiate directly: ``pyvisa.ResourceManager()``
-    sys.modules["pyvisa"].ResourceManager = DummyResourceManager  # type: ignore 
+    def close(self):
+        """No-op manager shutdown for the in-process simulator."""
+        pass

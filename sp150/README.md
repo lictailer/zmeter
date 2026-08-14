@@ -15,9 +15,12 @@ The integration never enumerates resources and has no default address. The resou
 Example profile setup:
 
 ```python
+from core.shared_runtime import RuntimeServices
 from sp150.sp150_main import SP150
 
+services = RuntimeServices()
 mono = SP150(
+    visa_runtime=services.visa,
     move_timeout_s=120.0,
     poll_interval_s=0.25,
     completion_tolerance_nm=0.1,
@@ -48,7 +51,7 @@ Repository-wide scan limits remain separate and are keyed by the stable equipmen
 - `stop_scan()` cancels a conflicting UI operation before scan access; `start_scan()` restores normal UI use after cleanup.
 - `force_stop()` cancels move polling immediately between VISA queries. A query already in progress may remain pending until its configured VISA timeout.
 - A move timeout reports both the target and last confirmed readback. The requested target is never reported as the actual value without readback confirmation.
-- `disconnect()` and `terminate_dev()` close both the VISA resource and ResourceManager idempotently after active I/O finishes.
+- `disconnect()` and `terminate_dev()` close only this device's VISA lease/session idempotently after active I/O finishes. The shared ResourceManager closes at provider shutdown.
 
 After a timeout, cancellation, malformed response, or uncertain move, the user must inspect the monochromator before issuing another command.
 
@@ -59,7 +62,7 @@ python -B -m py_compile sp150\sp150_hardware.py sp150\sp150_logic.py sp150\sp150
 python -B -m unittest discover -s sp150\tests -p "test_*.py" -v
 ```
 
-The tests use injected fake VISA objects. They do not instantiate a real ResourceManager.
+The tests use an injected `VisaRuntime` with a fake manager. They do not instantiate a real ResourceManager.
 
 ## User-executed hardware test
 

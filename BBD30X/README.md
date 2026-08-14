@@ -17,40 +17,31 @@ module for unattended motion or as an emergency-stop mechanism.
 - 64-bit Windows and the repository's Python 3.12/PyQt6 environment;
 - NumPy;
 - the optional `pythonnet` package, which provides `clr` and `System`;
-- a matching 64-bit Thorlabs Kinesis installation containing:
+- the complete matching 64-bit Kinesis 1.14.58.26351 files listed by
+  `core/shared_runtime/vendor/thorlabs_kinesis/manifest.json`, including:
   - `Thorlabs.MotionControl.DeviceManagerCLI.dll`;
   - `Thorlabs.MotionControl.GenericMotorCLI.dll`;
   - `Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll`.
 
 Neither `pythonnet` nor proprietary Kinesis DLLs are added to the maintained
-Conda environment. Install the optional runtime only in a reviewed laboratory
-environment. Confirm Python, .NET, Kinesis, controller, and stage compatibility
-before enabling the profile.
-
-At connection time, DLL directories are searched in this order:
-
-1. `THORLABS_KINESIS_DIR`, when set;
-2. `C:\Program Files\Thorlabs\Kinesis`;
-3. a package-local `BBD30X\Kinesis` directory.
-
-Vendor DLLs are not distributed in this repository. Importing the package and
+Conda environment or Git. Copy the manifest-listed files from one reviewed
+release into the ignored shared vendor folder. There is no environment,
+Program Files, `PATH`, or device-local fallback. Importing the package and
 constructing its widget do not import `pythonnet`, load Kinesis, build the
 device list, or connect hardware. Those actions begin only after `connect()`.
 
 ## Laboratory-profile example
 
-Keep the controller serial and the Kinesis path in local profile configuration,
-not in shared source:
+Keep the controller serial in local profile configuration and inject the same
+Kinesis service used by every Kinesis device:
 
 ```python
-import os
-
 from BBD30X.BBD30X_main import BBD30X
+from core.shared_runtime import RuntimeServices
 
-os.environ["THORLABS_KINESIS_DIR"] = r"C:\Program Files\Thorlabs\Kinesis"
-
-delay_stage = BBD30X()
-delay_stage.connect(os.environ["ZMETER_BBD30X_SERIAL"])
+services = RuntimeServices()
+delay_stage = BBD30X(kinesis_runtime=services.kinesis)
+delay_stage.connect("REVIEWED_SERIAL")
 
 equips = {"Delay_Stage": delay_stage}
 equips_set_channels = {"Delay_Stage": ["pos"]}
@@ -110,8 +101,9 @@ These are documented integration debt, not assurances of safe operation:
   nor establish a scan-specific safe state.
 - UI work uses one mutable `job` field on a `QThread`; rapid UI actions or UI
   and scan access can conflict or overwrite pending intent.
-- A failure after creating or connecting the controller can leave a partial
-  connection because the connection path has no rollback cleanup.
+- Failed connection now performs best-effort controller cleanup and releases
+  the runtime lease; a failing vendor disconnect call can still leave physical
+  controller state uncertain and requires operator verification.
 - Timeout comments in the source historically disagreed with the actual
   Kinesis values. The effective calls are the values documented above.
 - Device discovery enumerates and prints every returned serial number.
@@ -127,11 +119,11 @@ hardware emergency stop.
 
 ## Errors and troubleshooting
 
-- A `FileNotFoundError` naming `THORLABS_KINESIS_DIR` means the three required
-  CLI DLLs were not found together in any search directory.
+- A manifest missing/hash/size error means the ignored shared Kinesis folder is
+  absent, incomplete, or does not match the tracked reviewed release.
 - An `ImportError` naming `pythonnet` means the optional Python/.NET bridge is
   unavailable.
-- A runtime load error after DLL discovery commonly indicates incompatible
+- A runtime load error after manifest validation commonly indicates incompatible
   bitness, .NET/runtime problems, missing dependent DLLs, or an incompatible
   Kinesis release.
 - A move `TimeoutError` is raised when readback remains outside the tolerance

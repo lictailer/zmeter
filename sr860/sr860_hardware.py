@@ -1,6 +1,7 @@
 import logging
 import time
-import pyvisa
+
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
 
 class SR860_Hardware:
@@ -10,16 +11,25 @@ class SR860_Hardware:
     """
 
     # ---------------- initialisation ----------------
-    def __init__(self, address: str):
+    def __init__(self, address: str, visa_runtime: VisaRuntime | None = None):
         """
         address : VISA resource string, e.g. 'GPIB0::12::INSTR'
         """
         self._address = address
-        rm = pyvisa.ResourceManager()
-        self._vi = rm.open_resource(self._address)
-        self._vi.write_termination = '\n'
-        self._vi.read_termination = '\n'
-        self._vi.timeout = 100
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self._visa_owner = f"SR860:{id(self):x}"
+        self._visa_lease: VisaResourceLease | None = None
+        lease = self.visa_runtime.open_resource(self._visa_owner, self._address)
+        try:
+            self._vi = lease.resource
+            self._vi.write_termination = '\n'
+            self._vi.read_termination = '\n'
+            self._vi.timeout = 100
+        except Exception:
+            lease.close()
+            self._vi = None
+            raise
+        self._visa_lease = lease
 
     # -------------- low-level helpers ---------------
     def _write(self, cmd: str):
@@ -572,15 +582,23 @@ class SR860_Hardware:
         except Exception:
             pass  # ignore issues during buffer clear
 
-        try:
-            self._vi.close()  # type: ignore[attr-defined]
-        except Exception:
-            pass  # ignore errors if already closed
+        if self._visa_lease is not None:
+            self._visa_lease.close()
+        else:
+            try:
+                self._vi.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass  # ignore errors if already closed
 
         self._vi = None
+        self._visa_lease = None
 
 
 if __name__ == "__main__":
+    raise SystemExit(
+        "Direct hardware demonstrations are disabled; use a reviewed ZMeter "
+        "profile with an injected VisaRuntime."
+    )
 
     # ---------- comprehensive functional test ----------
     ADDRESS = "GPIB0::7::INSTR"          # edit for your setup

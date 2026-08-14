@@ -1,5 +1,6 @@
 from PyQt6 import QtCore
 from .keithley24xx_hardware import Keithly24xxHardware
+from core.shared_runtime.visa import VisaRuntime
 import numpy as np
 import time
 import re
@@ -10,9 +11,10 @@ class Keithley24xxLogic(QtCore.QThread):
     sig_on_off = QtCore.pyqtSignal(object)
     sig_last_set = QtCore.pyqtSignal(object)
 
-    def __init__(self):
+    def __init__(self, visa_runtime: VisaRuntime | None = None):
         QtCore.QThread.__init__(self)
-        self.k24xxHardware = Keithly24xxHardware()
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self.k24xxHardware = Keithly24xxHardware(self.visa_runtime)
         self.addr = ""
         self.next_pos = 0
         self.reset_flags()
@@ -224,11 +226,4 @@ class Keithley24xxLogic(QtCore.QThread):
             self.reset()
         self.reset_flags()
 
-
-if __name__ == "__main__":
-    addr = 'GPIB1::19::INSTR'
-    k = Keithley24xxLogic()
-    k.initialize(addr=addr)
-    k.set_direct_source_voltage(0)
-    print("Success A")
-    k.ramp_voltage_to(2)
+# Direct hardware demonstration entry point intentionally removed.

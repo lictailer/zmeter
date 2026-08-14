@@ -2,9 +2,9 @@
 
 ## Purpose and status
 
-This package controls a Keithley 24xx-family source-measure unit through PyVISA. It supports voltage or current sourcing, voltage or current sensing, a software voltage ramp, live UI reads, and output shutdown on close. It has no focused automated tests or recorded model-by-model hardware validation in the repository.
+This package controls a Keithley 24xx-family source-measure unit through the shared `VisaRuntime`. It supports voltage or current sourcing, voltage or current sensing, a software voltage ramp, live UI reads, and output shutdown on close. Shared-session lifecycle and offscreen construction have fake coverage; model-by-model hardware validation remains pending.
 
-Constructing the widget enumerates VISA resources. Do not instantiate it during hardware-independent tests.
+Constructing the widget does not create a ResourceManager or enumerate. The operator must click **Refresh VISA** for worker-thread discovery. Disconnect closes only this device's session; the manager closes at provider shutdown.
 
 ## Scan channels
 

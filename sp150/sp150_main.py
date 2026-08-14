@@ -6,6 +6,8 @@ from pathlib import Path
 
 from PyQt6 import QtWidgets, uic
 
+from core.shared_runtime.visa import VisaRuntime
+
 from .sp150_hardware import SP150Hardware
 from .sp150_logic import SP150Logic
 
@@ -14,6 +16,7 @@ class SP150(QtWidgets.QWidget):
     def __init__(
         self,
         hardware: SP150Hardware | None = None,
+        visa_runtime: VisaRuntime | None = None,
         move_timeout_s: float = 120.0,
         poll_interval_s: float = 0.25,
         completion_tolerance_nm: float = 0.1,
@@ -21,7 +24,7 @@ class SP150(QtWidgets.QWidget):
         super().__init__()
         uic.loadUi(str(Path(__file__).with_name("sp150.ui")), self)
         self.logic = SP150Logic(
-            hardware=hardware,
+            hardware=hardware or SP150Hardware(visa_runtime=visa_runtime),
             move_timeout_s=move_timeout_s,
             poll_interval_s=poll_interval_s,
             completion_tolerance_nm=completion_tolerance_nm,

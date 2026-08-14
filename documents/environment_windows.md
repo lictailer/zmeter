@@ -53,7 +53,13 @@ The current startup profile is `start_zmeter.py`. It controls registered device 
 
 `scan_range_limits.json` is loaded from the repository root by default. UI files are loaded relative to the current working directory. The environment YAML contains a machine-specific exported `prefix`; Conda normally creates the named environment from `name`, and maintainers should review/remove hardcoded export prefixes when regenerating the file.
 
-Environment variables or `PATH` additions required by a vendor DLL belong in the relevant device README. Do not add a global variable or copy a DLL until its origin, architecture, loading rule, and licensing are understood.
+Shared Kinesis does not use an environment variable, global `PATH` mutation,
+Program Files fallback, or device-local DLL search. Populate the ignored
+`core/shared_runtime/vendor/thorlabs_kinesis/` directory from one matching
+reviewed 64-bit release and keep its tracked manifest synchronized. Other
+vendor families remain device-specific until a separate typed adapter is
+approved. Do not copy a DLL until origin, architecture, loading rule, and
+licensing are understood.
 
 ## PowerPoint/COM
 
