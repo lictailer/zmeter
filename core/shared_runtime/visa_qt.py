@@ -1,10 +1,14 @@
-"""Qt worker/controller for explicit, off-UI-thread VISA discovery."""
+"""Qt worker/controller for automatic, off-UI-thread VISA discovery."""
 
 from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
 from .visa import VisaRuntime
+
+
+ADDRESS_MINIMUM_WIDTH = 320
+ADDRESS_HORIZONTAL_PADDING = 48
 
 
 class VisaDiscoveryWorker(QtCore.QObject):
@@ -70,7 +74,7 @@ class VisaDiscoveryController(QtCore.QObject):
 
 
 class VisaResourceRefresh(QtCore.QObject):
-    """Add and manage an explicit Refresh button for a VISA address combo."""
+    """Populate and size a VISA address combo without blocking the UI thread."""
 
     def __init__(
         self,
@@ -90,6 +94,8 @@ class VisaResourceRefresh(QtCore.QObject):
             lambda busy: self.button.setEnabled(not busy)
         )
         self._insert_button(parent)
+        self._resize_address_selector()
+        QtCore.QTimer.singleShot(0, self.controller.refresh)
 
     @QtCore.pyqtSlot(tuple)
     def _replace_resources(self, resources: tuple[str, ...]) -> None:
@@ -100,11 +106,29 @@ class VisaResourceRefresh(QtCore.QObject):
             self.combo_box.addItem(current)
         if current:
             self.combo_box.setCurrentText(current)
+        self._resize_address_selector()
         self.button.setToolTip(f"Found {len(resources)} VISA resource(s)")
 
     @QtCore.pyqtSlot(str)
     def _show_error(self, message: str) -> None:
         self.button.setToolTip(f"VISA discovery failed: {message}")
+
+    def _resize_address_selector(self) -> None:
+        texts = [
+            self.combo_box.itemText(index)
+            for index in range(self.combo_box.count())
+        ]
+        text_width = max(
+            (self.combo_box.fontMetrics().horizontalAdvance(text) for text in texts),
+            default=0,
+        )
+        width = max(
+            ADDRESS_MINIMUM_WIDTH,
+            text_width + ADDRESS_HORIZONTAL_PADDING,
+        )
+        self.combo_box.setMinimumWidth(width)
+        self.combo_box.view().setMinimumWidth(width)
+        self.combo_box.view().setTextElideMode(QtCore.Qt.TextElideMode.ElideNone)
 
     def _insert_button(self, parent: QtWidgets.QWidget) -> None:
         container = self.combo_box.parentWidget() or parent

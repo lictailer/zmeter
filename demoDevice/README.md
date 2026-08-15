@@ -4,7 +4,7 @@
 
 `demoDevice` is an older template/simulator and is not the maintained reference integration. Use [mockDevice](../mockDevice/README.md) for new device work.
 
-The package now uses normal relative imports and an injected `VisaRuntime` backed by `DummyResourceManager`. It never imports or monkey-patches the real PyVISA manager. Construction performs no discovery; the explicit Refresh button lists only the dummy resource.
+The package now uses normal relative imports and an injected `VisaRuntime` backed by `DummyResourceManager`. It never imports or monkey-patches the real PyVISA manager. After construction, its address selector schedules dummy-resource discovery for the next Qt event-loop turn; the manual Refresh button remains available.
 
 ## Intended behavior
 

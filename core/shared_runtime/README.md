@@ -16,9 +16,11 @@ complete, matching 64-bit release and verify it against `manifest.json` before
 connecting. Do not mix files from device packages or installed releases.
 
 Constructing `RuntimeServices`, `VisaRuntime`, or `KinesisRuntime` is side-effect
-free. PyVISA is imported only when VISA enumeration or opening is explicitly
-requested. Kinesis is validated and loaded only when a device explicitly asks
-for native or managed bindings.
+free. A widget with a shared VISA address selector schedules background
+enumeration for the next Qt event-loop turn and retains its manual refresh
+button; creating the runtime alone does not enumerate. The selector and its
+popup expand to show the longest discovered address. Kinesis is validated and
+loaded only when a device explicitly asks for native or managed bindings.
 
 Device sessions own leases. Device disconnect closes/releases only its lease.
 The startup/profile boundary terminates devices first, then calls provider

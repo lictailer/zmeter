@@ -24,8 +24,10 @@ start_zmeter.py
 - The startup/profile boundary owns one `RuntimeServices` provider. Enabled
   VISA devices receive `provider.visa`; K10CR1 and BBD30X receive
   `provider.kinesis`. Devices terminate before provider shutdown.
-- Runtime construction is side-effect free. VISA managers, Kinesis validation,
-  `clr`, DLL loading, and discovery remain lazy until an explicit action.
+- Runtime construction is side-effect free. Dropdown-based VISA widgets
+  schedule worker-thread discovery for the next Qt event-loop turn; this may
+  create the shared manager but does not open a device session. Kinesis
+  validation, `clr`, DLL loading, and device connections remain explicit.
 - `MainWindow` owns the registered equipment map, discovered scan channels, global range configuration, artificial channels, the shared `DeviceCommandRouter`, and application shutdown.
 - `ScanList` owns available, queued, manual, and completed items. Its worker runs queue items sequentially and exposes stop-now and stop-after-current behavior.
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.

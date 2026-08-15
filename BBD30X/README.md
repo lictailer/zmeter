@@ -30,6 +30,12 @@ Program Files, `PATH`, or device-local fallback. Importing the package and
 constructing its widget do not import `pythonnet`, load Kinesis, build the
 device list, or connect hardware. Those actions begin only after `connect()`.
 
+The widget's serial field starts with the convenience default `103529564`.
+This value does not trigger connection and an explicit `connect(serial)` value
+still replaces it. Verify that the displayed serial belongs to the intended
+controller before every connection; a checked-in default is not device
+identity validation.
+
 ## Laboratory-profile example
 
 Keep the controller serial in local profile configuration and inject the same
@@ -48,8 +54,9 @@ equips_set_channels = {"Delay_Stage": ["pos"]}
 equips_get_channels = {"Delay_Stage": ["pos"]}
 ```
 
-The checked-in `start_zmeter.py` intentionally remains mock-only. Do not commit
-laboratory serials or enable this package in the shared startup profile.
+The checked-in `start_zmeter.py` intentionally remains mock-only. Keep any
+additional laboratory serials in local profile configuration and do not enable
+this package in the shared startup profile.
 
 ## Scan channel and units
 

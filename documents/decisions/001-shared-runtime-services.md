@@ -55,8 +55,10 @@ layer remains visibly separate from device packages.
 The startup/profile boundary will create one `RuntimeServices` provider, inject
 the required typed service into enabled devices, and arrange for provider
 shutdown only after device sessions have been terminated. Constructing the
-provider or a device widget must not import optional vendor runtimes, enumerate
-hardware, or connect to a device.
+provider remains side-effect free. Dropdown-based VISA widgets schedule
+worker-thread enumeration for the next Qt event-loop turn, but widget startup
+must not open an instrument session or connect to a device. Optional Kinesis
+runtimes remain unloaded until explicit connection.
 
 The common layer will provide:
 
@@ -109,8 +111,8 @@ release. The tracked manifest validates the required local files before load.
   instrument sessions have been closed;
 - reject duplicate ownership of one VISA address by default, with any exception
   requiring an explicit device contract and serialization policy;
-- keep resource enumeration an explicit user/profile operation rather than an
-  import or construction side effect;
+- let dropdown-based device widgets enumerate automatically in a worker thread
+  after the Qt event loop starts, while preserving explicit manual refresh;
 - support injected fake managers without globally monkey-patching `pyvisa`.
 
 Sharing the VISA manager does not imply sharing instrument sessions or assuming
@@ -136,8 +138,8 @@ The initial change will not alter scan channels, device units, hardware limits,
 protocol commands, startup-profile activation, or persisted scan formats.
 
 Shared operation is the only maintained path for migrated packages. Old
-device-local loaders, manager factories, constructor enumeration, and hidden
-legacy switches are not retained. Each vendor family can be restored
+device-local loaders, manager factories, blocking constructor enumeration, and
+hidden legacy switches are not retained. Each vendor family can be restored
 independently from Git history if user bench validation fails.
 
 ### Later candidates
@@ -230,8 +232,8 @@ open laboratory sessions.
 Required implementation evidence includes:
 
 - static tests for canonical path/backend normalization and version conflicts;
-- fake-runtime tests proving imports and widget construction have no hardware
-  side effects;
+- fake-runtime tests proving imports remain side-effect free and automatic
+  dropdown enumeration never opens an instrument session;
 - Kinesis tests covering both device load orders, one-time loading, conflicting
   path rejection, retained DLL-directory handles, partial-load errors, and
   serialized shared initialization;

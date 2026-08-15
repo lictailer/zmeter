@@ -4,7 +4,7 @@
 
 `sr830_v2` is the preferred SR830 integration. It uses the shared `VisaRuntime` while retaining its widget/logic/hardware protocol behavior, identity checking, logging, and monitor coordination. Shared-session lifecycle and offscreen construction have fake coverage; bench validation remains pending.
 
-Constructing the widget does not create a ResourceManager or enumerate. The operator must click **Refresh VISA** for worker-thread discovery. Disconnect closes only its session lease.
+After construction, the widget schedules one VISA enumeration on the next Qt event-loop turn. Discovery runs in a worker thread, populates a width-adjusted address dropdown, and never opens an instrument session. The operator can still click **Refresh VISA**. Disconnect closes only its session lease.
 
 ## Current scan discovery
 

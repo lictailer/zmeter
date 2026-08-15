@@ -212,7 +212,19 @@ class BBD30XTests(unittest.TestCase):
         widget = BBD30X(hardware=fake)
         self.addCleanup(widget.close)
         self.assertIs(sys.modules.get("clr"), before_clr)
+        self.assertEqual(widget.lineEdit.text(), "103529564")
         self.assertEqual(fake.connect_calls, [])
+
+    def test_explicit_serial_overrides_the_widget_default(self):
+        fake = FakeHardware()
+        widget = BBD30X(hardware=fake)
+        self.addCleanup(widget.close)
+
+        widget.connect("876543210")
+
+        self.assertTrue(widget.logic.wait(1000))
+        self.assertEqual(widget.lineEdit.text(), "876543210")
+        self.assertEqual(fake.connect_calls, ["876543210"])
 
     def test_current_scanner_discovers_only_pos(self):
         widget = BBD30X(hardware=FakeHardware())
