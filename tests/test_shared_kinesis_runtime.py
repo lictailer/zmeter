@@ -15,13 +15,24 @@ from core.shared_runtime.kinesis import (
 )
 
 
+BBD30X_TRANSITIVE_FILES = (
+    "Thorlabs.MotionControl.Tools.Logging.dll",
+    "Thorlabs.MotionControl.Tools.Common.dll",
+    "Thorlabs.MotionControl.Tools.WPF.dll",
+    "Thorlabs.MotionControl.PrivateInternal.dll",
+)
+BBD30X_MANAGED_FILES = BBD30X_TRANSITIVE_FILES + (
+    "Thorlabs.MotionControl.DeviceManagerCLI.dll",
+    "Thorlabs.MotionControl.GenericMotorCLI.dll",
+    "Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll",
+)
+
+
 def make_runtime_dir(root: Path, names: tuple[str, ...] | None = None) -> Path:
     names = names or (
         "Thorlabs.MotionControl.DeviceManager.dll",
-        "Thorlabs.MotionControl.DeviceManagerCLI.dll",
-        "Thorlabs.MotionControl.GenericMotorCLI.dll",
+        *BBD30X_MANAGED_FILES,
         "Thorlabs.MotionControl.Benchtop.BrushlessMotor.dll",
-        "Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll",
         "Thorlabs.MotionControl.IntegratedStepperMotors.dll",
         "ftd2xx.dll",
         "BBD_Stages.xml",
@@ -81,6 +92,12 @@ class KinesisRuntimeTests(unittest.TestCase):
         self.assertEqual(len(native), 1)
         self.assertEqual(len(managed), 1)
         self.assertEqual(directories, [str(self.runtime_dir.resolve())])
+        managed_base, managed_paths = managed[0]
+        self.assertEqual(managed_base, self.runtime_dir.resolve())
+        self.assertEqual(
+            tuple(path.name for path in managed_paths),
+            BBD30X_MANAGED_FILES,
+        )
 
     def test_both_load_orders_work_with_one_time_loading(self):
         for order in (("native", "managed"), ("managed", "native")):
@@ -106,6 +123,53 @@ class KinesisRuntimeTests(unittest.TestCase):
         runtime, *_ = self.make_runtime(process_bits=32)
         with self.assertRaisesRegex(KinesisRuntimeError, "64-bit"):
             runtime.load_native("k10cr1")
+
+    def test_each_managed_dependency_is_required_and_hash_checked(self):
+        for filename in BBD30X_TRANSITIVE_FILES:
+            for failure, pattern in (("missing", "missing"), ("altered", "mismatch")):
+                with self.subTest(filename=filename, failure=failure):
+                    with tempfile.TemporaryDirectory() as temp:
+                        runtime_dir = make_runtime_dir(Path(temp))
+                        target = runtime_dir / filename
+                        if failure == "missing":
+                            target.unlink()
+                        else:
+                            target.write_bytes(b"changed")
+                        runtime = KinesisRuntime(
+                            runtime_dir=runtime_dir,
+                            native_loader=lambda _path: object(),
+                            managed_loader=lambda _base, _paths: (1, 2, 3, 4, 5),
+                            dll_directory_loader=lambda _path: object(),
+                            selection_guard=KinesisProcessSelection(),
+                        )
+                        with self.assertRaisesRegex(KinesisRuntimeError, pattern):
+                            runtime.load_managed("bbd30x")
+
+    def test_checked_in_vendor_manifest_validates_without_loading_dlls(self):
+        vendor_dir = (
+            Path(__file__).resolve().parents[1]
+            / "core"
+            / "shared_runtime"
+            / "vendor"
+            / "thorlabs_kinesis"
+        )
+        managed_calls = []
+        runtime = KinesisRuntime(
+            runtime_dir=vendor_dir,
+            native_loader=lambda _path: self.fail("native loader must not run"),
+            managed_loader=lambda base, paths: managed_calls.append((base, paths))
+            or (1, 2, 3, 4, 5),
+            dll_directory_loader=lambda _path: object(),
+            selection_guard=KinesisProcessSelection(),
+        )
+
+        self.assertEqual(runtime.load_managed("bbd30x"), (1, 2, 3, 4, 5))
+        self.assertEqual(len(managed_calls), 1)
+        self.assertEqual(
+            tuple(path.name for path in managed_calls[0][1]),
+            BBD30X_MANAGED_FILES,
+        )
+        self.assertTrue(runtime.diagnostics["validated"])
 
     def test_partial_load_failure_is_terminal(self):
         runtime, *_ = self.make_runtime(native_loader=lambda _path: (_ for _ in ()).throw(OSError("bad dll")))

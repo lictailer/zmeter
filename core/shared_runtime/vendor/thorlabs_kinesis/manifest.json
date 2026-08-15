@@ -5,6 +5,10 @@
   "source": "user-provided complete Kinesis folder",
   "files": [
     {"name": "Thorlabs.MotionControl.DeviceManager.dll", "size": 3247000, "version": "1.14.58.26351", "sha256": "6a554f0eb124c6ae0993a38ed94a522764f390c60b59beed011b9213fb2807ee"},
+    {"name": "Thorlabs.MotionControl.Tools.Logging.dll", "size": 43928, "version": "1.0.0.26351", "sha256": "a6ef0f604bb2baf3a5fba4b32e331e61a95bfcc4649f0d293ed8ebd07d44fb4a"},
+    {"name": "Thorlabs.MotionControl.Tools.Common.dll", "size": 79256, "version": "1.0.0.26351", "sha256": "f8efa0ba2f80cb42e2f2a6d16366a73fd6b063d626e1c60701ad22ed3676a9be"},
+    {"name": "Thorlabs.MotionControl.Tools.WPF.dll", "size": 46488, "version": "1.0.0.26351", "sha256": "cd570fc4c965ac16a6887d5cf59300ab7b31ba1c43f2eb546487bcae71794ce9"},
+    {"name": "Thorlabs.MotionControl.PrivateInternal.dll", "size": 432024, "version": "1.14.58.26351", "sha256": "27d7f383467a8e5757f1fb36028ab4d182664c6cfbbd928861a1e3f40b72abe3"},
     {"name": "Thorlabs.MotionControl.DeviceManagerCLI.dll", "size": 800152, "version": "1.14.58.26351", "sha256": "9d85efffc391ce3ff4a026c9ffeb9736a7c7f56b1a38ca85802d231cd9e8ef09"},
     {"name": "Thorlabs.MotionControl.GenericMotorCLI.dll", "size": 535448, "version": "1.14.58.26351", "sha256": "1f0ad1806054650f75900e38ece969786629575672761296ff5c7039eaeb8530"},
     {"name": "Thorlabs.MotionControl.Benchtop.BrushlessMotor.dll", "size": 565144, "version": "1.14.58.26351", "sha256": "0afee6ee25836aac710ea7cdad31b0780434696f87fdc74e952e29eed3cfd3f6"},

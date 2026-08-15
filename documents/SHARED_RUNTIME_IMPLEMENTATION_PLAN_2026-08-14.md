@@ -95,7 +95,8 @@ The services will be lazy, relocatable, independently replaceable, and injected 
 ## Assumptions
 
 - The complete matching Kinesis runtime is sourced from `C:\Users\Taylo\Documents\GitHub\Kinesis`; implementation inventories it without loading it.
-- Vendor DLLs remain local and ignored by Git; manifests and population instructions are tracked.
+- The reviewed Kinesis DLL/XML set, manifest, and population instructions are
+  tracked together; updates replace and verify one matching release as a unit.
 - Shared operation is the default and only maintained mode. Restoration of one legacy family, if needed, will be performed later from Git history without changing the other runtime service.
 - Public device class names and scan-facing channels remain stable, but obsolete transport factories, module-level binding APIs, and hardware demonstration entry points need not be preserved.
 - Changes remain local and unstaged; no commit, push, PR, or hardware access is included.

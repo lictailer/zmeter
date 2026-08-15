@@ -17,7 +17,8 @@ The maintainer clarified the remaining scope:
 - Removed paths include migrated-device `ResourceManager` ownership,
   constructor enumeration, demoDevice's global PyVISA patch, K10CR1's
   import-time/machine-specific loader, BBD30X's search/PATH loader, and five
-  package-local Kinesis DLL copies. Canonical local DLLs remain ignored.
+  package-local Kinesis DLL copies. The canonical shared Kinesis DLL set and
+  manifest are tracked together.
 - After user bench validation and one stable lab-use cycle, consider removing
   legacy `sr830/`, pruning unused K10CR1 bindings, and folding its remaining
   small lazy binding helper into the maintained adapter.

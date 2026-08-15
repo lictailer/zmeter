@@ -10,9 +10,9 @@ The standard local vendor layout is:
 core/shared_runtime/vendor/<runtime-name>/
 ```
 
-Instructions and manifests are tracked. Proprietary DLLs and vendor XML files
-are local and ignored. For Kinesis, populate `vendor/thorlabs_kinesis/` from one
-complete, matching 64-bit release and verify it against `manifest.json` before
+The reviewed Kinesis DLLs, vendor XML files, setup instructions, and manifest
+are tracked together. The contents of `vendor/thorlabs_kinesis/` must come from
+one complete, matching 64-bit release and verify against `manifest.json` before
 connecting. Do not mix files from device packages or installed releases.
 
 Constructing `RuntimeServices`, `VisaRuntime`, or `KinesisRuntime` is side-effect
@@ -34,10 +34,16 @@ instrument responses; treat addresses and runtime paths as local diagnostics.
 ## Updating and restoring
 
 1. Close every ZMeter/Python process.
-2. Copy one complete reviewed release into `vendor/thorlabs_kinesis/`.
-3. Update the tracked manifest version, sizes, and SHA-256 hashes together.
+2. Replace the tracked files in `vendor/thorlabs_kinesis/` from one complete
+   reviewed release.
+3. Update the manifest version, sizes, and SHA-256 hashes in the same change.
 4. Run fake/static validation before any bench test.
 5. Perform the device README's **User-executed hardware test**.
+
+Deploy the complete `vendor/thorlabs_kinesis/` directory, including its
+manifest, rather than copying an individual DLL named by the first load error.
+For example, refresh the entire directory in
+`D:\Xuguo\2026.08.14_sharedruntimes_test` before bench validation.
 
 To restore a runtime family after a failed bench test, revert only that typed
 service and its device migrations from Git history. Do not add hidden legacy

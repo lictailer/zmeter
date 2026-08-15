@@ -19,7 +19,8 @@ The conversion uses 49,152,000 device counts per 360 degrees. The setter applies
 
 - Python: PyQt6;
 - system: Thorlabs Kinesis runtime/driver matching process bitness;
-- native libraries: the complete manifest-listed Kinesis 1.14.58.26351 set in the ignored shared vendor folder;
+- native libraries: the complete tracked, manifest-verified Kinesis
+  1.14.58.26351 set in the shared vendor folder;
 - configuration: exact device serial, homing policy, allowed angular range, velocity, acceleration, and experiment-specific collision constraints.
 
 The connection path builds the Kinesis device list, opens the serial-numbered device, reads hardware information, and overwrites velocity parameters. Homing and movement are blocking polling operations executed in the device thread.

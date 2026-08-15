@@ -93,10 +93,10 @@ hardware manager.
   unloaded or replaced;
 - remain loaded until process shutdown.
 
-The service does not distribute proprietary Kinesis binaries. The laboratory
-populates the ignored repo-relative
-`core/shared_runtime/vendor/thorlabs_kinesis/` directory from one reviewed
-release. The tracked manifest validates the required local files before load.
+The repository tracks one reviewed Kinesis binary set in the repo-relative
+`core/shared_runtime/vendor/thorlabs_kinesis/` directory. The manifest validates
+the required files before load; every native and managed dependency must come
+from that same release and directory.
 
 ### VisaRuntime
 

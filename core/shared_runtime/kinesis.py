@@ -83,6 +83,10 @@ class KinesisRuntime:
     }
     MANAGED_COMPONENTS = {
         "bbd30x": (
+            "Thorlabs.MotionControl.Tools.Logging.dll",
+            "Thorlabs.MotionControl.Tools.Common.dll",
+            "Thorlabs.MotionControl.Tools.WPF.dll",
+            "Thorlabs.MotionControl.PrivateInternal.dll",
             "Thorlabs.MotionControl.DeviceManagerCLI.dll",
             "Thorlabs.MotionControl.GenericMotorCLI.dll",
             "Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll",

@@ -19,16 +19,26 @@ module for unattended motion or as an emergency-stop mechanism.
 - the optional `pythonnet` package, which provides `clr` and `System`;
 - the complete matching 64-bit Kinesis 1.14.58.26351 files listed by
   `core/shared_runtime/vendor/thorlabs_kinesis/manifest.json`, including:
+  - `Thorlabs.MotionControl.Tools.Logging.dll`;
+  - `Thorlabs.MotionControl.Tools.Common.dll`;
+  - `Thorlabs.MotionControl.Tools.WPF.dll`;
+  - `Thorlabs.MotionControl.PrivateInternal.dll`;
   - `Thorlabs.MotionControl.DeviceManagerCLI.dll`;
   - `Thorlabs.MotionControl.GenericMotorCLI.dll`;
   - `Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll`.
 
-Neither `pythonnet` nor proprietary Kinesis DLLs are added to the maintained
-Conda environment or Git. Copy the manifest-listed files from one reviewed
-release into the ignored shared vendor folder. There is no environment,
-Program Files, `PATH`, or device-local fallback. Importing the package and
-constructing its widget do not import `pythonnet`, load Kinesis, build the
-device list, or connect hardware. Those actions begin only after `connect()`.
+`pythonnet` remains an optional dependency outside the maintained Conda
+environment. The reviewed Kinesis files and their manifest are tracked in the
+shared vendor folder. There is no environment, Program Files, `PATH`, or
+device-local fallback. Importing the package and constructing its widget do not
+import `pythonnet`, load Kinesis, build the device list, or connect hardware.
+Those actions begin only after `connect()`.
+
+When updating a deployed checkout such as
+`D:\Xuguo\2026.08.14_sharedruntimes_test`, copy the complete
+`core/shared_runtime/vendor/thorlabs_kinesis/` directory and manifest. Copying
+only `Thorlabs.MotionControl.Tools.Logging.dll` can expose the next missing
+transitive dependency instead of repairing the runtime.
 
 The widget's serial field starts with the convenience default `103529564`.
 This value does not trigger connection and an explicit `connect(serial)` value
@@ -126,8 +136,8 @@ hardware emergency stop.
 
 ## Errors and troubleshooting
 
-- A manifest missing/hash/size error means the ignored shared Kinesis folder is
-  absent, incomplete, or does not match the tracked reviewed release.
+- A manifest missing/hash/size error means the shared Kinesis folder is absent,
+  incomplete, or does not match the tracked reviewed release.
 - An `ImportError` naming `pythonnet` means the optional Python/.NET bridge is
   unavailable.
 - A runtime load error after manifest validation commonly indicates incompatible

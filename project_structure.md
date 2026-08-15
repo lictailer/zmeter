@@ -30,7 +30,7 @@ The checked-in startup profile instantiates two `mockDevice.MockDevice` widgets.
 | `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing |
 | `core/shared_runtime/` | Lazy typed VISA/Kinesis ownership, leases, diagnostics, shutdown, fake injection, and local vendor manifests |
-| `core/shared_runtime/vendor/thorlabs_kinesis/` | Ignored local Kinesis 1.14.58.26351 files plus tracked manifest/setup instructions |
+| `core/shared_runtime/vendor/thorlabs_kinesis/` | Tracked, manifest-verified Kinesis 1.14.58.26351 runtime and setup instructions |
 | `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |
 | `core/all_plot_settings.py`, `core/all_plots.py` | Plot configuration and presentation |
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
