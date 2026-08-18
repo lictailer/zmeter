@@ -1,6 +1,5 @@
 import numpy as np
 from PyQt6 import QtCore, QtWidgets, uic
-import time
 
 try:
     from .nidaq_hardware import NIDAQHardWare
@@ -12,6 +11,7 @@ class NIDAQLogic(QtCore.QThread):
     sig_new_write = QtCore.pyqtSignal(object)
     sig_new_read = QtCore.pyqtSignal(object)
     sig_name = QtCore.pyqtSignal(object)
+    AO_CHANNELS = ("AO0", "AO1")
 
     def __init__(self):
         QtCore.QThread.__init__(self)
@@ -31,17 +31,14 @@ class NIDAQLogic(QtCore.QThread):
             self.close()
         self.dev_name = dev_name
 
-        self.AO_channels = ["AO0", "AO1"]
+        self.AO_channels = list(self.AO_CHANNELS)
         for ch in self.AO_channels:
             ch = "/" + self.dev_name + "/" + ch
             self.daq.setup_single_AO_task(ch)
         self.next_channel = "AO0"
-        self.target_AO = {"AO0": 0.0, "AO1": 0.0, "AO2": 0.0, "AO3": 0.0}
+        self.target_AO = {channel: 0.0 for channel in self.AO_channels}
         self.hold_AO = {
-            "AO0": 0.0,
-            "AO1": 0.0,
-            "AO2": 0.0,
-            "AO3": 0.0,
+            channel: 0.0 for channel in self.AO_channels
         }  # used for coupled channels like rotator
 
         self.AI_channels = ["AI0", "AI1", "AI2", "AI3"]
@@ -53,7 +50,6 @@ class NIDAQLogic(QtCore.QThread):
         self.setup_sample_counter()
 
         self.reset_flags()
-        self.wait_sec = 10
         self.is_initialized = True
         self.sig_name.emit(dev_name)
 
@@ -89,14 +85,6 @@ class NIDAQLogic(QtCore.QThread):
 
     def setup_channel(self, channel):
         self.next_channel = channel
-
-    def setup_wait_sec(self, sec):
-        self.wait_sec = sec
-
-    def emit_pulse(self):
-        for a in [5, 5, 5, 5, 5, 0, 0, 0, 0, 0]:
-            self.daq.write_single_AO_task(f"/{self.dev_name}/AO3", a)
-        time.sleep(self.wait_sec)
 
     #############        end of AO      ###############
 
@@ -171,9 +159,6 @@ class NIDAQLogic(QtCore.QThread):
 
         elif self.job == "write_AO":
             self.setup_AO(self.next_channel, self.target_AO[self.next_channel])
-
-        elif self.job == "pulse":
-            self.emit_pulse()
 
         self.reset_flags()
         self.job = ""

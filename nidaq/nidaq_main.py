@@ -14,7 +14,7 @@ class NIDAQ(QtWidgets.QWidget):
 
     def __init__(self):
         super(NIDAQ, self).__init__()
-        uic.loadUi(r"nidaq/nidaq_new.ui", self)
+        uic.loadUi(r"nidaq/nidaq.ui", self)
         self.logic = NIDAQLogic()
 
         self.connect_sig_slot()
@@ -97,8 +97,6 @@ class NIDAQ(QtWidgets.QWidget):
         labels = [
             self.last_set_pos_label,
             self.last_set_pos_label_2,
-            self.last_set_pos_label_3,
-            self.last_set_pos_label_4,
         ]
         id, d = info
         labels[id].setText(f"last set to: {d:+.4f} V")
@@ -109,8 +107,6 @@ class NIDAQ(QtWidgets.QWidget):
         val = [
             self.pos_to_go_doubleSpinBox,
             self.pos_to_go_doubleSpinBox_2,
-            self.pos_to_go_doubleSpinBox_3,
-            self.pos_to_go_doubleSpinBox_4,
         ][AO_index].value()
         ch = self.logic.AO_channels[AO_index]
         self.logic.setup_channel(ch)
@@ -127,8 +123,6 @@ class NIDAQ(QtWidgets.QWidget):
         plus_minus_box = [
             self.step_doubleSpinBox,
             self.step_doubleSpinBox_2,
-            self.step_doubleSpinBox_3,
-            self.step_doubleSpinBox_4,
         ]
         if fun == "m":
             self.logic.assign_AO_target(
