@@ -182,3 +182,59 @@ Copy and complete:
 - Ready for user review: Yes/No
 - Remote/main merge actions performed: None unless separately authorized
 ```
+
+## 2026-08-18 — Phase 0 baseline
+
+- Agent/operator: Codex implementation task
+- Authorized repository root: `C:\Users\Taylo\Documents\GitHub\zmeter`
+- Current branch: `codex/structural_update_vibeeee`
+- Current commit at inspection: `b98a1666aad2132316f535738457df928f3147ac`
+- Upstream: None configured for the structure branch
+- Approved `main` baseline commit: `b98a1666aad2132316f535738457df928f3147ac` (local `main` and `origin/main` matched at inspection)
+- Recovery tag and commit: local annotated tag `pre-structure-v2` at `b98a1666aad2132316f535738457df928f3147ac`; not pushed
+- Initial `git status --short --branch`: branch header plus only the expected untracked `documents/restructure_manual/` copy; the five files matched the staged manual by SHA-256
+- Python environment/version/executable: `zmeter_May2026`; Python 3.12.12; `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe`; PyQt6/Qt 6.9.1; NumPy 2.4.1
+- Checked-in startup profile/devices: `start_zmeter.py` created `mock_device_1` then `mock_device_2`; backup disabled; default save path `<repository>\data` when launched from the repository root
+- Relevant pre-existing changes or failures: the manual copy was expected user-supplied work and was preserved in commit `5092f94`; the PATH Python 3.12.10 lacked PyQt6 and NumPy, producing eight import errors before the maintained environment was selected
+- Hardware-impact assessment: none; imports, fixtures, and setup were inspected before execution, all validation used fakes/simulators/offscreen Qt, and no real device profile, discovery backend, vendor loader, or hardware command was run
+- Persistence-impact assessment: none; one representative scalar JSON was written only inside an OS temporary directory and removed afterward
+
+### Commands and evidence
+
+| Command/check | Evidence level | Result | Files/output created |
+| --- | --- | --- | --- |
+| `git rev-parse --show-toplevel`; `git status --short --branch`; `git branch --show-current`; `git rev-parse HEAD`; `git rev-parse main`; `git merge-base --is-ancestor main HEAD` | Static inspection | Correct root and branch; HEAD equaled `main`; ancestor exit 0 | None |
+| `git remote -v`; `git branch -vv`; `git tag --list 'pre-structure*'` | Static inspection | `origin/main` matched baseline; structure branch had no upstream; no recovery tag initially | None |
+| `python -c "import sys; print(sys.version); print(sys.executable)"` | Environment inspection | PATH Python 3.12.10 at `C:\Users\Taylo\AppData\Local\Programs\Python\Python312\python.exe` | None |
+| `python -B -m unittest discover -s tests -p "test_*.py" -v` | Environment failure; not product evidence | 23 tests passed and 8 modules failed import because PATH Python lacked PyQt6/NumPy | None |
+| `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe -B -m unittest discover -s tests -p "test_*.py" -v` | Hardware-independent unit/mock/offscreen GUI | 61 tests passed in 1.465 s | OS temporary Kinesis fixtures only; removed by tests |
+| `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v` | Mock/simulation/offscreen GUI | 18 tests passed in 0.293 s | None |
+| Offscreen startup/catalog characterization using `RuntimeServices`, `create_equipment()`, and `MainWindow` with an OS temporary save path | Hardware-independent integration | Labels/buttons were `mock_device_1`, `mock_device_2`; each exposed setters `channel_A`, `channel_B`, `ramp_channel_A`, `ramp_channel_B` and getters `channel_A`, `channel_B`, `random_channel`; default and artificial catalogs also matched | OS temporary directory only; removed |
+| Offscreen `Scan.when_save_clicked()` characterization with mock devices, a patched-false `Z:\` existence check, and OS temporary output | Persistence simulation | One JSON written and parsed; top-level keys were `levels`, `data`, `plots`, `name`, `plots_per_page`, `comments`, `scan_log`; scalar sample encoded as `[1.25, NaN]`; comments and list-valued log preserved | One temporary JSON; removed |
+| `git tag -a pre-structure-v2 b98a1666aad2132316f535738457df928f3147ac -m "Recovery point before device-management restructure"` | Local recovery control | Local annotated recovery tag created | Local Git tag only; no remote action |
+| `git diff --check`; `git status --short --branch` before recording this entry | Static inspection | No whitespace errors; only expected manual files present before their first commit | None |
+
+### Baseline decision
+
+- Safe to begin Phase 1: No, pending the two verified contract/current-behavior conflicts recorded below.
+- Blockers or user decisions: decide automatic VISA discovery behavior and unknown configured-channel handling before configuration/registry implementation.
+
+## 2026-08-18 — Scope/architecture decision (pending): automatic VISA discovery
+
+- Question: Must enabled VISA widgets retain their current automatic deferred resource discovery, or must discovery become an explicit operator action?
+- Current verified behavior: `documents/architecture.md` and `tests/test_visa_widget_construction.py` require dropdown VISA widgets to schedule worker-thread resource enumeration on the next Qt event-loop turn after construction. The injected test manager is enumerated but no resource is opened.
+- Options considered: (1) preserve automatic deferred enumeration for enabled VISA widgets while making configuration parsing, disabled entries, registry lookup, and manager construction side-effect free; (2) change all VISA widgets to enumerate only after an explicit operator refresh action.
+- Safety/data/maintenance tradeoffs: option 1 preserves operator behavior but requires a narrow exception to the manual's absolute construction-triggered-enumeration ban; option 2 follows that ban literally but changes established startup behavior across maintained VISA devices.
+- Decision: Pending user approval; no Phase 1 source edits made.
+- User approval reference, if scope changed: Pending.
+- Files/tests/documentation affected: future registry/manager tests, `tests/test_visa_widget_construction.py`, `documents/architecture.md`, and possibly VISA widget implementations.
+
+## 2026-08-18 — Scope/architecture decision (pending): unknown profile channels
+
+- Question: Must an explicit profile channel allowlist containing an unknown channel fail validation, or retain the current silent-skip behavior?
+- Current verified behavior: `MainWindow.filter_scan_channels()` and `documents/device_contract.md` silently ignore unknown requested names. The restructure manual's profile rules and Gate B require unknown explicit channels to be reported/rejected.
+- Options considered: (1) reject the entire profile before device construction and report all unknown channels; (2) preserve silent skipping; (3) accept the profile with warnings.
+- Safety/data/maintenance tradeoffs: option 1 implements deterministic validated configuration and prevents a typo from silently omitting a measurement channel, but changes current startup-filter behavior; option 2 preserves behavior but weakens the approved validated-profile capability; option 3 leaves partially accepted safety-relevant configuration, which the manual otherwise forbids.
+- Decision: Pending user approval; no Phase 1 source edits made.
+- User approval reference, if scope changed: Pending.
+- Files/tests/documentation affected: future configuration models/loader tests, `MainWindow` integration, `documents/device_contract.md`, startup/profile documentation.
