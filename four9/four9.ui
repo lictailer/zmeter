@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Four9Form</class>
+ <widget class="QWidget" name="Four9Form">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>560</width><height>520</height></rect>
+  </property>
+  <property name="windowTitle"><string>Four9</string></property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="connection_groupBox">
+     <property name="title"><string>Connection</string></property>
+     <layout class="QGridLayout" name="connection_gridLayout">
+      <item row="0" column="0"><widget class="QLabel" name="hostTitle_label"><property name="text"><string>Host</string></property></widget></item>
+      <item row="0" column="1"><widget class="QLineEdit" name="host_lineEdit"><property name="text"><string>127.0.0.1</string></property></widget></item>
+      <item row="0" column="2"><widget class="QLabel" name="portTitle_label"><property name="text"><string>Port</string></property></widget></item>
+      <item row="0" column="3">
+       <widget class="QSpinBox" name="port_spinBox">
+        <property name="minimum"><number>1</number></property>
+        <property name="maximum"><number>65535</number></property>
+        <property name="value"><number>5050</number></property>
+       </widget>
+      </item>
+      <item row="1" column="0"><widget class="QLabel" name="connectionTitle_label"><property name="text"><string>Status</string></property></widget></item>
+      <item row="1" column="1"><widget class="QLabel" name="connectionStatus_label"><property name="text"><string>Disconnected</string></property></widget></item>
+      <item row="1" column="2"><widget class="QPushButton" name="connect_pushButton"><property name="text"><string>Connect</string></property></widget></item>
+      <item row="1" column="3"><widget class="QPushButton" name="disconnect_pushButton"><property name="text"><string>Disconnect</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="temperature_groupBox">
+     <property name="title"><string>Temperature Control</string></property>
+     <layout class="QGridLayout" name="temperature_gridLayout">
+      <item row="0" column="0"><widget class="QLabel" name="targetInputTitle_label"><property name="text"><string>Set temperature</string></property></widget></item>
+      <item row="0" column="1">
+       <widget class="QDoubleSpinBox" name="targetTemperature_doubleSpinBox">
+        <property name="suffix"><string> K</string></property>
+        <property name="decimals"><number>3</number></property>
+        <property name="minimum"><double>0.000000000000000</double></property>
+        <property name="maximum"><double>300.000000000000000</double></property>
+        <property name="value"><double>300.000000000000000</double></property>
+       </widget>
+      </item>
+      <item row="0" column="2"><widget class="QPushButton" name="setTemperature_pushButton"><property name="text"><string>Set</string></property></widget></item>
+      <item row="0" column="3"><widget class="QPushButton" name="getTemperature_pushButton"><property name="text"><string>Get Temperature / Status</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="targetTitle_label"><property name="text"><string>Current target</string></property></widget></item>
+      <item row="1" column="1" colspan="3"><widget class="QLabel" name="targetTemperature_label"><property name="text"><string>Unknown</string></property></widget></item>
+      <item row="2" column="0"><widget class="QLabel" name="currentTitle_label"><property name="text"><string>Current temperature</string></property></widget></item>
+      <item row="2" column="1" colspan="3"><widget class="QLabel" name="currentTemperature_label"><property name="text"><string>Unknown</string></property></widget></item>
+      <item row="3" column="0"><widget class="QLabel" name="stableTitle_label"><property name="text"><string>Stable status</string></property></widget></item>
+      <item row="3" column="1" colspan="3"><widget class="QLabel" name="temperatureStatus_label"><property name="text"><string>Unknown</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item><widget class="QLabel" name="logTitle_label"><property name="text"><string>Four9 Log</string></property></widget></item>
+   <item>
+    <widget class="QTextEdit" name="logStatus_textEdit">
+     <property name="readOnly"><bool>true</bool></property>
+     <property name="placeholderText"><string>Connection, temperature, stability, timeout, and error messages appear here.</string></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
