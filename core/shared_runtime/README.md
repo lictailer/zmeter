@@ -21,6 +21,10 @@ enumeration for the next Qt event-loop turn and retains its manual refresh
 button; creating the runtime alone does not enumerate. The selector and its
 popup expand to show the longest discovered address. Kinesis is validated and
 loaded only when a device explicitly asks for native or managed bindings.
+Each Kinesis API component builds its DeviceManager list once after a
+successful initialization. Known-serial reconnects use the cached initialized
+state; device integrations may request one serialized refresh after a direct
+connection failure.
 
 Device sessions own leases. Device disconnect closes/releases only its lease.
 The startup/profile boundary terminates devices first, then calls provider

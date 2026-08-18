@@ -75,15 +75,11 @@ class BBD30X_Logic(QtCore.QThread):
             self._emit_log(f"Connecting to BBD30X {serial}.")
             try:
                 velocity, acceleration = self.hw.connect(serial)
-            except Exception as exc:
+            except Exception:
                 self.is_connected = False
                 self._clear_t0()
                 self.sig_connect.emit(False)
                 self.sig_status.emit("Connection failed")
-                self._emit_log(
-                    f"Connection failed for {serial}: {type(exc).__name__}: {exc}",
-                    level="ERROR",
-                )
                 raise
 
             self.is_connected = True
@@ -92,6 +88,10 @@ class BBD30X_Logic(QtCore.QThread):
             self.sig_connect.emit(True)
             self.sig_velocity_params.emit((velocity, acceleration))
             self.sig_status.emit(f"Connected to BBD30X {serial}")
+            if bool(getattr(self.hw, "last_connection_refreshed", False)):
+                self._emit_log(
+                    "DeviceManager was refreshed once before connecting."
+                )
             self._emit_log(
                 "Connected; applied motion parameters "
                 f"{velocity:g} mm/s and {acceleration:g} mm/s^2."
@@ -147,25 +147,18 @@ class BBD30X_Logic(QtCore.QThread):
             target_mm = self.hw.validate_position_mm(position_mm)
             self.sig_target_pos.emit(target_mm)
             self.sig_status.emit(f"Moving to {target_mm:.4f} mm")
-            self._emit_log(f"Move started: target {target_mm:.4f} mm.")
             try:
                 final_mm = self.hw.move(
                     target_mm,
                     position_callback=self.sig_current_pos.emit,
                     cancel_event=self._cancel_event,
                 )
-            except Exception as exc:
+            except Exception:
                 self.sig_status.emit("Move failed")
-                self._emit_log(
-                    f"Move to {target_mm:.4f} mm failed: "
-                    f"{type(exc).__name__}: {exc}",
-                    level="ERROR",
-                )
                 raise
             self.sig_current_pos.emit(final_mm)
             self.sig_target_pos.emit(target_mm)
             self.sig_status.emit(f"Move completed at {final_mm:.4f} mm")
-            self._emit_log(f"Move completed at {final_mm:.4f} mm.")
             return final_mm
 
     # Scan-visible API. Keep these as the only get_*/set_* position methods.
@@ -197,10 +190,6 @@ class BBD30X_Logic(QtCore.QThread):
             self.sig_current_pos.emit(current_mm)
             self.sig_target_pos.emit(target_mm)
             self.sig_status.emit(f"Position read: {current_mm:.4f} mm")
-            self._emit_log(
-                f"Position read: current {current_mm:.4f} mm, "
-                f"target {target_mm:.4f} mm."
-            )
             return current_mm, target_mm
 
     def set_t0_from_current_position(self) -> float:
@@ -224,10 +213,6 @@ class BBD30X_Logic(QtCore.QThread):
             values = self.hw.set_velocity_params(velocity, acceleration)
             self.sig_velocity_params.emit(values)
             self.sig_status.emit("Motion parameters updated")
-            self._emit_log(
-                f"Motion parameters read back: {values[0]:g} mm/s, "
-                f"{values[1]:g} mm/s^2."
-            )
             return values
 
     def home(self) -> None:
@@ -264,11 +249,12 @@ class BBD30X_Logic(QtCore.QThread):
         try:
             operation(*args)
         except Exception as exc:
-            message = f"{type(exc).__name__}: {exc}"
+            operation_name = operation.__name__.replace("_", " ").capitalize()
+            if operation.__name__ == "connect" and args:
+                operation_name = f"Connection for {args[0]}"
+            message = f"{operation_name} failed: {type(exc).__name__}: {exc}"
             self.sig_error.emit(message)
             self.sig_status.emit(message)
-            # Operation methods log contextual errors; this guarantees coverage
-            # for validation and other failures before an operation begins.
             self._emit_log(message, level="ERROR")
 
     def start_scan(self) -> bool:

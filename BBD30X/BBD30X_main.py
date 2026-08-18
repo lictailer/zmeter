@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
 from PyQt6 import QtWidgets, uic
 
+from core.device_log import append_device_log, configure_device_log
 from core.shared_runtime.kinesis import KinesisRuntime
 
 try:
@@ -28,7 +28,6 @@ class BBD30X(QtWidgets.QWidget):
         self._configure_log()
         self._update_connected(False)
         self._update_t0(None)
-        self._append_log("BBD30X UI ready.")
 
     def _connect_signals(self) -> None:
         self.connect_button.clicked.connect(self.connect)
@@ -57,8 +56,7 @@ class BBD30X(QtWidgets.QWidget):
         self.logic.sig_log.connect(self._handle_logic_log)
 
     def _configure_log(self) -> None:
-        self.log_textEdit.setReadOnly(True)
-        self.log_textEdit.setMaximumBlockCount(500)
+        configure_device_log(self.log_textEdit)
 
     def _handle_logic_log(self, payload: object) -> None:
         if isinstance(payload, tuple) and len(payload) == 2:
@@ -68,12 +66,7 @@ class BBD30X(QtWidgets.QWidget):
         self._append_log(str(payload))
 
     def _append_log(self, message: str, level: str = "INFO") -> None:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.log_textEdit.appendPlainText(
-            f"[{timestamp}] [{level.upper()}] {message}"
-        )
-        scrollbar = self.log_textEdit.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        append_device_log(self.log_textEdit, level, message)
 
     def _update_error(self, message: str) -> None:
         self.status_label.setText(f"Error: {message}")

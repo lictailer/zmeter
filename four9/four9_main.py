@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from PyQt6 import QtCore, QtWidgets, uic
+
+from core.device_log import append_device_log, configure_device_log
 
 from .four9_hardware import MAX_TEMPERATURE_K, MIN_TEMPERATURE_K
 from .four9_logic import Four9Logic
@@ -29,7 +30,7 @@ class Four9(QtWidgets.QWidget):
         self.logic.sig_temperature.connect(self._update_temperature)
         self.logic.sig_target_temperature.connect(self._update_target_temperature)
         self.logic.sig_temperature_stable.connect(self._update_stability)
-        self.logic.sig_status.connect(self._append_log)
+        self.logic.sig_log.connect(self._handle_logic_log)
         self.logic.sig_is_connected.connect(self._update_connection_status)
         self.logic.started.connect(self._on_logic_started)
         self.logic.finished.connect(self._on_logic_finished)
@@ -39,11 +40,8 @@ class Four9(QtWidgets.QWidget):
         self.setTemperature_pushButton.clicked.connect(self._on_set_temperature_clicked)
         self.getTemperature_pushButton.clicked.connect(self._on_get_temperature_clicked)
 
+        configure_device_log(self.logStatus_textEdit)
         self._update_connection_status(self.logic.is_connected)
-        self._append_log(
-            "Four9 ready. Stable-wait timeout is configured in code as "
-            f"{self.logic.stable_wait_timeout_s:g} s."
-        )
 
     def _on_connect_clicked(self) -> None:
         self.logic.host = self.host_lineEdit.text().strip()
@@ -55,20 +53,24 @@ class Four9(QtWidgets.QWidget):
 
     def _on_set_temperature_clicked(self) -> None:
         if not self.logic.is_connected:
-            self._append_log("Cannot set temperature while Four9 is disconnected.")
+            self._append_log(
+                "Cannot set temperature while Four9 is disconnected.", "WARNING"
+            )
             return
         self.logic.setpoint_temperature = self.targetTemperature_doubleSpinBox.value()
         self._start_logic_job("set_temperature")
 
     def _on_get_temperature_clicked(self) -> None:
         if not self.logic.is_connected:
-            self._append_log("Cannot read temperature while Four9 is disconnected.")
+            self._append_log(
+                "Cannot read temperature while Four9 is disconnected.", "WARNING"
+            )
             return
         self._start_logic_job("get_temperature")
 
     def _start_logic_job(self, job: str) -> bool:
         if self.logic.isRunning():
-            self._append_log("Four9 is busy with another UI request.")
+            self._append_log("Four9 is busy with another UI request.", "WARNING")
             return False
         self.logic.job = job
         self.logic.start()
@@ -119,11 +121,15 @@ class Four9(QtWidgets.QWidget):
             else "color: #9b5d00; font-weight: bold;"
         )
 
-    def _append_log(self, message: object) -> None:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.logStatus_textEdit.append(f"[{timestamp}] {message}")
-        scroll_bar = self.logStatus_textEdit.verticalScrollBar()
-        scroll_bar.setValue(scroll_bar.maximum())
+    def _handle_logic_log(self, payload: object) -> None:
+        if isinstance(payload, tuple) and len(payload) == 2:
+            level, message = payload
+            self._append_log(message, level)
+            return
+        self._append_log(payload)
+
+    def _append_log(self, message: object, level: object = "INFO") -> None:
+        append_device_log(self.logStatus_textEdit, level, message)
 
     def force_stop(self) -> None:
         """Allow ZMeter scan stop to interrupt a stable wait promptly."""

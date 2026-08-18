@@ -15,6 +15,7 @@ from core.shared_runtime.kinesis import KinesisRuntime, KinesisRuntimeLease
 
 
 class BBD30x_hardware:
+    DEVICE_MANAGER_COMPONENT = "bbd30x-managed-cli"
     MIN_POSITION_MM = 0.0
     MAX_POSITION_MM = 220.0
     DEFAULT_VELOCITY_MM_S = 100.0
@@ -43,6 +44,7 @@ class BBD30x_hardware:
         )
         self.move_timeout_seconds = float(move_timeout_seconds)
         self.poll_interval_seconds = float(poll_interval_seconds)
+        self.last_connection_refreshed = False
 
     @staticmethod
     def _make_completion_callback(callback: Callable[[object], None]):
@@ -74,29 +76,56 @@ class BBD30x_hardware:
             raise RuntimeError("BBD30X is not connected")
         return self.channel
 
+    def _create_and_connect_device(self) -> None:
+        self.device = self._bm.BenchtopBrushlessMotor.CreateBenchtopBrushlessMotor(
+            self.serial_no
+        )
+        self.device.Connect(self.serial_no)
+
+    def _discard_failed_device(self) -> None:
+        if self.device is not None:
+            try:
+                self.device.Disconnect()
+            except Exception:
+                pass
+        self.channel = None
+        self.device = None
+
+    def _connect_with_one_refresh(self) -> None:
+        try:
+            self._create_and_connect_device()
+        except Exception:
+            self._discard_failed_device()
+            self.last_connection_refreshed = True
+            self.kinesis_runtime.refresh_device_manager(
+                self.DEVICE_MANAGER_COMPONENT,
+                self._dm.DeviceManagerCLI.BuildDeviceList,
+            )
+            try:
+                self._create_and_connect_device()
+            except Exception as exc:
+                raise RuntimeError(
+                    "BBD30X connection failed after DeviceManager refresh: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+
     def connect(self, serial_no: str) -> tuple[float, float]:
         try:
             self._ensure_bindings()
-            print("trying to find BBD ...")
             self.serial_no = str(serial_no)
+            self.last_connection_refreshed = False
 
-            self.kinesis_runtime.initialize_device_manager(
-                self._dm.DeviceManagerCLI.BuildDeviceList
+            self.kinesis_runtime.ensure_device_manager(
+                self.DEVICE_MANAGER_COMPONENT,
+                self._dm.DeviceManagerCLI.BuildDeviceList,
             )
-            for serial in self._dm.DeviceManagerCLI.GetDeviceList():
-                print("Found BBD:", serial)
-
-            self.device = self._bm.BenchtopBrushlessMotor.CreateBenchtopBrushlessMotor(
-                self.serial_no
-            )
-            self.device.Connect(self.serial_no)
+            self._connect_with_one_refresh()
             self.channel = self.device.GetChannel(1)
             self.channel.WaitForSettingsInitialized(5000)
 
             try:
                 self.channel.LoadMotorConfiguration(self.channel.DeviceID)
-            except Exception as exc:
-                print("Load from device failed, applying file settings for DDS220...", exc)
+            except Exception:
                 cfg = self.channel.LoadMotorConfiguration(
                     self.channel.DeviceID,
                     self._gm.DeviceConfiguration.DeviceSettingsUseOptionType.UseFileSettings,
@@ -113,7 +142,6 @@ class BBD30x_hardware:
                 self.DEFAULT_VELOCITY_MM_S,
                 self.DEFAULT_ACCELERATION_MM_S2,
             )
-            print("BBD connected")
             return velocity_params
         except Exception:
             self.disconnect()
@@ -122,19 +150,13 @@ class BBD30x_hardware:
     def connect3(self, serial_no: str):
         """Preserved alternate connection path; not used by the ZMeter widget."""
         self._ensure_bindings()
-        print("trying to find BBD ...")
         self.serial_no = serial_no
-        self.kinesis_runtime.initialize_device_manager(
-            self._dm.DeviceManagerCLI.BuildDeviceList
+        self.last_connection_refreshed = False
+        self.kinesis_runtime.ensure_device_manager(
+            self.DEVICE_MANAGER_COMPONENT,
+            self._dm.DeviceManagerCLI.BuildDeviceList,
         )
-
-        for serial in self._dm.DeviceManagerCLI.GetDeviceList():
-            print("Found BBD: ", serial)
-
-        self.device = self._bm.BenchtopBrushlessMotor.CreateBenchtopBrushlessMotor(
-            self.serial_no
-        )
-        self.device.Connect(self.serial_no)
+        self._connect_with_one_refresh()
         self.channel = self.device.GetChannel(1)
         self.channel.WaitForSettingsInitialized(5000)
 

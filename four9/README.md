@@ -74,10 +74,13 @@ connection. They do not stop the Four9 server or its control service.
 
 ## Logging and failures
 
-The widget log records the endpoint, connection state, socket and stable-wait
-timeouts, set/read operations, stable-wait result and elapsed time, server
-`last_error`, rejected requests, malformed responses, and connection loss. It
-does not add a log entry for every successful 1 Hz stable poll.
+The widget log records connection state, stable-wait lifecycle and timeout,
+server `last_error`, rejected requests, malformed responses, warnings, and
+connection loss. Successful routine temperature set/read results update the
+dedicated target, current-temperature, and stability fields without adding log
+entries. The read-only log is approximately eight lines high by default,
+remains vertically resizable, and retains the latest 500 timestamped entries
+in memory. It does not add an entry for every successful 1 Hz stable poll.
 
 A valid server `ok:false` response raises an operation error but preserves the
 TCP connection. Transport errors or malformed protocol data invalidate the

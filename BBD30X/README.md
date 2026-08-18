@@ -48,10 +48,14 @@ enable this device in the shared startup profile.
 
 ## Connection and motion parameters
 
-A successful connection builds the Kinesis device list, creates the requested
-BBD30X controller, selects channel 1, waits up to 5000 ms for settings, starts
-50 ms controller polling, and enables the channel. If device configuration
-loading fails, the existing DDS220 file-settings fallback is applied.
+The first BBD30X connection for a shared Kinesis runtime builds the managed
+DeviceManager list once. Later connections create and connect the requested
+serial directly. If a direct connection fails, BBD30X performs one serialized
+DeviceManager refresh and retries the same serial once; it does not enumerate,
+log, or select other devices. After connection it selects channel 1, waits up
+to 5000 ms for settings, starts 50 ms controller polling, and enables the
+channel. If device configuration loading fails, the existing DDS220 file-
+settings fallback is applied.
 
 Every successful connection then writes and reads back:
 
@@ -77,8 +81,11 @@ The device panel uses millimeters only:
 - Current and Target display millimeters and picoseconds with four decimals;
 - position displays update during an active move and when Read Position is
   clicked; there is no continuous UI timer;
-- the embedded log retains the latest 500 timestamped lifecycle, motion,
-  parameter, T0, warning, and error entries in memory only.
+- the embedded log shows connection state, T0, home/stop lifecycle, warnings,
+  and errors; successful routine moves, reads, and parameter updates stay in
+  their dedicated status fields and are not logged;
+- the log is approximately eight lines high by default, remains vertically
+  resizable, and retains the latest 500 timestamped entries in memory only.
 
 Set T0 reads the actual current position without moving the stage. T0 is
 cleared on connect and disconnect and is never persisted. A delay_ps scan
@@ -160,7 +167,8 @@ The user must review and run this procedure; agents must not execute it.
    independent known position.
 5. Command the current position, then the smallest approved move in each
    direction. Confirm intermediate Current updates, Target remains correct,
-   final readback is within tolerance, and the log records start/completion.
+   final readback is within tolerance, and routine samples do not flood the
+   device log.
 6. Set T0 and confirm Current delay becomes 0 ps. Make equivalent smallest
    approved moves through pos_mm, pos_um, and delay_ps, verifying the
    retroreflector factor of two and physical displacement.

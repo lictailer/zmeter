@@ -58,7 +58,25 @@ class Four9UiTests(unittest.TestCase):
         self.assertFalse(self.widget.disconnect_pushButton.isEnabled())
         self.assertFalse(self.widget.setTemperature_pushButton.isEnabled())
         self.assertFalse(self.widget.getTemperature_pushButton.isEnabled())
-        self.assertIn("Four9 ready", self.widget.logStatus_textEdit.toPlainText())
+        self.assertIsInstance(
+            self.widget.logStatus_textEdit, QtWidgets.QPlainTextEdit
+        )
+        self.assertTrue(self.widget.logStatus_textEdit.isReadOnly())
+        self.assertEqual(self.widget.logStatus_textEdit.maximumBlockCount(), 500)
+        self.widget.show()
+        self.application.processEvents()
+        visible_lines = (
+            self.widget.logStatus_textEdit.height()
+            / self.widget.logStatus_textEdit.fontMetrics().lineSpacing()
+        )
+        self.assertGreaterEqual(visible_lines, 8)
+        self.assertLessEqual(visible_lines, 10)
+        initial_log_height = self.widget.logStatus_textEdit.height()
+        self.widget.resize(self.widget.width(), self.widget.height() + 100)
+        self.application.processEvents()
+        self.assertGreater(
+            self.widget.logStatus_textEdit.height(), initial_log_height
+        )
 
     def test_buttons_dispatch_background_connect_set_get_and_disconnect(self):
         hardware = self.logic.hardware
@@ -67,6 +85,7 @@ class Four9UiTests(unittest.TestCase):
         self.application.processEvents()
         self.assertTrue(self.logic.is_connected)
         self.assertEqual(self.widget.connectionStatus_label.text(), "Connected")
+        connection_log = self.widget.logStatus_textEdit.toPlainText()
 
         self.widget.targetTemperature_doubleSpinBox.setValue(42)
         self.widget.setTemperature_pushButton.click()
@@ -79,6 +98,9 @@ class Four9UiTests(unittest.TestCase):
         self.assertTrue(self.logic.wait(1000))
         self.application.processEvents()
         self.assertNotEqual(self.widget.currentTemperature_label.text(), "Unknown")
+        self.assertEqual(
+            self.widget.logStatus_textEdit.toPlainText(), connection_log
+        )
 
         self.widget.disconnect_pushButton.click()
         self.assertTrue(self.logic.wait(1000))

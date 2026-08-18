@@ -3,7 +3,7 @@
  <class>Four9Form</class>
  <widget class="QWidget" name="Four9Form">
   <property name="geometry">
-   <rect><x>0</x><y>0</y><width>560</width><height>520</height></rect>
+   <rect><x>0</x><y>0</y><width>560</width><height>380</height></rect>
   </property>
   <property name="windowTitle"><string>Four9</string></property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -55,9 +55,9 @@
    </item>
    <item><widget class="QLabel" name="logTitle_label"><property name="text"><string>Four9 Log</string></property></widget></item>
    <item>
-    <widget class="QTextEdit" name="logStatus_textEdit">
+    <widget class="QPlainTextEdit" name="logStatus_textEdit">
      <property name="readOnly"><bool>true</bool></property>
-     <property name="placeholderText"><string>Connection, temperature, stability, timeout, and error messages appear here.</string></property>
+     <property name="placeholderText"><string>Connection, lifecycle, warning, and error messages appear here.</string></property>
     </widget>
    </item>
   </layout>

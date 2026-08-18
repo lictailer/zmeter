@@ -30,7 +30,7 @@ class Four9Logic(QtCore.QThread):
     sig_temperature = QtCore.pyqtSignal(object)
     sig_target_temperature = QtCore.pyqtSignal(object)
     sig_temperature_stable = QtCore.pyqtSignal(bool, str)
-    sig_status = QtCore.pyqtSignal(str)
+    sig_log = QtCore.pyqtSignal(object)
     sig_is_connected = QtCore.pyqtSignal(bool)
 
     def __init__(
@@ -64,15 +64,18 @@ class Four9Logic(QtCore.QThread):
         self._latest_stable = False
         self._latest_stable_reason = "unknown"
 
+    def _emit_log(self, message: object, level: str = "INFO") -> None:
+        self.sig_log.emit((str(level).upper(), str(message)))
+
     def connect(self) -> bool:
         if self.is_connected and bool(getattr(self.hardware, "is_connected", False)):
             self.sig_is_connected.emit(True)
-            self.sig_status.emit(
+            self._emit_log(
                 f"Already connected to Four9 at {self.host}:{self.port}."
             )
             return True
 
-        self.sig_status.emit(
+        self._emit_log(
             f"Connecting to Four9 at {self.host}:{self.port} "
             f"(socket timeout {self.socket_timeout_s:g} s)."
         )
@@ -80,19 +83,20 @@ class Four9Logic(QtCore.QThread):
             connected = bool(self.hardware.connect_hardware(self.host, self.port))
         except Exception as exc:
             self._mark_disconnected()
-            self.sig_status.emit(f"Four9 connection failed: {exc}")
+            self._emit_log(f"Four9 connection failed: {exc}", "ERROR")
             return False
 
         self.is_connected = connected
         self.sig_is_connected.emit(connected)
         if connected:
-            self.sig_status.emit(
+            self._emit_log(
                 f"Connected to Four9 at {self.host}:{self.port}. "
                 f"Stable-wait timeout is {self.stable_wait_timeout_s:g} s."
             )
         else:
-            self.sig_status.emit(
-                f"Four9 connection failed at {self.host}:{self.port}."
+            self._emit_log(
+                f"Four9 connection failed at {self.host}:{self.port}.",
+                "ERROR",
             )
         return connected
 
@@ -102,16 +106,16 @@ class Four9Logic(QtCore.QThread):
             getattr(self.hardware, "is_connected", False)
         ):
             self._mark_disconnected()
-            self.sig_status.emit("Four9 is already disconnected.")
+            self._emit_log("Four9 is already disconnected.")
             return
 
         try:
             self.hardware.disconnect()
         except Exception as exc:
-            self.sig_status.emit(f"Four9 disconnect error: {exc}")
+            self._emit_log(f"Four9 disconnect error: {exc}", "ERROR")
         finally:
             self._mark_disconnected()
-            self.sig_status.emit("Four9 disconnected.")
+            self._emit_log("Four9 disconnected.")
 
     # These are the only scan-discoverable get_/set_ methods in this class.
     def get_temperature(self) -> float:
@@ -123,12 +127,8 @@ class Four9Logic(QtCore.QThread):
             error = Four9ProtocolError(
                 "Four9 has not cached a temperature sample yet."
             )
-            self.sig_status.emit(str(error))
+            self._emit_log(error, "ERROR")
             raise error
-        self.sig_status.emit(
-            f"Temperature readback: {temperature:.5f} K "
-            f"({self._format_stability()})."
-        )
         return temperature
 
     def set_temperature(self, target_k: float) -> float:
@@ -136,7 +136,6 @@ class Four9Logic(QtCore.QThread):
 
         self._ensure_connected()
         target = Four9Hardware.validate_temperature(target_k)
-        self.sig_status.emit(f"Requested temperature setpoint: {target:.5f} K.")
         try:
             returned_target = float(self.hardware.set_temperature(target))
         except Exception as exc:
@@ -149,9 +148,6 @@ class Four9Logic(QtCore.QThread):
 
         status = self._request_status()
         self._apply_status(status)
-        self.sig_status.emit(
-            f"Temperature target confirmed: {returned_target:.5f} K."
-        )
         return returned_target
 
     def set_temperature_stable(self, target_k: float) -> bool:
@@ -165,7 +161,7 @@ class Four9Logic(QtCore.QThread):
         start_time = time.monotonic()
         try:
             target = self.set_temperature(target_k)
-            self.sig_status.emit(
+            self._emit_log(
                 f"Waiting for Four9 server stability at {target:.5f} K; "
                 f"client timeout is {self.stable_wait_timeout_s:g} s."
             )
@@ -173,16 +169,17 @@ class Four9Logic(QtCore.QThread):
             while True:
                 elapsed_s = time.monotonic() - start_time
                 if self._latest_stable:
-                    self.sig_status.emit(
+                    self._emit_log(
                         f"Four9 reported stable at {target:.5f} K after "
                         f"{elapsed_s:.1f} s ({self._latest_stable_reason})."
                     )
                     return True
 
                 if elapsed_s >= self.stable_wait_timeout_s:
-                    self.sig_status.emit(
+                    self._emit_log(
                         f"Four9 stable wait timed out after {elapsed_s:.1f} s "
-                        f"at target {target:.5f} K; scan will continue."
+                        f"at target {target:.5f} K; scan will continue.",
+                        "WARNING",
                     )
                     return False
 
@@ -192,9 +189,10 @@ class Four9Logic(QtCore.QThread):
                 )
                 if self._abort_stable_wait.wait(wait_s):
                     elapsed_s = time.monotonic() - start_time
-                    self.sig_status.emit(
+                    self._emit_log(
                         f"Four9 stable wait stopped after {elapsed_s:.1f} s; "
-                        f"target remains {target:.5f} K."
+                        f"target remains {target:.5f} K.",
+                        "WARNING",
                     )
                     return False
 
@@ -210,9 +208,9 @@ class Four9Logic(QtCore.QThread):
     def request_abort_stable_wait(self, *, log_if_idle: bool = True) -> None:
         if self._stable_wait_active:
             self._abort_stable_wait.set()
-            self.sig_status.emit("Stop requested for Four9 stable wait.")
+            self._emit_log("Stop requested for Four9 stable wait.", "WARNING")
         elif log_if_idle:
-            self.sig_status.emit("No Four9 stable wait is active.")
+            self._emit_log("No Four9 stable wait is active.")
 
     def run(self) -> None:
         job = self.job
@@ -229,7 +227,10 @@ class Four9Logic(QtCore.QThread):
             elif job:
                 raise ValueError(f"Unknown Four9 job: {job}")
         except Exception as exc:
-            self.sig_status.emit(f"Four9 {job or 'job'} failed: {exc}")
+            if not isinstance(
+                exc, (Four9ConnectionError, Four9ProtocolError, Four9ServerError)
+            ):
+                self._emit_log(f"Four9 {job or 'job'} failed: {exc}", "ERROR")
 
     def _request_status(self) -> dict[str, Any]:
         self._ensure_connected()
@@ -289,7 +290,7 @@ class Four9Logic(QtCore.QThread):
         self.sig_temperature_stable.emit(stable_value, reason)
 
         if last_error and last_error != self._last_server_error:
-            self.sig_status.emit(f"Four9 server last_error: {last_error}")
+            self._emit_log(f"Four9 server last_error: {last_error}", "ERROR")
         self._last_server_error = last_error
         return temperature
 
@@ -314,7 +315,7 @@ class Four9Logic(QtCore.QThread):
 
     def _handle_request_error(self, exc: Exception) -> None:
         if isinstance(exc, Four9ServerError):
-            self.sig_status.emit(f"Four9 server rejected request: {exc}")
+            self._emit_log(f"Four9 server rejected request: {exc}", "ERROR")
             return
         if isinstance(exc, (Four9ConnectionError, Four9ProtocolError)):
             try:
@@ -322,9 +323,9 @@ class Four9Logic(QtCore.QThread):
             except Exception:
                 pass
             self._mark_disconnected()
-            self.sig_status.emit(f"Four9 connection/protocol error: {exc}")
+            self._emit_log(f"Four9 connection/protocol error: {exc}", "ERROR")
             return
-        self.sig_status.emit(f"Four9 request error: {exc}")
+        self._emit_log(f"Four9 request error: {exc}", "ERROR")
 
     def _mark_connected(self) -> None:
         if not self.is_connected:
@@ -334,7 +335,3 @@ class Four9Logic(QtCore.QThread):
     def _mark_disconnected(self) -> None:
         self.is_connected = False
         self.sig_is_connected.emit(False)
-
-    def _format_stability(self) -> str:
-        state = "stable" if self._latest_stable else "not stable"
-        return f"{state}: {self._latest_stable_reason}"

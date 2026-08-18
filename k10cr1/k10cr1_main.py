@@ -5,6 +5,7 @@ import numpy as np
 import pyqtgraph as pg
 
 from core.shared_runtime.kinesis import KinesisRuntime
+from core.device_log import append_device_log, configure_device_log
 
 
 class K10CR1(QtWidgets.QWidget):
@@ -19,8 +20,9 @@ class K10CR1(QtWidgets.QWidget):
         self.home_button.clicked.connect(self.home)
         self.stop_button.clicked.connect(self.force_stop)
         self.logic.sig_last_pos.connect(self.update_pos)
-        self.logic.sig_info.connect(self.update_info)
+        self.logic.sig_log.connect(self._handle_logic_log)
         self.logic.sig_connect.connect(self.set_on_off)
+        configure_device_log(self.log_textEdit)
 
     def set_on_off(self, status):
         if status:
@@ -32,8 +34,12 @@ class K10CR1(QtWidgets.QWidget):
         deg = "%.3f" % float(pos * 360 / 49152000)
         self.last_pos_label.setText(f"last positon: {deg} deg <-- {pos}")
 
-    def update_info(self, info):
-        self.info_label.setText(info)
+    def _handle_logic_log(self, payload):
+        if isinstance(payload, tuple) and len(payload) == 2:
+            level, message = payload
+            append_device_log(self.log_textEdit, level, message)
+            return
+        append_device_log(self.log_textEdit, "INFO", payload)
 
     def connect(self, serial=""):
         self.logic.job="connect"

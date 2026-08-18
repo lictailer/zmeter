@@ -204,24 +204,27 @@ class KinesisRuntimeTests(unittest.TestCase):
         self.assertTrue(runtime.shutdown()["shutdown"])
         self.assertTrue(runtime.shutdown()["shutdown"])
 
-    def test_device_manager_initialization_is_serialized(self):
+    def test_device_manager_initialization_is_serialized_and_cached(self):
         runtime, *_ = self.make_runtime()
         active = 0
         maximum = 0
+        calls = 0
+        results = []
         guard = threading.Lock()
         barrier = threading.Barrier(3)
 
         def callback():
-            nonlocal active, maximum
+            nonlocal active, calls, maximum
             with guard:
                 active += 1
+                calls += 1
                 maximum = max(maximum, active)
             with guard:
                 active -= 1
 
         def run():
             barrier.wait()
-            runtime.initialize_device_manager(callback)
+            results.append(runtime.ensure_device_manager("managed", callback))
 
         threads = [threading.Thread(target=run) for _ in range(2)]
         for thread in threads:
@@ -230,6 +233,58 @@ class KinesisRuntimeTests(unittest.TestCase):
         for thread in threads:
             thread.join()
         self.assertEqual(maximum, 1)
+        self.assertEqual(calls, 1)
+        self.assertEqual(sorted(results), [False, True])
+
+    def test_device_manager_keys_are_independent(self):
+        runtime, *_ = self.make_runtime()
+        calls = []
+
+        self.assertTrue(
+            runtime.ensure_device_manager("managed", lambda: calls.append("managed"))
+        )
+        self.assertTrue(
+            runtime.ensure_device_manager("native", lambda: calls.append("native"))
+        )
+        self.assertFalse(
+            runtime.ensure_device_manager("managed", lambda: calls.append("again"))
+        )
+        self.assertEqual(calls, ["managed", "native"])
+
+    def test_failed_device_manager_build_is_not_cached(self):
+        runtime, *_ = self.make_runtime()
+
+        def fail():
+            raise RuntimeError("build failed")
+
+        with self.assertRaisesRegex(RuntimeError, "build failed"):
+            runtime.ensure_device_manager("managed", fail)
+        self.assertTrue(runtime.ensure_device_manager("managed", lambda: None))
+
+    def test_device_manager_refresh_always_runs(self):
+        runtime, *_ = self.make_runtime()
+        calls = []
+        runtime.ensure_device_manager("managed", lambda: calls.append("ensure"))
+
+        result = runtime.refresh_device_manager(
+            "managed", lambda: calls.append("refresh") or 7
+        )
+
+        self.assertEqual(result, 7)
+        self.assertEqual(calls, ["ensure", "refresh"])
+        self.assertFalse(runtime.ensure_device_manager("managed", lambda: None))
+
+    def test_failed_refresh_clears_cached_initialization(self):
+        runtime, *_ = self.make_runtime()
+        runtime.ensure_device_manager("managed", lambda: None)
+
+        with self.assertRaisesRegex(RuntimeError, "refresh failed"):
+            runtime.refresh_device_manager(
+                "managed",
+                lambda: (_ for _ in ()).throw(RuntimeError("refresh failed")),
+            )
+
+        self.assertTrue(runtime.ensure_device_manager("managed", lambda: None))
 
 
 if __name__ == "__main__":

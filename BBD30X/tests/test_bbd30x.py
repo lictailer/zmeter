@@ -280,7 +280,9 @@ class FakeKinesisRuntime:
         self.load_error = load_error
         self.leases = []
         self.load_calls = []
-        self.initialize_calls = 0
+        self.ensure_calls = 0
+        self.refresh_calls = 0
+        self.initialized_components = set()
 
     def acquire(self, _owner):
         lease = FakeLease()
@@ -293,9 +295,19 @@ class FakeKinesisRuntime:
             raise self.load_error
         return self.bindings
 
-    def initialize_device_manager(self, callback):
-        self.initialize_calls += 1
-        return callback()
+    def ensure_device_manager(self, component, callback):
+        self.ensure_calls += 1
+        if component in self.initialized_components:
+            return False
+        callback()
+        self.initialized_components.add(component)
+        return True
+
+    def refresh_device_manager(self, component, callback):
+        self.refresh_calls += 1
+        result = callback()
+        self.initialized_components.add(component)
+        return result
 
 
 class ScanDiscoveryHarness:
@@ -325,6 +337,18 @@ class BBD30XTests(unittest.TestCase):
         self.assertEqual(widget.velocity_lineEdit.text(), "100")
         self.assertEqual(widget.acceleration_lineEdit.text(), "2000")
         self.assertEqual(fake.connect_calls, [])
+        widget.show()
+        self.app.processEvents()
+        visible_lines = (
+            widget.log_textEdit.height()
+            / widget.log_textEdit.fontMetrics().lineSpacing()
+        )
+        self.assertGreaterEqual(visible_lines, 8)
+        self.assertLessEqual(visible_lines, 10)
+        initial_log_height = widget.log_textEdit.height()
+        widget.resize(widget.width(), widget.height() + 100)
+        self.app.processEvents()
+        self.assertGreater(widget.log_textEdit.height(), initial_log_height)
 
     def test_connection_failure_is_contained_and_retry_succeeds(self):
         fake = FakeHardware(fail_connect_count=1)
@@ -338,6 +362,10 @@ class BBD30XTests(unittest.TestCase):
         self.assertFalse(widget.logic.is_connected)
         self.assertTrue(widget.isVisible())
         self.assertIn("connection failure", widget.log_textEdit.toPlainText())
+        self.assertEqual(
+            widget.log_textEdit.toPlainText().count("Connection for 876543210 failed"),
+            1,
+        )
 
         self.assertTrue(widget.connect("876543210"))
         self.assertTrue(widget.logic.wait(1000))
@@ -379,7 +407,7 @@ class BBD30XTests(unittest.TestCase):
         self.assertIn("update_configuration", events)
         self.assertIn(("set_settings", ("motor-settings", True, False)), events)
 
-    def test_device_connection_failure_releases_lease_and_retry_reacquires(self):
+    def test_device_connection_failure_refreshes_once_and_retries_same_serial(self):
         bindings, _events, _channel = make_bindings(fail_connect_count=1)
         runtime = FakeKinesisRuntime(bindings)
         hardware = BBD30x_hardware(
@@ -387,12 +415,39 @@ class BBD30XTests(unittest.TestCase):
             completion_callback_factory=lambda callback: callback,
         )
         with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
-            with self.assertRaisesRegex(RuntimeError, "connection failure"):
-                hardware.connect("12345678")
-            self.assertEqual(runtime.leases[0].closed, 1)
             self.assertEqual(hardware.connect("12345678"), (100.0, 2000.0))
-        self.assertEqual(len(runtime.leases), 2)
-        self.assertEqual(runtime.leases[1].closed, 0)
+        self.assertEqual(runtime.ensure_calls, 1)
+        self.assertEqual(runtime.refresh_calls, 1)
+        self.assertEqual(len(runtime.leases), 1)
+        self.assertEqual(runtime.leases[0].closed, 0)
+        self.assertTrue(hardware.last_connection_refreshed)
+
+    def test_failed_retry_reports_error_and_releases_lease(self):
+        bindings, _events, _channel = make_bindings(fail_connect_count=2)
+        runtime = FakeKinesisRuntime(bindings)
+        hardware = BBD30x_hardware(
+            runtime,
+            completion_callback_factory=lambda callback: callback,
+        )
+        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+            with self.assertRaisesRegex(RuntimeError, "after DeviceManager refresh"):
+                hardware.connect("12345678")
+        self.assertEqual(runtime.refresh_calls, 1)
+        self.assertEqual(runtime.leases[0].closed, 1)
+
+    def test_reconnect_uses_cached_device_manager_without_rebuild(self):
+        bindings, events, _channel = make_bindings()
+        runtime = FakeKinesisRuntime(bindings)
+        hardware = BBD30x_hardware(
+            runtime,
+            completion_callback_factory=lambda callback: callback,
+        )
+        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+            hardware.connect("12345678")
+            hardware.disconnect()
+            hardware.connect("12345678")
+        self.assertEqual(events.count("build_device_list"), 1)
+        self.assertNotIn("get_device_list", events)
 
     def test_async_move_emits_intermediate_and_final_positions(self):
         bindings, events, channel = make_bindings()
@@ -505,6 +560,22 @@ class BBD30XTests(unittest.TestCase):
         self.assertIn("ps", widget.current_position_label.text())
         self.assertNotIn("um", widget.current_position_label.text().lower())
         self.assertIn("2.5000 mm", widget.target_position_label.text())
+
+    def test_routine_move_read_and_parameter_updates_do_not_log(self):
+        widget = BBD30X(hardware=FakeHardware())
+        self.addCleanup(widget.close)
+        widget.logic.connect("12345678")
+        self.app.processEvents()
+        connection_log = widget.log_textEdit.toPlainText()
+
+        widget.logic.set_pos_mm(1.0)
+        widget.logic.read_position_from_ui()
+        widget.logic.set_velocity_params(None, None)
+        self.app.processEvents()
+
+        self.assertEqual(widget.log_textEdit.toPlainText(), connection_log)
+        self.assertTrue(widget.log_textEdit.isReadOnly())
+        self.assertEqual(widget.log_textEdit.maximumBlockCount(), 500)
 
     def test_busy_ui_job_is_rejected_and_logged(self):
         logic = BBD30X_Logic(hardware=FakeHardware())

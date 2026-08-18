@@ -46,6 +46,7 @@ These device-local documents record the current source contract and readiness of
 | [hardware_safety.md](hardware_safety.md) | Canonical repository-wide hardware-safety contract |
 | [decisions/README.md](decisions/README.md) | Canonical decision-record policy and template |
 | [SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md](SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md) | Shared VISA/Kinesis implementation checklist and hardware-validation status |
+| [DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md](DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md) | Preserved device-log and Kinesis connection investigation record; implementation note identifies the approved reduced scope |
 | Device-local `README.md` | Module-specific; authoritative only for that device's source-verified details and status |
 | `archive/` | Historical; never current implementation authority |
 

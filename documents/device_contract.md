@@ -47,6 +47,19 @@ The startup profile may supply setter/getter allowlists. `None` exposes all vali
 - A long operation must have a bounded stop path and publish the actual completed state, especially after a partial ramp.
 - Exceptions must preserve context and reach the UI/scan controller; do not silently convert an uncertain hardware state into success.
 
+## Device logs
+
+Every active device widget should provide an operator-facing device log. Use
+the shared `core.device_log` presentation helper where practical so logs are
+read-only, timestamped with severity, auto-scrolling, limited to 500 in-memory
+entries, approximately eight lines high by default, and vertically resizable.
+
+Log connection and disconnection, errors, warnings, and important device or
+lifecycle events. Routine successful set/read results, raw successful vendor
+return codes, and repeated polling samples normally belong in dedicated UI
+fields or signals rather than the log. Device logs remain in memory unless a
+separate persistence requirement is explicitly approved.
+
 ## Lifecycle contract
 
 An active device widget should provide the following where applicable:

@@ -113,6 +113,7 @@ class KinesisRuntime:
         self._selection_guard = selection_guard or _PROCESS_SELECTION
         self._lock = threading.RLock()
         self._device_manager_lock = threading.Lock()
+        self._initialized_device_managers: set[str] = set()
         self._owners: dict[int, KinesisRuntimeLease] = {}
         self._native: dict[str, Any] = {}
         self._managed: dict[str, Any] = {}
@@ -172,10 +173,37 @@ class KinesisRuntime:
             self._managed[component] = bindings
             return bindings
 
-    def initialize_device_manager(self, callback: Callable[[], Any]) -> Any:
-        """Serialize Kinesis discovery and BuildDeviceList calls."""
+    def ensure_device_manager(
+        self,
+        component: str,
+        callback: Callable[[], Any],
+    ) -> bool:
+        """Build a component's device list once after a successful callback."""
+
+        component = str(component)
         with self._device_manager_lock:
-            return callback()
+            if component in self._initialized_device_managers:
+                return False
+            callback()
+            self._initialized_device_managers.add(component)
+            return True
+
+    def refresh_device_manager(
+        self,
+        component: str,
+        callback: Callable[[], Any],
+    ) -> Any:
+        """Force one serialized device-list rebuild for a component."""
+
+        component = str(component)
+        with self._device_manager_lock:
+            try:
+                result = callback()
+            except Exception:
+                self._initialized_device_managers.discard(component)
+                raise
+            self._initialized_device_managers.add(component)
+            return result
 
     def shutdown(self) -> dict[str, Any]:
         """Report ownership and mark an idle runtime closed; never unload DLLs."""

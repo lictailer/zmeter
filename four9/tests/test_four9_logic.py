@@ -149,12 +149,26 @@ class Four9LogicTests(unittest.TestCase):
             stable_poll_interval_s=1,
         )
         messages = []
-        logic.sig_status.connect(messages.append)
+        logic.sig_log.connect(lambda payload: messages.append(payload[1]))
 
         self.assertFalse(logic.set_temperature_stable(40))
         self.assertEqual(hardware.status_calls, 1)
         self.assertTrue(any("timed out" in message for message in messages))
         self.assertTrue(any("scan will continue" in message for message in messages))
+
+    def test_successful_set_and_get_do_not_log_routine_results(self):
+        logic, _hardware = self.make_logic(
+            [
+                _status(temperature=19.8, stable=False),
+                _status(temperature=20.0, stable=True),
+            ]
+        )
+        entries = []
+        logic.sig_log.connect(entries.append)
+
+        self.assertEqual(logic.set_temperature(20), 20.0)
+        self.assertEqual(logic.get_temperature(), 20.0)
+        self.assertEqual(entries, [])
 
     def test_abort_interrupts_wait_promptly(self):
         logic, _hardware = self.make_logic(

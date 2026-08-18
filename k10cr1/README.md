@@ -23,7 +23,13 @@ The conversion uses 49,152,000 device counts per 360 degrees. The setter applies
   1.14.58.26351 set in the shared vendor folder;
 - configuration: exact device serial, homing policy, allowed angular range, velocity, acceleration, and experiment-specific collision constraints.
 
-The connection path builds the Kinesis device list, opens the serial-numbered device, reads hardware information, and overwrites velocity parameters. Homing and movement are blocking polling operations executed in the device thread.
+The first K10CR1 connection for a shared Kinesis runtime builds the native
+DeviceManager list once. Later connections open the requested serial directly.
+If opening fails, K10CR1 performs one serialized DeviceManager refresh and
+retries the same serial once; it does not enumerate or select another device.
+After opening, it reads hardware information and overwrites velocity
+parameters. Homing and movement are blocking polling operations executed in
+the device thread.
 
 Profile construction:
 
@@ -35,6 +41,12 @@ services = RuntimeServices()
 mount = K10CR1(services.kinesis)
 mount.connect("REVIEWED_SERIAL")
 ```
+
+The widget includes a read-only device log for connection state, device
+identity, home/stop lifecycle, stuck or iteration-limit warnings, and errors.
+Successful position samples and raw vendor return codes are not logged. The log
+is approximately eight lines high by default, remains vertically resizable,
+and retains the latest 500 timestamped entries in memory.
 
 ## Lifecycle and safety gaps
 
