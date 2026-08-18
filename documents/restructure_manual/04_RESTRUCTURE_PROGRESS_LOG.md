@@ -238,3 +238,27 @@ Copy and complete:
 - Decision: Pending user approval; no Phase 1 source edits made.
 - User approval reference, if scope changed: Pending.
 - Files/tests/documentation affected: future configuration models/loader tests, `MainWindow` integration, `documents/device_contract.md`, startup/profile documentation.
+
+## 2026-08-18 — Scope/architecture decision resolved: automatic VISA discovery
+
+- Question: Resolve the pending conflict between established deferred VISA discovery and the manual's construction-side-effect prohibition.
+- Current verified behavior: Enabled maintained VISA widgets schedule resource enumeration on the next Qt event-loop turn after widget construction; they do not open an instrument session during discovery.
+- Decision: Preserve the established deferred automatic VISA discovery behavior for enabled VISA widgets. Configuration parsing, disabled profile entries, registry lookup, and manager construction must remain free of vendor import, enumeration, connection, and other hardware effects. Constructing an enabled VISA widget may continue to schedule its existing deferred discovery behavior.
+- User approval reference: User response on 2026-08-18: "Preserve deferred automatic VISA discovery."
+- Future-update note: Converting enabled VISA widgets to explicit operator-only discovery is deferred and requires a separately approved behavior change with device/UI regression review.
+- Files/tests/documentation affected: Preserve `tests/test_visa_widget_construction.py`; document the narrow enabled-widget exception in configuration/architecture documentation and manager tests.
+
+## 2026-08-18 — Scope/architecture decision resolved: unknown profile channels
+
+- Question: Resolve the pending conflict between current silent channel-filter skipping and the manual's proposed rejection of unknown configured channels.
+- Current verified behavior: `MainWindow.filter_scan_channels()` ignores unknown names in explicit getter/setter allowlists while retaining all recognized names.
+- Decision: Preserve silent skipping of unknown profile channel names. Validate the allowlist container and entry types, but do not reject a profile, warn, or fail device construction solely because a syntactically valid channel name is not exposed by the device. The corresponding Gate B unknown-channel rejection requirement is superseded for this restructure.
+- User approval reference: User response on 2026-08-18: "keep the current silent-skip behavior, write it down for future update."
+- Future-update note: Strict rejection or warnings for unknown configured channels are explicitly deferred. Either behavior would alter the current profile/device-filter contract and requires separate approval plus migration guidance for existing lab profiles.
+- Files/tests/documentation affected: Configuration/manager tests must assert silent skipping; retain and later update `documents/device_contract.md`, profile documentation, and `MainWindow` integration to state this compatibility rule.
+
+## 2026-08-18 — Phase 0 blocker resolution
+
+- The two mandatory-stop decisions recorded during Phase 0 were answered by the user.
+- Safe to begin Phase 1: Yes, subject to the resolved compatibility exceptions above.
+- No source behavior changed while resolving the decisions.
