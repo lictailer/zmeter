@@ -4,181 +4,171 @@
 
 This optional package controls channel 1 of a Thorlabs BBD30X benchtop
 brushless-motor controller configured for a DDS220 linear delay stage. It
-preserves the offline implementation's connection, motion, homing, velocity,
-and readback behavior so the device can be reviewed from the main ZMeter tree.
+supports guarded asynchronous UI jobs, unit-aware scan channels, session T0
+delay coordinates, move-loop position updates, and an embedded device log.
 
-The package has fake-driver and offscreen-GUI coverage, but it has **not** been
-validated on laboratory hardware. The safety and lifecycle gaps listed below
-are intentionally preserved for a later remediation pass. Do not rely on this
-module for unattended motion or as an emergency-stop mechanism.
+The package has fake-driver and offscreen-GUI coverage but has **not** been
+validated on laboratory hardware. Mechanically constrain and supervise the
+stage independently of ZMeter. Software limits and the ZMeter stop button are
+not substitutes for controller limits, physical clearance, or a hardware
+emergency stop.
 
 ## Dependencies and configuration
 
 - 64-bit Windows and the repository's Python 3.12/PyQt6 environment;
-- NumPy;
-- the optional `pythonnet` package, which provides `clr` and `System`;
-- the complete matching 64-bit Kinesis 1.14.58.26351 files listed by
-  `core/shared_runtime/vendor/thorlabs_kinesis/manifest.json`, including:
-  - `Thorlabs.MotionControl.Tools.Logging.dll`;
-  - `Thorlabs.MotionControl.Tools.Common.dll`;
-  - `Thorlabs.MotionControl.Tools.WPF.dll`;
-  - `Thorlabs.MotionControl.PrivateInternal.dll`;
-  - `Thorlabs.MotionControl.DeviceManagerCLI.dll`;
-  - `Thorlabs.MotionControl.GenericMotorCLI.dll`;
-  - `Thorlabs.MotionControl.Benchtop.BrushlessMotorCLI.dll`.
+- the optional pythonnet package, which provides clr and System;
+- the complete matching 64-bit Kinesis files listed by
+  core/shared_runtime/vendor/thorlabs_kinesis/manifest.json.
 
-`pythonnet` remains an optional dependency outside the maintained Conda
-environment. The reviewed Kinesis files and their manifest are tracked in the
-shared vendor folder. There is no environment, Program Files, `PATH`, or
-device-local fallback. Importing the package and constructing its widget do not
-import `pythonnet`, load Kinesis, build the device list, or connect hardware.
-Those actions begin only after `connect()`.
+The Kinesis runtime remains lazy. Importing the package and constructing its
+widget do not import pythonnet, load Kinesis, build the device list, or connect
+hardware. These operations start only after connect().
 
-When updating a deployed checkout such as
-`D:\Xuguo\2026.08.14_sharedruntimes_test`, copy the complete
-`core/shared_runtime/vendor/thorlabs_kinesis/` directory and manifest. Copying
-only `Thorlabs.MotionControl.Tools.Logging.dll` can expose the next missing
-transitive dependency instead of repairing the runtime.
+The serial field contains the convenience value 103529564, but this is not
+device identity validation. Keep the reviewed controller serial in local lab
+configuration and verify it before connecting.
 
-The widget's serial field starts with the convenience default `103529564`.
-This value does not trigger connection and an explicit `connect(serial)` value
-still replaces it. Verify that the displayed serial belongs to the intended
-controller before every connection; a checked-in default is not device
-identity validation.
+    from BBD30X.BBD30X_main import BBD30X
+    from core.shared_runtime import RuntimeServices
 
-## Laboratory-profile example
+    services = RuntimeServices()
+    delay_stage = BBD30X(kinesis_runtime=services.kinesis)
+    delay_stage.connect("REVIEWED_SERIAL")
 
-Keep the controller serial in local profile configuration and inject the same
-Kinesis service used by every Kinesis device:
+    equips = {"delay_stage": delay_stage}
+    equips_set_channels = {
+        "delay_stage": ["pos_mm", "pos_um", "delay_ps"],
+    }
+    equips_get_channels = {
+        "delay_stage": ["pos_mm", "pos_um", "delay_ps"],
+    }
 
-```python
-from BBD30X.BBD30X_main import BBD30X
-from core.shared_runtime import RuntimeServices
+The checked-in start_zmeter.py remains mock-only. Do not add lab serials or
+enable this device in the shared startup profile.
 
-services = RuntimeServices()
-delay_stage = BBD30X(kinesis_runtime=services.kinesis)
-delay_stage.connect("REVIEWED_SERIAL")
+## Connection and motion parameters
 
-equips = {"Delay_Stage": delay_stage}
-equips_set_channels = {"Delay_Stage": ["pos"]}
-equips_get_channels = {"Delay_Stage": ["pos"]}
-```
+A successful connection builds the Kinesis device list, creates the requested
+BBD30X controller, selects channel 1, waits up to 5000 ms for settings, starts
+50 ms controller polling, and enables the channel. If device configuration
+loading fails, the existing DDS220 file-settings fallback is applied.
 
-The checked-in `start_zmeter.py` intentionally remains mock-only. Keep any
-additional laboratory serials in local profile configuration and do not enable
-this package in the shared startup profile.
+Every successful connection then writes and reads back:
 
-## Scan channel and units
+- velocity: 100 mm/s;
+- acceleration: 2000 mm/s².
 
-The current ZMeter method/signature discovery exposes exactly one writable and
-one readable channel:
+The UI displays those values. Set / Read Back treats each empty field as
+"preserve the current controller value." If both fields are empty, it performs
+readback without writing. Inputs must be finite and greater than zero; final
+stage-specific limits remain enforced by Kinesis.
 
-| Channel | Method | Unit | Behavior |
-| --- | --- | --- | --- |
-| `pos` | `set_pos(value)` | mm | Blocking absolute move followed by tolerance-based readback |
-| `pos` | `get_pos()` | mm | Returns the current channel position after a fixed read delay |
+Connection and UI-operation exceptions are contained in the worker thread,
+reported in the status label and device log, and do not intentionally close
+the application. Failed connection performs best-effort controller cleanup,
+releases the runtime lease, and permits retry.
 
-The GUI accepts and displays micrometers. It divides the GUI target by 1000
-before calling the logic layer and multiplies millimeter readback by 1000 for
-display. Its spin box currently allows 0 to 220,000 µm. Velocity and
-acceleration fields use mm/s and mm/s².
+## Position UI, T0, and delay conversion
 
-The motion path calls Kinesis `MoveTo(target, 50000)`, then performs at most 100
-additional checks with a nominal 0.1 µm (`0.0001 mm`) tolerance. Each read
-contains a 0.5-second delay and each failed check adds another 0.05 seconds.
-Homing calls `Home(60000)`.
+The device panel uses millimeters only:
 
-## Preserved connection behavior
+- the move target accepts 0–220 mm, has four decimal places, and steps by
+  0.0001 mm;
+- Current and Target display millimeters and picoseconds with four decimals;
+- position displays update during an active move and when Read Position is
+  clicked; there is no continuous UI timer;
+- the embedded log retains the latest 500 timestamped lifecycle, motion,
+  parameter, T0, warning, and error entries in memory only.
 
-An explicit serial is required. Connection builds the Kinesis device list,
-prints discovered serials, creates the named BBD30X controller, connects it,
-selects channel 1, and waits up to 5000 ms for settings initialization.
+Set T0 reads the actual current position without moving the stage. T0 is
+cleared on connect and disconnect and is never persisted. A delay_ps scan
+operation fails until T0 has been explicitly set for the current connection.
 
-The package first tries device motor configuration. If that call fails, it
-loads Kinesis file settings, assigns `DDS220`, updates the current
-configuration, and calls `SetSettings(..., True, False)`. It then starts 50 ms
-polling, waits 0.3 seconds, enables the channel, and waits another 0.3 seconds.
-Disconnect stops polling and disconnects the controller.
+The retroreflector round-trip conversion uses c = 0.299792458 mm/ps:
 
-## Known safety and reliability risks
+    delay_ps    = 2 * (position_mm - t0_mm) / c
+    position_mm = t0_mm + delay_ps * c / 2
 
-These are documented integration debt, not assurances of safe operation:
+Micrometers are available as a scan unit but are not displayed in the device
+panel.
 
-- The hardware layer does not validate finite numbers or enforce position,
-  velocity, or acceleration limits. The GUI's 0–220 mm range does not constrain
-  values supplied by scans or direct logic calls.
-- The DDS220 fallback can apply and initialize file settings when device
-  configuration loading fails. The attached stage model is not verified first.
-- The alternate `connect3()` path changes homing velocity/direction and motion
-  velocity/acceleration. The direction and values are not checked against the
-  installed mechanism.
-- `Home()` and `MoveTo()` are blocking Kinesis calls. Qt interruption requests
-  cannot cancel them, and `force_stop()` does not issue a Kinesis stop command.
-- `start_scan()` and `stop_scan()` are empty. They neither reserve the device
-  nor establish a scan-specific safe state.
-- UI work uses one mutable `job` field on a `QThread`; rapid UI actions or UI
-  and scan access can conflict or overwrite pending intent.
-- Failed connection now performs best-effort controller cleanup and releases
-  the runtime lease; a failing vendor disconnect call can still leave physical
-  controller state uncertain and requires operator verification.
-- Timeout comments in the source historically disagreed with the actual
-  Kinesis values. The effective calls are the values documented above.
-- Device discovery enumerates and prints every returned serial number.
-- Shutdown requests interruption, waits only one second, and may then
-  disconnect while an operation still owns the device.
-- Readback uses fixed sleeps, and the post-move verification can add substantial
-  time after the blocking move has already returned.
+## Scan channels
 
-Until these issues are remediated, mechanically constrain and supervise the
-system independently of ZMeter. Software limits or the ZMeter stop button are
-not substitutes for controller limits, physical clearance, or an appropriate
-hardware emergency stop.
+ZMeter method/signature discovery exposes three writable and readable
+channels. All setters converge on the same finite 0–220 mm validation and
+motion path.
 
-## Errors and troubleshooting
+| Channel | Setter input / getter output | Coordinate |
+| --- | --- | --- |
+| pos_mm | millimeters | absolute stage position |
+| pos_um | micrometers | absolute stage position |
+| delay_ps | picoseconds | round-trip delay relative to session T0 |
 
-- A manifest missing/hash/size error means the shared Kinesis folder is absent,
-  incomplete, or does not match the tracked reviewed release.
-- An `ImportError` naming `pythonnet` means the optional Python/.NET bridge is
-  unavailable.
-- A runtime load error after manifest validation commonly indicates incompatible
-  bitness, .NET/runtime problems, missing dependent DLLs, or an incompatible
-  Kinesis release.
-- A move `TimeoutError` is raised when readback remains outside the tolerance
-  for all additional checks. It does not prove that motion stopped.
+Only the current channel names are supported. Configure scans and
+scan_range_limits.json with pos_mm, pos_um, or delay_ps as appropriate.
+
+## Motion, cancellation, and remaining risks
+
+Moves use Kinesis's asynchronous completion callback. While a move is active,
+the worker reads the controller's cached position every 100 ms and emits it to
+the UI. Success requires callback completion and final readback within
+0.0001 mm. The overall deadline remains 50 seconds.
+
+On force-stop, cancellation, or timeout, the move loop requests Kinesis
+Stop(5000) and reports the outcome. This is a software-controlled stop and
+does not provide emergency-stop guarantees.
+
+Remaining hardware-facing risks include:
+
+- The DDS220 file-settings fallback can initialize settings when device
+  configuration loading fails; the attached stage model is not independently
+  verified first.
+- Homing remains a blocking Home(60000) call. The move cancellation event
+  does not interrupt a blocking home operation.
+- The preserved alternate connect3() path changes homing direction and is
+  not used by the ZMeter widget.
+- Shutdown cannot safely disconnect until the active worker operation exits.
+- A Kinesis stop or disconnect failure leaves physical controller state
+  uncertain and requires operator verification.
+- The 0–220 mm software check does not prove physical clearance or correct
+  stage orientation.
 
 ## Hardware-independent validation
 
-From the repository root, with the maintained environment active:
+Run with the maintained environment active:
 
-```powershell
-python -B -m py_compile BBD30X\BBD30X_hardware.py BBD30X\BBD30X_logic.py BBD30X\BBD30X_main.py
-python -B -m unittest discover -s BBD30X\tests -p "test_*.py" -v
-```
+    python -B -m py_compile BBD30X\BBD30X_hardware.py BBD30X\BBD30X_logic.py BBD30X\BBD30X_main.py
+    python -B -m unittest discover -s BBD30X\tests -p "test_*.py" -v
 
-The tests inject fake Kinesis bindings and must not load vendor DLLs or perform
-device discovery.
+The tests inject fake Kinesis bindings and must not load vendor DLLs, build a
+device list, or operate hardware.
 
 ## **User-executed hardware test**
 
-This procedure is for the user to review and execute only after accepting the
-known risks above:
+The user must review and run this procedure; agents must not execute it.
 
-1. Verify the controller and channel are a BBD30X driving the intended DDS220;
-   confirm 64-bit Kinesis/pythonnet compatibility and the configured serial.
-2. Mechanically clear and independently constrain the complete expected travel.
-   Verify stage orientation, home direction, controller limits, units, velocity,
-   acceleration, cabling, and the available physical emergency stop.
-3. Connect explicitly without invoking `connect3()` or homing. Confirm the
-   displayed position agrees with an independent known position.
-4. Command the current position first. Observe that no unexpected motion or
-   settings change occurs.
-5. Make the smallest approved bounded move in each direction, verify readback
-   and physical displacement, and return to the starting point.
-6. If safe to do so under the controller's own protection, characterize what
-   the current GUI stop does during a longer bounded move; expect it may not
-   stop motion.
-7. Disconnect, close ZMeter, and confirm polling, the controller handle, stage
+1. Verify the controller/channel are a BBD30X with the intended DDS220 and
+   confirm the reviewed serial, stage orientation, physical clearance,
+   controller limits, cabling, and emergency stop.
+2. Connect without homing. Confirm the UI remains open on an intentionally
+   invalid serial, reports the error, and then successfully retries the
+   reviewed serial.
+3. Confirm connection reads back 100 mm/s and 2000 mm/s². Change only one
+   field while leaving the other empty, then verify the empty parameter is
+   preserved.
+4. Click Read Position and compare Current against the controller or an
+   independent known position.
+5. Command the current position, then the smallest approved move in each
+   direction. Confirm intermediate Current updates, Target remains correct,
+   final readback is within tolerance, and the log records start/completion.
+6. Set T0 and confirm Current delay becomes 0 ps. Make equivalent smallest
+   approved moves through pos_mm, pos_um, and delay_ps, verifying the
+   retroreflector factor of two and physical displacement.
+7. Under independent hardware protection, request Stop during a bounded move
+   and verify the controller decelerates/stops as intended. Do not treat this
+   as an emergency-stop qualification.
+8. Disconnect and close ZMeter. Confirm polling, controller handles, stage
    state, and external safety controls are in the intended state.
 
-Do not test homing until its direction, speed, travel, and limit-switch behavior
-have been separately reviewed for the installed mechanism.
+Do not test homing until direction, speed, travel, and limit-switch behavior
+have been reviewed separately for the installed mechanism.

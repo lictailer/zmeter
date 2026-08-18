@@ -96,9 +96,11 @@ def create_equipment(runtime_services: RuntimeServices):
     # Only ni6423 support this function so far
     equips_set_channels = {
         "ni6423": ["AO0", "AO1"],
+        # "delay_stage": ["pos_mm", "pos_um", "delay_ps"],
     }
     equips_get_channels = {
         "ni6423": ["AI0", "AI1", "AI4", "counter0"],
+        # "delay_stage": ["pos_mm", "pos_um", "delay_ps"],
     }
 
     return equips, equips_set_channels, equips_get_channels
