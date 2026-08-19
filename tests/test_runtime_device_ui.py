@@ -204,6 +204,24 @@ class RuntimeDeviceUiTests(unittest.TestCase):
             self.assertTrue(ui_sealed)
             self.assertIsNotNone(rejection)
 
+    def test_scan_range_log_reports_load_summary_and_denied_write(self):
+        initial_log = self.window.scan_range_window.log_plainTextEdit.toPlainText()
+        self.assertIn("[INFO]", initial_log)
+        self.assertIn("valid limit entries", initial_log)
+
+        writes = []
+        self.window.setter_equipment_info_for_scanning = {
+            "guard": {"voltage": writes.append}
+        }
+        self.window.active_scan_range_limits = {("guard", "voltage"): (-1.0, 1.0)}
+        self.window.write_info(2.0, "guard_voltage")
+
+        self.assertEqual(writes, [])
+        log_text = self.window.scan_range_window.log_plainTextEdit.toPlainText()
+        self.assertIn("[WARNING]", log_text)
+        self.assertIn("Denied write 'guard_voltage'=2.0", log_text)
+        self.assertIn("outside [-1.0, 1.0]", log_text)
+
     def test_router_lease_spans_catalog_lookup_and_response_construction(self):
         observations = []
         original_catalog = self.window.get_device_channel_catalog

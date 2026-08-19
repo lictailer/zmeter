@@ -609,6 +609,11 @@ class DeviceManager(QtCore.QObject):
             return self._mutation_active or self._teardown_in_progress
 
     @property
+    def shutdown_started(self) -> bool:
+        with self._lock:
+            return self._shutdown_intent or self._teardown_in_progress
+
+    @property
     def teardown_report(self) -> LifecycleReport | None:
         with self._lock:
             return self._teardown_report
@@ -704,15 +709,7 @@ class DeviceManager(QtCore.QObject):
                 if config.connect_on_start:
                     record.state = DeviceState.CONNECTING
                     try:
-                        adapter.connect()
-                        if (
-                            adapter.registration.is_connected is not None
-                            and not adapter.connected()
-                        ):
-                            raise RuntimeError(
-                                "connection callback returned without reporting a "
-                                "connected device"
-                            )
+                        self._connect_and_confirm(record)
                     except Exception as exc:
                         record.state = DeviceState.ERROR
                         record.error = str(exc)
@@ -1048,6 +1045,9 @@ class DeviceManager(QtCore.QObject):
         return self._run_bulk("stop_for_scan", "stop scan activity", "stop_scan")
 
     def start_after_scan(self) -> LifecycleReport:
+        with self._lock:
+            if self._shutdown_intent or self._teardown_in_progress:
+                return LifecycleReport("start_after_scan")
         return self._run_bulk(
             "start_after_scan",
             "start scan activity",
@@ -1689,14 +1689,7 @@ class DeviceManager(QtCore.QObject):
         if not record.config.connect_on_start:
             return _WorkerOutcome("connection")
         try:
-            record.adapter.connect()
-            if (
-                record.adapter.registration.is_connected is not None
-                and not record.adapter.connected()
-            ):
-                raise RuntimeError(
-                    "connection callback returned without reporting a connected device"
-                )
+            self._connect_and_confirm(record)
         except Exception as exc:
             failures.append(
                 LifecycleFailure.from_exception(record.config.id, "connection", exc)
@@ -2612,6 +2605,22 @@ class DeviceManager(QtCore.QObject):
             )
 
         return LifecycleReport(operation, tuple(failures))
+
+    @staticmethod
+    def _connect_and_confirm(record: _DeviceRecord) -> None:
+        result = record.adapter.connect()
+        if result is not True:
+            raise RuntimeError(
+                "connection callback must return literal True after a successful "
+                f"bounded connection; received {result!r}"
+            )
+        if (
+            record.adapter.registration.is_connected is not None
+            and not record.adapter.connected()
+        ):
+            raise RuntimeError(
+                "connection callback returned True without reporting a connected device"
+            )
 
     @staticmethod
     def _is_known_disconnected(record: _DeviceRecord) -> bool:

@@ -299,12 +299,10 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         button.click()
         self.assertEqual(device.show_calls, show_calls)
 
-    def test_filter_only_removal_and_unknown_device_reference_are_refused(self):
+    def test_template_references_do_not_block_catalog_removal(self):
         device = self._track(_CatalogDevice())
         added = self._with_device("lab_device", device)
         self._apply_snapshot(added)
-        old_snapshot = self.window.catalog_snapshot
-
         self._template_setter("lab_device_alpha")
         filtered = self._with_device(
             "lab_device",
@@ -312,24 +310,23 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             setters=("shared",),
             getters=None,
         )
-        with self.assertRaises(DeviceCatalogReferenceError):
-            self._apply_snapshot(filtered)
-        self.assertIs(self.window.catalog_snapshot, old_snapshot)
+        self._apply_snapshot(filtered)
+        self.assertNotIn(
+            "alpha", self.window.catalog_snapshot.setter_channels["lab_device"]
+        )
 
         self._template_setter("lab_device_silently_filtered_unknown")
-        with self.assertRaises(DeviceCatalogReferenceError) as caught:
-            self._apply_snapshot(self.base_device_snapshot)
-        self.assertIn("lab_device", caught.exception.removed_labels)
-        self.assertIs(self.window.catalog_snapshot, old_snapshot)
+        self._apply_snapshot(self.base_device_snapshot)
+        self.assertNotIn("lab_device", self.window.catalog_snapshot.equipment)
 
-    def test_zero_channel_device_reference_blocks_removal(self):
+    def test_zero_channel_template_reference_does_not_block_removal(self):
         device = self._track(_CatalogDevice(_NoChannelLogic()))
         added = self._with_device("zero_device", device)
         self._apply_snapshot(added)
         self._template_setter("zero_device_unknown")
 
-        with self.assertRaises(DeviceCatalogReferenceError):
-            self._apply_snapshot(self.base_device_snapshot)
+        self._apply_snapshot(self.base_device_snapshot)
+        self.assertNotIn("zero_device", self.window.catalog_snapshot.equipment)
 
     def test_device_owned_reference_provider_blocks_target_removal(self):
         target = self._track(_CatalogDevice())
@@ -634,7 +631,14 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
     def test_artificial_rename_preflight_and_post_apply_failure_restore_exact_state(self):
         artificial = self.window.artificial_channel_2d
         logic = self.window.artificial_channel_logic
-        self._template_setter("artificial_channel_n")
+        available_scan = self.window.scanlist.list_available.get_widgets()[0].scan
+        available_info = copy.deepcopy(
+            available_scan.all_level_setting.all_level_info
+        )
+        available_info["level0"]["setters"]["setter0"]["channel"] = (
+            "artificial_channel_n"
+        )
+        available_scan.all_level_setting.all_level_info = available_info
         checkpoint = logic.capture_configuration_state()
         old_catalog = self.window.catalog_snapshot
         old_equations = dict(self.window.equations)
@@ -657,7 +661,8 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         self.assertEqual(targets, [])
         self.assertEqual(states, [])
 
-        self._template_setter("none")
+        available_info["level0"]["setters"]["setter0"]["channel"] = "none"
+        available_scan.all_level_setting.all_level_info = available_info
         artificial.artificialchannelnamex_textEdit.setPlainText("renamed_n")
         with mock.patch.object(
             self.window,

@@ -7,6 +7,7 @@ from typing import Callable
 from PyQt6 import QtCore, QtWidgets, uic
 
 from .artificial_channel_logic import ArtificialChannelLogic
+from .device_log import append_device_log, configure_device_log
 from .nested_menu import NestedMenu
 
 
@@ -25,6 +26,7 @@ class ArtificialChannel2D(QtWidgets.QWidget):
         self.setWindowModality(QtCore.Qt.WindowModality.NonModal)
 
         self.logic = logic
+        configure_device_log(self.log_plainTextEdit)
         self._on_config_preflight = on_config_preflight
         self._on_config_applied = on_config_applied
         self._available_original_channels: set[str] = set()
@@ -35,6 +37,20 @@ class ArtificialChannel2D(QtWidgets.QWidget):
         self._update_target_labels(self.logic.state)
         self._update_state_labels(self.logic.state)
         self.setWindowTitle("artificial channel 2D")
+        self._append_log(
+            "INFO",
+            "Artificial channel ready: "
+            f"{self.logic.artificial_channel_x_name}/{self.logic.artificial_channel_y_name} "
+            f"mapped to {self.logic.original_channel_x_name}/"
+            f"{self.logic.original_channel_y_name}.",
+        )
+
+    def _append_log(self, level, message):
+        append_device_log(self.log_plainTextEdit, level, message)
+
+    def _log_event(self, level, message):
+        print(message)
+        self._append_log(level, message)
 
     def _install_nested_menus(self, setter_equipment_info: dict):
         channel_choices, available_channels = self._build_channel_choices(
@@ -113,6 +129,7 @@ class ArtificialChannel2D(QtWidgets.QWidget):
             self.loadconfig_pushButton.clicked.connect(self._on_load_config_clicked)
         self.logic.sig_target_changed.connect(self._update_target_labels)
         self.logic.sig_state_changed.connect(self._update_state_labels)
+        self.logic.sig_log.connect(self._append_log)
 
     def _load_from_logic_config(self):
         self.ocx_nested_menu.set_chosen_one(self.logic.original_channel_x_name)
@@ -255,7 +272,7 @@ class ArtificialChannel2D(QtWidgets.QWidget):
                 emit_signals=False,
             )
             self._load_from_logic_config()
-            print(f"[ArtificialChannel2D] Set config failed: {exc}")
+            self._log_event("ERROR", f"[ArtificialChannel2D] Set config failed: {exc}")
             QtWidgets.QMessageBox.warning(self, "Set Config Failed", str(exc))
             return False
 
@@ -266,15 +283,28 @@ class ArtificialChannel2D(QtWidgets.QWidget):
                 self.logic.artificial_channel_y_name: "Unknown",
             }
         )
+        self._log_event(
+            "INFO",
+            "[ArtificialChannel2D] Configuration applied: "
+            f"{self.logic.artificial_channel_x_name}/{self.logic.artificial_channel_y_name} "
+            f"mapped to {self.logic.original_channel_x_name}/"
+            f"{self.logic.original_channel_y_name}.",
+        )
         return True
 
     def _on_set_value_clicked(self):
+        target_x = self.ACx_setvalue_doubleSpinBox.value()
+        target_y = self.ACy_setvalue_doubleSpinBox.value()
+        self._log_event(
+            "INFO",
+            "[ArtificialChannel2D] Requested artificial target "
+            f"{self.logic.artificial_channel_x_name}={target_x:.6f}, "
+            f"{self.logic.artificial_channel_y_name}={target_y:.6f}.",
+        )
         try:
-            self.logic.set_artificial_channel_values(
-                self.ACx_setvalue_doubleSpinBox.value(),
-                self.ACy_setvalue_doubleSpinBox.value(),
-            )
+            self.logic.set_artificial_channel_values(target_x, target_y)
         except Exception as exc:
+            self._log_event("ERROR", f"[ArtificialChannel2D] Set value failed: {exc}")
             QtWidgets.QMessageBox.warning(self, "Set Value Failed", str(exc))
 
     def _get_current_config_for_save(self) -> dict:
@@ -351,10 +381,10 @@ class ArtificialChannel2D(QtWidgets.QWidget):
             with open(file_path, "w", encoding="utf-8") as handle:
                 json.dump(config, handle, indent=2)
         except Exception as exc:
-            print(f"[ArtificialChannel2D] Save config failed: {exc}")
+            self._log_event("ERROR", f"[ArtificialChannel2D] Save config failed: {exc}")
             return
 
-        print(f"[ArtificialChannel2D] Config saved to '{file_path}'.")
+        self._log_event("INFO", f"[ArtificialChannel2D] Config saved to '{file_path}'.")
 
     def _on_load_config_clicked(self):
         file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -389,9 +419,10 @@ class ArtificialChannel2D(QtWidgets.QWidget):
                     for name in (original_channel_x_name, original_channel_y_name)
                     if name not in self._available_original_channels
                 ]
-                print(
-                    "[ArtificialChannel2D] Load config failed: original channel(s) not available: "
-                    f"{missing}"
+                self._log_event(
+                    "ERROR",
+                    "[ArtificialChannel2D] Load config failed: original channel(s) "
+                    f"not available: {missing}",
                 )
                 return
 
@@ -418,7 +449,7 @@ class ArtificialChannel2D(QtWidgets.QWidget):
                 float(original_limits["y"][1]),
             )
         except Exception as exc:
-            print(f"[ArtificialChannel2D] Load config failed: {exc}")
+            self._log_event("ERROR", f"[ArtificialChannel2D] Load config failed: {exc}")
             return
 
         try:
@@ -462,15 +493,16 @@ class ArtificialChannel2D(QtWidgets.QWidget):
             self.OCy_highlimit_doubleSpinBox.setValue(float(y_limits[1]))
 
             if not self._on_set_config_clicked():
-                print(
-                    "[ArtificialChannel2D] Load config failed: imported values could not be applied."
+                self._log_event(
+                    "ERROR",
+                    "[ArtificialChannel2D] Load config failed: imported values could not be applied.",
                 )
                 return
         except Exception as exc:
-            print(f"[ArtificialChannel2D] Load config apply failed: {exc}")
+            self._log_event("ERROR", f"[ArtificialChannel2D] Load config apply failed: {exc}")
             return
 
-        print(f"[ArtificialChannel2D] Config loaded from '{file_path}'.")
+        self._log_event("INFO", f"[ArtificialChannel2D] Config loaded from '{file_path}'.")
 
     def _update_config_labels(self):
         self.ACx_label.setText(self.logic.artificial_channel_x_name)

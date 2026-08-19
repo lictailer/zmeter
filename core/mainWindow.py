@@ -853,6 +853,10 @@ class MainWindow(QtWidgets.QWidget):
         if hasattr(self, "scan_range_window"):
             self.scan_range_window.set_status(message)
 
+    def _log_scan_range(self, level, message):
+        if hasattr(self, "scan_range_window"):
+            self.scan_range_window.append_log(level, message)
+
     def reload_scan_range_limits(self):
         file_path = self.scan_range_limits_path
 
@@ -866,6 +870,7 @@ class MainWindow(QtWidgets.QWidget):
             )
             print(message)
             self._set_scan_range_status(message)
+            self._log_scan_range("ERROR", message)
             return False
         except (json.JSONDecodeError, OSError) as exc:
             message = (
@@ -874,6 +879,7 @@ class MainWindow(QtWidgets.QWidget):
             )
             print(message)
             self._set_scan_range_status(message)
+            self._log_scan_range("ERROR", message)
             return False
 
         try:
@@ -885,18 +891,23 @@ class MainWindow(QtWidgets.QWidget):
             )
             print(message)
             self._set_scan_range_status(message)
+            self._log_scan_range("ERROR", message)
             return False
 
         for warning in warnings:
             print(f"[ScanRange] {warning}")
+            self._log_scan_range("WARNING", warning)
 
         self.scan_range_limits = parsed_limits
         self._refresh_active_scan_range_limits()
         message = (
-            f"[ScanRange] Loaded {len(parsed_limits)} limit entries from '{file_path}'."
+            f"[ScanRange] Loaded {len(parsed_limits)} valid limit entries from "
+            f"'{file_path}'; {len(self.active_scan_range_limits)} active for the "
+            f"current device catalog; {len(warnings)} warning(s)."
         )
         print(message)
         self._set_scan_range_status(message)
+        self._log_scan_range("INFO", message)
         return True
 
     def on_artificial_channel_config_applied(self):
@@ -1172,6 +1183,7 @@ class MainWindow(QtWidgets.QWidget):
         references = finder(
             removed_setters=removed_setters,
             removed_getters=removed_getters,
+            blocking_only=True,
         )
         return self._normalize_reference_descriptions(references)
 
@@ -1275,11 +1287,15 @@ class MainWindow(QtWidgets.QWidget):
         scan_finder = getattr(scanlist, "find_device_references", None)
         if callable(scan_finder):
             references.extend(
-                self._normalize_reference_descriptions(scan_finder(label))
+                self._normalize_reference_descriptions(
+                    scan_finder(label, blocking_only=True)
+                )
             )
         reference_uses = getattr(scanlist, "reference_uses", None)
         if callable(reference_uses):
             for reference in reference_uses():
+                if reference.collection in {"past", "available-template"}:
+                    continue
                 if self._reference_device_label(str(reference.channel)) == label:
                     references.append(str(reference))
 
@@ -2248,10 +2264,12 @@ class MainWindow(QtWidgets.QWidget):
                     low_limit, high_limit = limits
                     numeric_val = float(val)
                     if numeric_val < low_limit or numeric_val > high_limit:
-                        print(
+                        message = (
                             f"[ScanRange] Denied write '{master}'={numeric_val} "
                             f"outside [{low_limit}, {high_limit}]."
                         )
+                        print(message)
+                        self._log_scan_range("WARNING", message)
                         self.mark_skip_next_scan_read_from_global_limit()
                         return
                 try:
@@ -2367,8 +2385,19 @@ class MainWindow(QtWidgets.QWidget):
                 equipment.stop_scan()
 
     def start_equipments(self):
-        self._force_stop_requested = False
         device_manager = getattr(self, "device_manager", None)
+        shutdown_started = bool(
+            getattr(self, "_session_shutdown_in_progress", False)
+            or getattr(self, "_shutdown_retry_required", False)
+            or getattr(self, "_session_shutdown_complete", False)
+            or (
+                device_manager is not None
+                and getattr(device_manager, "shutdown_started", False) is True
+            )
+        )
+        if shutdown_started:
+            return None
+        self._force_stop_requested = False
         if device_manager is not None:
             report = device_manager.start_after_scan()
             self._raise_lifecycle_failures(report)

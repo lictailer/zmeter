@@ -1088,8 +1088,54 @@ class Scan(QtWidgets.QWidget):
 
         def write_json_snapshot(path):
             self._sync_scan_log_to_info()
-            with open(path, "w") as json_file:
+            with open(path, "w", encoding="utf-8") as json_file:
                 json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
+
+        def write_recovery_snapshot(original_name):
+            temporary_path = None
+            try:
+                data_root = QtCore.QStandardPaths.writableLocation(
+                    QtCore.QStandardPaths.StandardLocation.GenericDataLocation
+                )
+                if not data_root:
+                    raise OSError("platform-local application-data directory is unavailable")
+                recovery_dir = os.path.join(data_root, "ZMeter", "recovery")
+                os.makedirs(recovery_dir, exist_ok=True)
+
+                safe_name = re.sub(
+                    r"[^A-Za-z0-9._-]+",
+                    "_",
+                    str(original_name or self.info.get("name", "scan")),
+                ).strip("._") or "scan.json"
+                if not safe_name.lower().endswith(".json"):
+                    safe_name = f"{safe_name}.json"
+                timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                stem = f"recovery_{timestamp}_{safe_name}"
+                recovery_path = os.path.join(recovery_dir, stem)
+                count = 1
+                while os.path.exists(recovery_path):
+                    name_part, extension = os.path.splitext(stem)
+                    recovery_path = os.path.join(
+                        recovery_dir, f"{name_part}_{count}{extension}"
+                    )
+                    count += 1
+
+                temporary_path = f"{recovery_path}.{os.getpid()}.tmp"
+                write_json_snapshot(temporary_path)
+                os.replace(temporary_path, recovery_path)
+                self._log_warning(f"Recovery JSON saved: {recovery_path}")
+                return recovery_path
+            except Exception as recovery_error:
+                if temporary_path and os.path.exists(temporary_path):
+                    try:
+                        os.remove(temporary_path)
+                    except OSError:
+                        pass
+                self._log_error(
+                    "Recovery JSON save failed: "
+                    f"{type(recovery_error).__name__}: {recovery_error}"
+                )
+                return None
 
         self.update_alllevel_setting_array()
         self.info["comments"] = self.comments_textEdit.toPlainText()
@@ -1097,26 +1143,39 @@ class Scan(QtWidgets.QWidget):
         self._sync_scan_log_to_info()
 
         text = self.main_window.save_info_path.toPlainText().strip()
-        base_name = self._next_unique_data_name() + ".json"
-        self.name = base_name
+        base_name = f"{self.info.get('name', 'scan')}.json"
+        try:
+            base_name = self._next_unique_data_name() + ".json"
+            self.name = base_name
 
-        if not text:
-            fileName, _ = QFileDialog.getSaveFileName(self, "Select File to Save", self.name)
-            if not fileName:
-                self._log_warning("Manual save canceled by user.", persist_current_run=False)
-                return
-            folder, file = os.path.split(fileName)
-            base_name = file
-        else:
-            folder = os.path.normpath(text.strip('"'))
-            os.makedirs(folder, exist_ok=True)
-            fileName = os.path.join(folder, base_name)
+            if not text:
+                fileName, _ = QFileDialog.getSaveFileName(
+                    self, "Select File to Save", self.name
+                )
+                if not fileName:
+                    self._log_warning(
+                        "Manual save canceled by user; writing recovery JSON."
+                    )
+                    write_recovery_snapshot(base_name)
+                    return
+                folder, file = os.path.split(fileName)
+                base_name = file
+            else:
+                folder = os.path.normpath(text.strip('"'))
+                os.makedirs(folder, exist_ok=True)
+                fileName = os.path.join(folder, base_name)
 
-        count = 1
-        while os.path.exists(fileName):
-            name_part, ext = os.path.splitext(base_name)
-            fileName = os.path.join(folder, f"{name_part}_{count}{ext}")
-            count += 1
+            count = 1
+            while os.path.exists(fileName):
+                name_part, ext = os.path.splitext(base_name)
+                fileName = os.path.join(folder, f"{name_part}_{count}{ext}")
+                count += 1
+        except Exception as error:
+            self._log_error(
+                f"Manual save preparation failed: {type(error).__name__}: {error}"
+            )
+            write_recovery_snapshot(base_name)
+            return
 
         try:
             write_json_snapshot(fileName)
@@ -1141,6 +1200,7 @@ class Scan(QtWidgets.QWidget):
                 self._log_warning("JSON backup skipped: drive Z: not found.")
         except Exception as e:
             self._log_error(f"Manual save failed: {type(e).__name__}: {e}")
+            write_recovery_snapshot(base_name)
 
     def when_load_clicked(self):
         def handle_special_values(value):

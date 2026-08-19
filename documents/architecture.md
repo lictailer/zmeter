@@ -28,10 +28,12 @@ start_zmeter.py
   `provider.kinesis`. Devices terminate before provider shutdown.
 - Runtime construction is side-effect free. Dropdown-based VISA widgets
   schedule worker-thread discovery for the next Qt event-loop turn; this may
-  create the shared manager but does not open a device session. Kinesis
+  create the shared manager but does not open a device session. Discovery has a
+  10-second soft watchdog: timed-out results are ignored, while the worker and
+  runtime remain retained until the vendor call actually returns. Kinesis
   validation, `clr`, DLL loading, and device connections remain explicit.
 - `MainWindow` turns an ordered manager snapshot into one immutable `DeviceCatalogSnapshot`. Runtime changes use a manager-issued, single-use proposal: the UI first performs side-effect-free idle/reference preflight, lifecycle work then runs, and the exact committed generation is acknowledged synchronously before one informational publication. Callable maps, display choices, scan/manual menus, artificial-channel choices, active range-limit view, device buttons, and router catalog are reconciled as one UI-thread transaction. A consumer failure restores the preceding snapshot; a destructive change that cannot be acknowledged leaves calls and controls sealed until exact reconciliation succeeds.
-- Catalog replacement is allowed only while scan and queue work, deferred output finalization, and queue UI completion are idle. If a removed label or full channel is still referenced by an open/template/queued/past scan, manual item, or artificial-channel configuration, replacement is refused; definitions are never silently rewritten.
+- Catalog replacement is allowed only while scan and queue work, deferred output finalization, and queue UI completion are idle. References from executable available/queued/manual/active work, detached queue workers, artificial-channel mappings, and device-owned state block removal. Completed Past items and the available template remain diagnostic references but do not block; definitions are never silently rewritten.
 - Runtime add/disconnect/remove is session-only and never edits the selected profile. Admission is serialized with scan, queue, manual, whole-router-request, individual device-call, and reviewed device-busy reservations. Per-record generations keep retained callables valid across unrelated changes while making handles to a removed and later re-added label stale. Only the mock registration is currently approved for runtime mutation.
 - `ScanList` owns available, queued, manual, and completed items. Its worker runs queue items sequentially and exposes stop-now and stop-after-current behavior.
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.
@@ -77,7 +79,7 @@ For cross-device operations, use the injected `DeviceCommandRouter`/`DeviceComma
 
 The scan editor constructs ordered level dictionaries and setting arrays. At start, `Scan` stops device monitoring/scan activity, initializes `ScanLogic`, configures plots, and starts the worker. The worker begins at the highest level, recurses toward `level0`, emits data updates to `Scan`, and triggers progress and hourly autosave signals.
 
-`Scan` stores emitted arrays in the active scan dictionary and updates only affected plots when emission metadata is present. On finish or error, scan cleanup restarts equipment scan state, then GUI-thread finalization exports PPT and JSON and advances the serial counter. See [scan_engine.md](scan_engine.md) and [data_format.md](data_format.md).
+`Scan` stores emitted arrays in the active scan dictionary and updates only affected plots when emission metadata is present. On finish or error, scan cleanup restarts equipment scan state unless shutdown has begun, then GUI-thread finalization exports PPT and JSON and advances the serial counter. A failed/canceled primary JSON save attempts a platform-local recovery JSON. See [scan_engine.md](scan_engine.md) and [data_format.md](data_format.md).
 
 ## Extension and coupling rules
 

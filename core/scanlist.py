@@ -583,6 +583,7 @@ class ScanListLogic(QtCore.QThread):
 
 
 class ScanList(QtWidgets.QWidget):
+    NONBLOCKING_REMOVAL_COLLECTIONS = frozenset({"past", "available-template"})
     MAX_UI_LOG_LINES = 1000
     sig_info_changed = QtCore.pyqtSignal(object)
     start = QtCore.pyqtSignal(object)
@@ -1194,6 +1195,14 @@ class ScanList(QtWidgets.QWidget):
             )
         return tuple(uses)
 
+    def removal_blocking_reference_uses(self):
+        """Return only references that can still participate in live work."""
+        return tuple(
+            use
+            for use in self.reference_uses()
+            if use.collection not in self.NONBLOCKING_REMOVAL_COLLECTIONS
+        )
+
     def _make_reference_use(
         self,
         *,
@@ -1228,13 +1237,19 @@ class ScanList(QtWidgets.QWidget):
         *,
         removed_setters=(),
         removed_getters=(),
+        blocking_only=False,
     ):
         """Find exact direction-aware uses of channels proposed for removal."""
         removed_setters = frozenset(removed_setters)
         removed_getters = frozenset(removed_getters)
+        uses = (
+            self.removal_blocking_reference_uses()
+            if blocking_only
+            else self.reference_uses()
+        )
         return tuple(
             use
-            for use in self.reference_uses()
+            for use in uses
             if (
                 use.access == "set"
                 and use.channel in removed_setters
@@ -1245,12 +1260,15 @@ class ScanList(QtWidgets.QWidget):
             )
         )
 
-    def find_device_references(self, device_id):
+    def find_device_references(self, device_id, *, blocking_only=False):
         """Return references attributed to an exact catalog device ID."""
         device_id = str(device_id)
-        return tuple(
-            use for use in self.reference_uses() if use.device_id == device_id
+        uses = (
+            self.removal_blocking_reference_uses()
+            if blocking_only
+            else self.reference_uses()
         )
+        return tuple(use for use in uses if use.device_id == device_id)
 
     def catalog_mutation_blockers(self):
         """Describe active queue/scan work that blocks catalog publication."""

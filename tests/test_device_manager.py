@@ -158,8 +158,11 @@ print("manager import and registry lookup remained lazy")
         calls = []
         registration = make_registration(
             factory=lambda: next(instances),
-            connect=lambda instance, connection: calls.append(
-                ("connect", instance.label, dict(connection))
+            connect=lambda instance, connection, timeout_ms: (
+                calls.append(
+                    ("connect", instance.label, dict(connection), timeout_ms)
+                )
+                or True
             ),
         )
         manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
@@ -171,15 +174,35 @@ print("manager import and registry lookup remained lazy")
             )
         )
 
-        self.assertEqual(calls, [("connect", "second", {})])
+        self.assertEqual(calls, [("connect", "second", {}, 10_000)])
         self.assertEqual(snapshot.records[0].state, DeviceState.DISCONNECTED)
         self.assertEqual(snapshot.records[1].state, DeviceState.CONNECTED)
+
+    def test_start_after_scan_is_noop_while_shutdown_is_reserved(self):
+        calls = []
+        registration = make_registration(
+            start_scan=lambda _instance: calls.append("start")
+        )
+        manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
+        manager.load_profile(make_profile(make_config("device")))
+
+        reservation = manager.begin_shutdown()
+        self.assertTrue(manager.shutdown_started)
+        self.assertTrue(manager.start_after_scan().succeeded)
+        self.assertEqual(calls, [])
+
+        reservation.release()
+        self.assertFalse(manager.shutdown_started)
+        self.assertTrue(manager.start_after_scan().succeeded)
+        self.assertEqual(calls, ["start"])
 
     def test_connect_probe_mismatch_rolls_back_as_startup_failure(self):
         events = []
         registration = make_registration(
             factory=lambda: SimpleNamespace(label="probe"),
-            connect=lambda _instance, _connection: events.append("connect"),
+            connect=lambda _instance, _connection, _timeout_ms: (
+                events.append("connect") or True
+            ),
             is_connected=lambda _instance: False,
             force_stop=lambda _instance: events.append("force"),
             stop_scan=lambda _instance: events.append("stop"),
@@ -198,6 +221,24 @@ print("manager import and registry lookup remained lazy")
 
         self.assertEqual(events, ["connect", "force", "stop", "terminate", "close"])
         self.assertEqual(tuple(manager.snapshot().equipment), ())
+
+    def test_connection_callback_requires_literal_true(self):
+        for result in (False, None, 1, "connected"):
+            with self.subTest(result=result):
+                registration = make_registration(
+                    connect=lambda _instance, _connection, _timeout_ms, value=result: value,
+                )
+                manager = DeviceManager(
+                    DriverRegistry((registration,)), SimpleNamespace()
+                )
+                with self.assertRaisesRegex(
+                    DeviceStartupError,
+                    "must return literal True",
+                ):
+                    manager.load_profile(
+                        make_profile(make_config("strict", connect_on_start=True))
+                    )
+                self.assertEqual(tuple(manager.snapshot().equipment), ())
 
     def test_teardown_before_load_seals_manager_without_constructing(self):
         factory_calls = []
@@ -330,7 +371,7 @@ print("manager import and registry lookup remained lazy")
 
             return run
 
-        def connect(instance, _connection):
+        def connect(instance, _connection, _timeout_ms):
             events.append(f"connect:{instance.label}")
             raise RuntimeError("connection fault")
 

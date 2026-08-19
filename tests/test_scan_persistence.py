@@ -217,6 +217,90 @@ class ScanPersistenceCompatibilityTests(unittest.TestCase):
         self._load(saved_path)
         self.assertEqual(self.scan.info["data"], {})
 
+    def test_primary_failure_writes_unique_atomic_recovery_json(self):
+        self._set_name("recovery probe")
+        self.scan.info["data"] = {"result": np.array([2.5, np.nan])}
+        application_data = self.output_root / "appdata"
+        real_open = open
+
+        def fail_primary(path, *args, **kwargs):
+            candidate = Path(path)
+            if candidate.parent == self.output_root:
+                raise OSError("primary disk unavailable")
+            return real_open(path, *args, **kwargs)
+
+        for _attempt in range(2):
+            with (
+                mock.patch(
+                    "core.scan.QtCore.QStandardPaths.writableLocation",
+                    return_value=str(application_data),
+                ),
+                mock.patch("builtins.open", side_effect=fail_primary),
+                self._blocked_external_outputs(),
+            ):
+                self.scan.when_save_clicked()
+
+        recovery_files = sorted(
+            (application_data / "ZMeter" / "recovery").glob("recovery_*.json")
+        )
+        self.assertEqual(len(recovery_files), 2)
+        self.assertFalse(
+            list((application_data / "ZMeter" / "recovery").glob("*.tmp"))
+        )
+        recovered = json.loads(recovery_files[-1].read_text(encoding="utf-8"))
+        self.assertEqual(recovered["name"], "recovery probe")
+        self.assertEqual(recovered["data"]["result"][0], 2.5)
+        self.assertTrue(math.isnan(recovered["data"]["result"][1]))
+        self.assertTrue(
+            any("Recovery JSON saved" in line for line in self.scan._current_scan_log)
+        )
+
+    def test_canceled_save_writes_recovery_json(self):
+        self._set_name("canceled")
+        self.main_window.save_info_path.setPlainText("")
+        application_data = self.output_root / "appdata"
+
+        with (
+            mock.patch.object(
+                self.scan,
+                "_next_unique_data_name",
+                return_value="0000_canceled",
+            ),
+            mock.patch(
+                "core.scan.QFileDialog.getSaveFileName",
+                return_value=("", ""),
+            ),
+            mock.patch(
+                "core.scan.QtCore.QStandardPaths.writableLocation",
+                return_value=str(application_data),
+            ),
+        ):
+            self.scan.when_save_clicked()
+
+        recovery_files = list(
+            (application_data / "ZMeter" / "recovery").glob("recovery_*.json")
+        )
+        self.assertEqual(len(recovery_files), 1)
+
+    def test_recovery_failure_is_logged_without_raising(self):
+        self._set_name("no_recovery_root")
+        with (
+            mock.patch(
+                "core.scan.QtCore.QStandardPaths.writableLocation",
+                return_value="",
+            ),
+            mock.patch("builtins.open", side_effect=OSError("primary failed")),
+            self._blocked_external_outputs(),
+        ):
+            self.scan.when_save_clicked()
+
+        self.assertTrue(
+            any(
+                "Recovery JSON save failed" in line
+                for line in self.scan._current_scan_log
+            )
+        )
+
     def test_filename_uniqueness_and_serial_discovery_keep_current_rules(self):
         self.main_window.scanlist.serial.setValue(7)
         self._set_name("collision")

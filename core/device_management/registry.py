@@ -9,7 +9,7 @@ from .models import ConnectionFieldSpec, DeviceConfig, DriverConfigSpec
 
 
 DeviceFactory = Callable[..., object]
-ConnectionAction = Callable[[object, Mapping[str, object]], object]
+ConnectionAction = Callable[[object, Mapping[str, object], int], bool]
 LifecycleAction = Callable[[object], object]
 StateProbe = Callable[[object], bool]
 
@@ -67,6 +67,7 @@ class DriverRegistration:
     terminate: LifecycleAction
     runtime_services: tuple[str, ...] = ()
     connect: ConnectionAction | None = None
+    connect_timeout_ms: int = 10_000
     disconnect: LifecycleAction | None = None
     start_scan: LifecycleAction | None = None
     stop_scan: LifecycleAction | None = None
@@ -94,6 +95,8 @@ class DriverRegistration:
                     f"driver '{self.driver_id}' has invalid runtime service "
                     f"'{service_name}'"
                 )
+        if type(self.connect_timeout_ms) is not int or self.connect_timeout_ms <= 0:
+            raise ValueError("driver connection timeout must be a positive integer")
         if self.runtime_mutation_allowed and self.is_busy is None:
             raise ValueError(
                 f"runtime-mutable driver '{self.driver_id}' must provide an "
@@ -158,7 +161,11 @@ class DriverAdapter:
                     f"driver '{self.driver_id}' does not support manager connection"
                 )
             connection = _thaw_json_value(self.config.connection)
-            return action(self.instance, connection)
+            return action(
+                self.instance,
+                connection,
+                self.registration.connect_timeout_ms,
+            )
 
     def disconnect(self):
         with self._lifecycle_lock:
@@ -354,8 +361,9 @@ def _create_mock_device():
     return MockDevice()
 
 
-def _mock_connect(instance, connection):
-    return instance.connect(**connection)
+def _mock_connect(instance, connection, _timeout_ms):
+    instance.connect(**connection)
+    return bool(instance.logic.hardware.connected)
 
 
 def _mock_disconnect(instance):

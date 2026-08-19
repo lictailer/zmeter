@@ -389,6 +389,15 @@ class ScanCatalogConsumerTests(unittest.TestCase):
             },
             {use.collection for use in uses},
         )
+        blocking_uses = scan_list.removal_blocking_reference_uses()
+        self.assertNotIn(
+            "available-template", {use.collection for use in blocking_uses}
+        )
+        self.assertNotIn("past", {use.collection for use in blocking_uses})
+        self.assertTrue(
+            {"available", "queue", "active", "queue_worker", "manual"}
+            <= {use.collection for use in blocking_uses}
+        )
         self.assertEqual(
             {"setter", "getter", "average_getter", "manual_set_before",
              "manual_set_after", "plot_setter", "plot_getter",
@@ -426,6 +435,11 @@ class ScanCatalogConsumerTests(unittest.TestCase):
             removed_setters={channels["in"]},
         )
         self.assertEqual(getter_only, ())
+        past_blocker = scan_list.find_channel_references(
+            removed_setters={channels["past"], channels["past_manual"]},
+            blocking_only=True,
+        )
+        self.assertEqual(past_blocker, ())
         self.assertTrue(all(str(use) for use in removed))
 
         manual_items = list(scan_list.iter_manual_set_items())

@@ -403,6 +403,26 @@ class ArtificialChannelWidgetTests(unittest.TestCase):
         finally:
             widget.close()
 
+    def test_standard_log_reports_ready_state_and_limit_skip(self):
+        logic = make_logic(lambda _value, _channel: None)
+        widget = ArtificialChannel2D(
+            logic,
+            {"device_x": ["output"], "device_y": ["output"]},
+        )
+        try:
+            logic.set_artificial_channel_values(3.0, 0.0)
+            self.app.processEvents()
+            log_text = widget.log_plainTextEdit.toPlainText()
+            self.assertRegex(
+                log_text,
+                r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] \[INFO\]",
+            )
+            self.assertIn("Artificial channel ready", log_text)
+            self.assertIn("[WARNING]", log_text)
+            self.assertIn("mapped original channels out of limit", log_text)
+        finally:
+            widget.close()
+
 
 class ScanAbortTests(unittest.TestCase):
     def test_aborted_ramp_stops_remaining_artificial_channel_writes(self):
@@ -458,6 +478,30 @@ class ForceStopFlagTests(unittest.TestCase):
 
         MainWindow.start_equipments(main_window)
         self.assertFalse(main_window._force_stop_requested)
+
+    def test_equipment_restart_is_suppressed_during_shutdown(self):
+        class Manager:
+            shutdown_started = True
+
+            def __init__(self):
+                self.start_calls = 0
+
+            def start_after_scan(self):
+                self.start_calls += 1
+
+        manager = Manager()
+        main_window = SimpleNamespace(
+            _force_stop_requested=True,
+            _session_shutdown_in_progress=True,
+            _shutdown_retry_required=False,
+            _session_shutdown_complete=False,
+            device_manager=manager,
+            equips={},
+        )
+
+        self.assertIsNone(MainWindow.start_equipments(main_window))
+        self.assertTrue(main_window._force_stop_requested)
+        self.assertEqual(manager.start_calls, 0)
 
 
 if __name__ == "__main__":

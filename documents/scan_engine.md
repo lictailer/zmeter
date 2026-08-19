@@ -90,8 +90,9 @@ Changing rejection or artificial-pair behavior requires focused tests for writes
 - Resume releases the wait condition.
 - Stop sets the worker stop flag, releases pause, sets the scan stop marker, and calls every equipment's `force_stop()`.
 - Pressing Scan during an active run requests stop, finalizes/saves that run, then starts a fresh run.
-- The worker always resets skip/control flags, calls `MainWindow.start_equipments()`, and emits `sig_scan_finished`, including after error or stop.
+- The worker always resets skip/control flags, calls `MainWindow.start_equipments()`, and emits `sig_scan_finished`, including after error or stop. Equipment restart is an idempotent no-op after application-shutdown intent is reserved.
 - Finish status is logged as completed, stopped/restarted, or error. Finalization is deferred one GUI event-loop turn, exports PPT, writes JSON, and increments the serial.
+- Application shutdown seals new work, stops the active scan, waits for output finalization (including JSON recovery fallback), and only then starts device teardown.
 
 ## Progress, logging, autosave, and output
 

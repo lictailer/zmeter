@@ -103,7 +103,12 @@ class RuntimeDriver:
     def record(self, action: str, widget: RuntimeWidget) -> None:
         self.events.append((action, widget.label, threading.get_ident()))
 
-    def connect(self, widget: RuntimeWidget, _connection: dict) -> None:
+    def connect(
+        self,
+        widget: RuntimeWidget,
+        _connection: dict,
+        _timeout_ms: int,
+    ) -> bool:
         self.record("connect", widget)
         if self.connect_entered is not None:
             self.connect_entered.set()
@@ -111,6 +116,7 @@ class RuntimeDriver:
             if not self.connect_release.wait(2):
                 raise TimeoutError("test did not release connection callback")
         widget.connected = True
+        return True
 
     def disconnect(self, widget: RuntimeWidget) -> None:
         self.record("disconnect", widget)

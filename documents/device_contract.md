@@ -40,10 +40,11 @@ Do not expose helper/control methods with these prefixes unless they are valid s
 The startup profile may supply setter/getter allowlists. `None` exposes all valid methods; unknown requested names are ignored. Support profile filtering rather than removing useful public methods for one lab.
 
 Runtime catalog changes are definition preserving. A device or channel must not
-be removed from the active session while it is referenced by an open, template,
-queued, completed, or manual scan configuration, or by an artificial-channel
-configuration. The operator must resolve the reference first; core code must
-not rename, clear, or substitute the stored channel silently.
+be removed from the active session while it is referenced by an executable
+available/queued/manual/active scan configuration, detached queue worker, an
+artificial-channel configuration, or a device-owned reference. Completed Past
+items and the available-scan template are retained for diagnostics but do not
+block removal. Core code must not rename, clear, or substitute stored channels.
 
 ## Signals and threads
 
@@ -76,7 +77,7 @@ An active device widget should provide the following where applicable:
 
 | Method | Required behavior |
 | --- | --- |
-| `connect(...)` | Validate configuration, establish one connection, and report actual connected state |
+| `connect(..., timeout_ms)` | Complete within the positive reviewed timeout and return literal `True` only after one connection succeeds |
 | `disconnect()` | Stop device activity as needed and release the connection idempotently |
 | `start_scan()` | Prepare for scan use and clear only stale stop state that is safe to clear |
 | `stop_scan()` | Stop monitoring/background activity that could contend with scanning; do not necessarily disconnect |
@@ -93,6 +94,13 @@ UI-owner thread. Methods should be safe when disconnected, partially
 initialized, already stopped, or called more than once. The manager preserves
 one-attempt termination/close errors and will not release shared runtimes after
 uncertain cleanup.
+
+The reviewed registry supplies a 10,000 ms connection timeout by default. A
+connection result other than literal `True` is failure. When an `is_connected`
+probe is registered, it must also report true before the manager publishes the
+device as connected. An asynchronous widget method must therefore be wrapped by
+a bounded adapter that waits for its completion result; merely scheduling work
+is not successful connection. The manager does not force-kill vendor threads.
 
 Runtime mutation eligibility is a separate code-review decision from startup
 registration. Before enabling it, the adapter must define coherent

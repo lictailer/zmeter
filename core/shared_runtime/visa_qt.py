@@ -9,6 +9,10 @@ from .visa import VisaRuntime
 
 ADDRESS_MINIMUM_WIDTH = 320
 ADDRESS_HORIZONTAL_PADDING = 48
+DEFAULT_DISCOVERY_TIMEOUT_MS = 10_000
+
+
+_retained_controllers: set["VisaDiscoveryController"] = set()
 
 
 class VisaDiscoveryWorker(QtCore.QObject):
@@ -36,15 +40,30 @@ class VisaDiscoveryController(QtCore.QObject):
     error = QtCore.pyqtSignal(str)
     busy_changed = QtCore.pyqtSignal(bool)
 
-    def __init__(self, runtime: VisaRuntime, parent=None) -> None:
+    def __init__(
+        self,
+        runtime: VisaRuntime,
+        parent=None,
+        *,
+        timeout_ms: int = DEFAULT_DISCOVERY_TIMEOUT_MS,
+    ) -> None:
         super().__init__(parent)
+        if type(timeout_ms) is not int or timeout_ms <= 0:
+            raise ValueError("VISA discovery timeout must be a positive integer")
         self.runtime = runtime
+        self.timeout_ms = timeout_ms
         self._thread: QtCore.QThread | None = None
         self._worker: VisaDiscoveryWorker | None = None
+        self._busy = False
+        self._timed_out = False
+        self._detached = False
+        self._timeout_timer = QtCore.QTimer(self)
+        self._timeout_timer.setSingleShot(True)
+        self._timeout_timer.timeout.connect(self._on_timeout)
 
     @property
     def busy(self) -> bool:
-        return self._thread is not None and self._thread.isRunning()
+        return self._busy
 
     @QtCore.pyqtSlot()
     def refresh(self) -> bool:
@@ -54,23 +73,63 @@ class VisaDiscoveryController(QtCore.QObject):
         worker = VisaDiscoveryWorker(self.runtime)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.resources.connect(self.resources)
-        worker.error.connect(self.error)
+        worker.resources.connect(self._forward_resources)
+        worker.error.connect(self._forward_error)
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(self._finished)
         thread.finished.connect(thread.deleteLater)
         self._thread = thread
         self._worker = worker
+        self._busy = True
+        self._timed_out = False
         self.busy_changed.emit(True)
         thread.start()
+        self._timeout_timer.start(self.timeout_ms)
+        return True
+
+    @QtCore.pyqtSlot(tuple)
+    def _forward_resources(self, resources: tuple[str, ...]) -> None:
+        if not self._timed_out:
+            self.resources.emit(resources)
+
+    @QtCore.pyqtSlot(str)
+    def _forward_error(self, message: str) -> None:
+        if not self._timed_out:
+            self.error.emit(message)
+
+    @QtCore.pyqtSlot()
+    def _on_timeout(self) -> None:
+        if not self.busy or self._timed_out:
+            return
+        self._timed_out = True
+        self.retain_until_finished()
+        self.error.emit(
+            f"VISA discovery timed out after {self.timeout_ms / 1000:g} s; "
+            "waiting for the vendor call to finish safely"
+        )
+
+    def retain_until_finished(self, *, detach=False) -> bool:
+        if not self.busy:
+            return False
+        if detach:
+            application = QtCore.QCoreApplication.instance()
+            if application is not None and self.parent() is not application:
+                self.setParent(application)
+                self._detached = True
+        _retained_controllers.add(self)
         return True
 
     @QtCore.pyqtSlot()
     def _finished(self) -> None:
+        self._timeout_timer.stop()
+        self._busy = False
         self._thread = None
         self._worker = None
         self.busy_changed.emit(False)
+        _retained_controllers.discard(self)
+        if self._detached:
+            self.deleteLater()
 
 
 class VisaResourceRefresh(QtCore.QObject):
@@ -81,10 +140,17 @@ class VisaResourceRefresh(QtCore.QObject):
         runtime: VisaRuntime,
         combo_box: QtWidgets.QComboBox,
         parent: QtWidgets.QWidget,
+        *,
+        timeout_ms: int = DEFAULT_DISCOVERY_TIMEOUT_MS,
     ) -> None:
         super().__init__(parent)
+        self._owner = parent
         self.combo_box = combo_box
-        self.controller = VisaDiscoveryController(runtime, self)
+        self.controller = VisaDiscoveryController(
+            runtime,
+            self,
+            timeout_ms=timeout_ms,
+        )
         self.button = QtWidgets.QPushButton("Refresh VISA", parent)
         self.button.setObjectName("refresh_visa_button")
         self.button.clicked.connect(self.controller.refresh)
@@ -95,7 +161,17 @@ class VisaResourceRefresh(QtCore.QObject):
         )
         self._insert_button(parent)
         self._resize_address_selector()
+        parent.installEventFilter(self)
         QtCore.QTimer.singleShot(0, self.controller.refresh)
+
+    def eventFilter(self, watched, event):
+        controller = getattr(self, "controller", None)
+        if watched is getattr(self, "_owner", None) and controller is not None:
+            if event.type() == QtCore.QEvent.Type.Close:
+                controller.retain_until_finished()
+            elif event.type() == QtCore.QEvent.Type.DeferredDelete:
+                controller.retain_until_finished(detach=True)
+        return super().eventFilter(watched, event)
 
     @QtCore.pyqtSlot(tuple)
     def _replace_resources(self, resources: tuple[str, ...]) -> None:

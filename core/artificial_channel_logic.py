@@ -12,6 +12,7 @@ from PyQt6 import QtCore
 class ArtificialChannelLogic(QtCore.QObject):
     sig_state_changed = QtCore.pyqtSignal(object)
     sig_target_changed = QtCore.pyqtSignal(object)
+    sig_log = QtCore.pyqtSignal(str, str)
     RAMP_DIVISOR = 100
     RAMP_INTER_STEP_DELAY_S = 0.02
 
@@ -167,6 +168,10 @@ class ArtificialChannelLogic(QtCore.QObject):
                 }
             )
         return dict(self.state)
+
+    def _emit_log(self, level: str, message: str) -> None:
+        print(message)
+        self.sig_log.emit(str(level).upper(), str(message))
 
     def capture_configuration_state(self) -> dict[str, Any]:
         """Return a detached checkpoint for an atomic UI configuration edit."""
@@ -340,11 +345,12 @@ class ArtificialChannelLogic(QtCore.QObject):
             target_original_x,
             target_original_y,
         ):
-            print(
+            message = (
                 "[ArtificialChannelLogic] Skip set: mapped original channels out of limit. "
                 f"{self.original_channel_x_name}={target_original_x:.6f}, "
                 f"{self.original_channel_y_name}={target_original_y:.6f}."
             )
+            self._emit_log("WARNING", message)
             if is_scan_write:
                 self._skip_next_scan_read = True
             else:
@@ -371,7 +377,10 @@ class ArtificialChannelLogic(QtCore.QObject):
         last_state = dict(self.state)
         for waypoint_index, (ax_value, ay_value) in enumerate(waypoints):
             if self._should_abort_ramp():
-                print("[ArtificialChannelLogic] Ramp aborted by force-stop request.")
+                self._emit_log(
+                    "WARNING",
+                    "[ArtificialChannelLogic] Ramp aborted by force-stop request.",
+                )
                 self._skip_next_scan_read = False
                 self._sync_scan_target_to_commanded()
                 return {
@@ -387,11 +396,12 @@ class ArtificialChannelLogic(QtCore.QObject):
             if not self._is_original_coordinate_within_limits(
                 original_channel_x_value, original_channel_y_value
             ):
-                print(
+                message = (
                     "[ArtificialChannelLogic] Skip set: mapped original channels out of limit. "
                     f"{self.original_channel_x_name}={original_channel_x_value:.6f}, "
                     f"{self.original_channel_y_name}={original_channel_y_value:.6f}."
                 )
+                self._emit_log("WARNING", message)
                 if is_scan_write:
                     self._skip_next_scan_read = True
                 else:
@@ -408,9 +418,11 @@ class ArtificialChannelLogic(QtCore.QObject):
                     original_channel_y_value,
                 )
             except Exception as exc:
-                raise RuntimeError(
+                error = RuntimeError(
                     f"Failed to write original channels '{self.original_channel_x_name}'/'{self.original_channel_y_name}': {exc}"
-                ) from exc
+                )
+                self._emit_log("ERROR", f"[ArtificialChannelLogic] {error}")
+                raise error from exc
 
             self._commanded_artificial_values[self.artificial_channel_x_name] = ax_value
             self._commanded_artificial_values[self.artificial_channel_y_name] = ay_value
@@ -428,6 +440,15 @@ class ArtificialChannelLogic(QtCore.QObject):
 
         self._skip_next_scan_read = False
         self._sync_scan_target_to_commanded()
+        if not is_scan_write:
+            self._emit_log(
+                "INFO",
+                "[ArtificialChannelLogic] Applied artificial target "
+                f"{self.artificial_channel_x_name}={target_x:.6f}, "
+                f"{self.artificial_channel_y_name}={target_y:.6f}; mapped to "
+                f"{self.original_channel_x_name}={target_original_x:.6f}, "
+                f"{self.original_channel_y_name}={target_original_y:.6f}.",
+            )
         return {
             "skipped": False,
             "state": dict(self.state),
@@ -453,8 +474,10 @@ class ArtificialChannelLogic(QtCore.QObject):
         if self.has_original_channel(channel_name):
             low, high = self.original_channel_limits[channel_name]
             if value < low or value > high:
-                print(
-                    f"[ArtificialChannelLogic] Skip set: {channel_name}={value:.6f} out of limit [{low:.6f}, {high:.6f}]."
+                self._emit_log(
+                    "WARNING",
+                    f"[ArtificialChannelLogic] Skip set: {channel_name}={value:.6f} "
+                    f"out of limit [{low:.6f}, {high:.6f}].",
                 )
                 if is_scan_write:
                     self._skip_next_scan_read = True
@@ -467,9 +490,11 @@ class ArtificialChannelLogic(QtCore.QObject):
             try:
                 self._write_channel(value, channel_name)
             except Exception as exc:
-                raise RuntimeError(
+                error = RuntimeError(
                     f"Failed to write original channel '{channel_name}': {exc}"
-                ) from exc
+                )
+                self._emit_log("ERROR", f"[ArtificialChannelLogic] {error}")
+                raise error from exc
             self._skip_next_scan_read = False
             updated = self.read_all_channel_values()
             return {
@@ -814,7 +839,8 @@ class ArtificialChannelLogic(QtCore.QObject):
         ax_low, ax_high = self.artificial_channel_limits[self.artificial_channel_x_name]
         ay_low, ay_high = self.artificial_channel_limits[self.artificial_channel_y_name]
 
-        print(
+        self._emit_log(
+            "INFO",
             "[ArtificialChannelLogic] Artificial channel limits computed: "
             f"{self.artificial_channel_x_name} in [{ax_low:.6f}, {ax_high:.6f}], "
             f"{self.artificial_channel_y_name} in [{ay_low:.6f}, {ay_high:.6f}]"

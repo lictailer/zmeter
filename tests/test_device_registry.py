@@ -181,7 +181,9 @@ print("registry lookup remained lazy")
                 },
             ),
             factory=lambda: calls.append("factory") or instance,
-            connect=lambda obj, values: calls.append(("connect", obj, values)),
+            connect=lambda obj, values, timeout_ms: (
+                calls.append(("connect", obj, values, timeout_ms)) or True
+            ),
             disconnect=lambda obj: calls.append(("disconnect", obj)),
             start_scan=lambda obj: calls.append(("start_scan", obj)),
             stop_scan=lambda obj: calls.append(("stop_scan", obj)),
@@ -215,6 +217,13 @@ print("registry lookup remained lazy")
         self.assertEqual(calls.count(("close", instance)), 1)
         connect_call = next(call for call in calls if isinstance(call, tuple) and call[0] == "connect")
         self.assertEqual(connect_call[2], {"nested": [{"value": 1}]})
+        self.assertEqual(connect_call[3], 10_000)
+
+    def test_connection_timeout_must_be_a_positive_integer(self):
+        for timeout_ms in (0, -1, True, 1.5):
+            with self.subTest(timeout_ms=timeout_ms):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    fake_registration(connect_timeout_ms=timeout_ms)
 
     def test_registry_rechecks_connection_schema_before_construction(self):
         calls = []
@@ -302,7 +311,7 @@ print("registry lookup remained lazy")
 
     def test_terminated_adapter_rejects_further_lifecycle_calls(self):
         registration = fake_registration(
-            connect=lambda _obj, _values: None,
+            connect=lambda _obj, _values, _timeout_ms: True,
             disconnect=lambda _obj: None,
         )
         adapter = DriverRegistry((registration,)).create(
@@ -351,7 +360,7 @@ class DefaultMockRegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "not connected"):
             adapter.start_scan()
 
-        self.assertEqual(adapter.connect(), "MOCK::INSTR")
+        self.assertIs(adapter.connect(), True)
         self.assertTrue(adapter.connected())
         adapter.stop_scan()
         adapter.start_scan()
