@@ -28,7 +28,7 @@ The serial field contains the convenience value 103529564, but this is not
 device identity validation. Keep the reviewed controller serial in local lab
 configuration and verify it before connecting.
 
-    from BBD30X.BBD30X_main import BBD30X
+    from devices.BBD30X.BBD30X_main import BBD30X
     from core.shared_runtime import RuntimeServices
 
     services = RuntimeServices()
@@ -144,8 +144,8 @@ Remaining hardware-facing risks include:
 
 Run with the maintained environment active:
 
-    python -B -m py_compile BBD30X\BBD30X_hardware.py BBD30X\BBD30X_logic.py BBD30X\BBD30X_main.py
-    python -B -m unittest discover -s BBD30X\tests -p "test_*.py" -v
+    python -B -m py_compile devices\BBD30X\BBD30X_hardware.py devices\BBD30X\BBD30X_logic.py devices\BBD30X\BBD30X_main.py
+    python -B -m unittest discover -s devices\BBD30X\tests -p "test_*.py" -v
 
 The tests inject fake Kinesis bindings and must not load vendor DLLs, build a
 device list, or operate hardware.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -9,9 +10,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
-from k10cr1 import k10cr1_hardware as bindings
-from k10cr1.k10cr1_logic import K10CR1Logic
-from k10cr1.k10cr1_main import K10CR1
+from devices.k10cr1 import k10cr1_hardware as bindings
+from devices.k10cr1.k10cr1_logic import K10CR1Logic
+from devices.k10cr1.k10cr1_main import K10CR1
 
 
 class FakeLease:
@@ -76,6 +77,20 @@ class K10CR1SharedRuntimeTests(unittest.TestCase):
         self.addCleanup(widget.close)
         self.assertEqual(runtime.load_calls, [])
         self.assertIs(sys.modules.get("clr"), before_clr)
+
+    def test_widget_ui_path_is_independent_of_current_directory(self):
+        runtime = FakeRuntime()
+        original_directory = os.getcwd()
+        with tempfile.TemporaryDirectory() as directory:
+            try:
+                os.chdir(directory)
+                widget = K10CR1(runtime)
+            finally:
+                os.chdir(original_directory)
+
+        self.addCleanup(widget.close)
+        self.assertEqual(runtime.load_calls, [])
+        self.assertTrue(hasattr(widget, "connect_button"))
 
     def test_lazy_binding_resolves_only_when_called(self):
         lazy_library = bindings._LazyLibrary()

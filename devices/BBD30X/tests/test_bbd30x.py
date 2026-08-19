@@ -13,9 +13,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
-from BBD30X.BBD30X_hardware import BBD30x_hardware
-from BBD30X.BBD30X_logic import BBD30X_Logic
-from BBD30X.BBD30X_main import BBD30X
+from devices.BBD30X.BBD30X_hardware import BBD30x_hardware
+from devices.BBD30X.BBD30X_logic import BBD30X_Logic
+from devices.BBD30X.BBD30X_main import BBD30X
 from core.mainWindow import MainWindow
 
 
@@ -312,10 +312,15 @@ class FakeKinesisRuntime:
 
 class ScanDiscoveryHarness:
     make_variables_dictionary = MainWindow.make_variables_dictionary
+    _discover_variables_dictionary = MainWindow._discover_variables_dictionary
     _is_valid_getter = MainWindow._is_valid_getter
     _is_valid_setter = MainWindow._is_valid_setter
     _safe_signature = MainWindow._safe_signature
     filter_scan_channels = MainWindow.filter_scan_channels
+
+    @staticmethod
+    def _bind_manager_device_call(_equipment_label, _device_generation, callback):
+        return callback
 
     def __init__(self):
         self.equips_set_channels = {}
@@ -389,7 +394,7 @@ class BBD30XTests(unittest.TestCase):
             runtime,
             completion_callback_factory=lambda callback: callback,
         )
-        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+        with mock.patch("devices.BBD30X.BBD30X_hardware.time.sleep"):
             values = hardware.connect("12345678")
         self.assertEqual(values, (100.0, 2000.0))
         self.assertIn(("get_channel", 1), events)
@@ -402,7 +407,7 @@ class BBD30XTests(unittest.TestCase):
             FakeKinesisRuntime(bindings),
             completion_callback_factory=lambda callback: callback,
         )
-        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+        with mock.patch("devices.BBD30X.BBD30X_hardware.time.sleep"):
             hardware.connect("12345678")
         self.assertIn("update_configuration", events)
         self.assertIn(("set_settings", ("motor-settings", True, False)), events)
@@ -414,7 +419,7 @@ class BBD30XTests(unittest.TestCase):
             runtime,
             completion_callback_factory=lambda callback: callback,
         )
-        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+        with mock.patch("devices.BBD30X.BBD30X_hardware.time.sleep"):
             self.assertEqual(hardware.connect("12345678"), (100.0, 2000.0))
         self.assertEqual(runtime.ensure_calls, 1)
         self.assertEqual(runtime.refresh_calls, 1)
@@ -429,7 +434,7 @@ class BBD30XTests(unittest.TestCase):
             runtime,
             completion_callback_factory=lambda callback: callback,
         )
-        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+        with mock.patch("devices.BBD30X.BBD30X_hardware.time.sleep"):
             with self.assertRaisesRegex(RuntimeError, "after DeviceManager refresh"):
                 hardware.connect("12345678")
         self.assertEqual(runtime.refresh_calls, 1)
@@ -442,7 +447,7 @@ class BBD30XTests(unittest.TestCase):
             runtime,
             completion_callback_factory=lambda callback: callback,
         )
-        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+        with mock.patch("devices.BBD30X.BBD30X_hardware.time.sleep"):
             hardware.connect("12345678")
             hardware.disconnect()
             hardware.connect("12345678")
@@ -593,7 +598,7 @@ class BBD30XTests(unittest.TestCase):
             runtime,
             completion_callback_factory=lambda callback: callback,
         )
-        with mock.patch("BBD30X.BBD30X_hardware.time.sleep"):
+        with mock.patch("devices.BBD30X.BBD30X_hardware.time.sleep"):
             hardware.connect("12345678")
         hardware.disconnect()
         self.assertEqual(events[-2:], ["stop_polling", "disconnect"])

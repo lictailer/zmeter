@@ -1,17 +1,20 @@
-from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from k10cr1.k10cr1_logic import K10CR1Logic
+from pathlib import Path
+
 import numpy as np
 import pyqtgraph as pg
+from PyQt6 import QtCore, QtWidgets, uic
 
-from core.shared_runtime.kinesis import KinesisRuntime
 from core.device_log import append_device_log, configure_device_log
+from core.shared_runtime.kinesis import KinesisRuntime
+
+from .k10cr1_logic import K10CR1Logic
 
 
 class K10CR1(QtWidgets.QWidget):
     def __init__(self, kinesis_runtime: KinesisRuntime | None = None):
         super(K10CR1, self).__init__()
-        uic.loadUi(r"k10cr1/k10cr1.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("k10cr1.ui")), self)
         self.logic = K10CR1Logic(kinesis_runtime)
 
         self.connect_button.clicked.connect(self.connect)

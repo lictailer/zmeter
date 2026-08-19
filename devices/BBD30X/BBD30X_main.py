@@ -7,10 +7,7 @@ from PyQt6 import QtWidgets, uic
 from core.device_log import append_device_log, configure_device_log
 from core.shared_runtime.kinesis import KinesisRuntime
 
-try:
-    from .BBD30X_logic import BBD30X_Logic
-except ImportError:
-    from BBD30X_logic import BBD30X_Logic
+from .BBD30X_logic import BBD30X_Logic
 
 
 class BBD30X(QtWidgets.QWidget):

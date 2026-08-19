@@ -8,10 +8,7 @@ from typing import Any
 
 from PyQt6 import QtCore
 
-try:
-    from .BBD30X_hardware import BBD30x_hardware
-except ImportError:
-    from BBD30X_hardware import BBD30x_hardware
+from .BBD30X_hardware import BBD30x_hardware
 
 
 class BBD30X_Logic(QtCore.QThread):

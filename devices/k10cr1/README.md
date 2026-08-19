@@ -35,7 +35,7 @@ Profile construction:
 
 ```python
 from core.shared_runtime import RuntimeServices
-from k10cr1.k10cr1_main import K10CR1
+from devices.k10cr1.k10cr1_main import K10CR1
 
 services = RuntimeServices()
 mount = K10CR1(services.kinesis)
