@@ -370,3 +370,57 @@ Copy and complete:
 - Remaining risks: only `mock_device` is registered; real drivers require individual lifecycle, dependency, connection-schema, and busy-state review. Active startup still uses the legacy direct construction path until the manager/profile integration phases.
 - Next authorized phase: Phase 3 — static `DeviceManager` ownership and unified teardown while preserving startup behavior.
 - User input required: None.
+
+## 2026-08-18 — Phase 3: static manager ownership and safe unified teardown
+
+### Intended outcome
+
+- Acceptance criteria: one manager transactionally owns the unchanged two-mock startup set; `MainWindow` consumes one immutable ordered snapshot; scan lifecycle calls delegate without changing driver behavior; application shutdown proves scan/queue/output quiescence before ordered device teardown and releases shared runtimes only after successful device cleanup.
+- Explicit non-goals: activating the checked JSON profile, runtime add/remove, rebuildable catalogs, real-driver registration, device-package moves, explicit-only VISA discovery, or strict unknown-channel rejection.
+- Base commit: `fb86fd6`.
+- Related maintenance commits integrated: None.
+
+### Changes
+
+- Files added: `core/device_management/manager.py`, `tests/test_device_manager.py`, `tests/test_device_manager_integration.py`, `tests/test_scanlist_shutdown.py`.
+- Files modified: `core/device_management/__init__.py`, `core/mainWindow.py`, `core/scan.py`, `core/scan_logic.py`, `core/scanlist.py`, `start_zmeter.py`, `tests/test_device_registry.py`.
+- Files moved: None.
+- Files removed: None.
+- API/config impact: added immutable device snapshots/record views, explicit manager states, transactional one-profile loading, typed lifecycle/startup/thread errors, aggregated lifecycle reports, and idempotent ordered teardown. `MainWindow` accepts a manager while retaining its legacy constructor path for this focused transition. The active launcher uses a temporary in-memory two-mock `ProfileConfig`; switching to `config/profiles/mock.json` remains Phase 4.
+- Existing behavior impact: startup labels, button order, window titles, disconnected mock state, channel order, router labels, menus, close confirmation, and driver start/stop exception behavior remain unchanged. Deferred automatic VISA discovery and silent skipping of unknown configured channels remain intact and covered by regression tests.
+- Scan/data/schema impact: measurement schema, scan signals, queue semantics, save/autosave behavior, and serial numbering are unchanged. A shutdown-only barrier now seals new scan/manual/queue starts, requests stop, waits for direct/queued scan threads and deferred output finalizers, and closes scan widgets only after quiescence.
+- Hardware/lifecycle impact: manager load is atomic and disabled devices are not constructed. Final teardown preserves the existing global order: force-stop every device, stop every applicable device, then terminate and close each device in profile order. Construction and final QWidget teardown are restricted to the manager owner/UI thread. Failures are aggregated without skipping later devices; failed teardown prevents shared-runtime release.
+- Documentation updated: this append-only evidence entry.
+
+### Validation
+
+| Exact command/check | Environment | Evidence level | Result | Duration/output |
+| --- | --- | --- | --- | --- |
+| `python -X pycache_prefix=C:\Users\Taylo\Documents\ChatGPT\zmeter\.restructure_phase3_pycache -m py_compile core/device_management/__init__.py core/device_management/manager.py core/mainWindow.py core/scan.py core/scan_logic.py core/scanlist.py start_zmeter.py tests/test_device_manager.py tests/test_device_manager_integration.py tests/test_device_registry.py tests/test_scanlist_shutdown.py` | `zmeter_May2026` Python 3.12.12 | Static | Passed; redirected bytecode directory removed immediately after validation | Exit 0 |
+| `python -B -m unittest tests.test_device_manager tests.test_device_manager_integration -v` | `zmeter_May2026`, offscreen | Hardware-independent unit/mock/offscreen GUI | 28 tests passed, including transactional rollback, teardown order/error aggregation, real-QWidget owner-thread rejection, exact catalog compatibility, and launcher failure policy | 2.994 s |
+| `python -B -m unittest discover -s tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen where requested by tests | Hardware-independent unit/mock/offscreen GUI | 125 tests passed | 5.255 s |
+| `python -B -m unittest discover -s mockDevice/tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen | Mock/simulation/offscreen GUI | 18 tests passed | 0.313 s |
+| Independent adversarial shutdown/manager audit | `zmeter_May2026`, offscreen | Safety/race review | No confirmed defects after fixes; independent rerun passed 125 core and 18 mock tests | 5.436 s / 0.307 s |
+| Fresh-process manager/registry sentinels | `zmeter_May2026` | Import-safety unit | No mock, VISA, pythonnet, NI, Kinesis, or other watched device/vendor import during manager/default-registry lookup | Passed |
+| `git diff --check` plus focused credential/secret scan | Repository root | Static/security inspection | Passed; only expected LF/CRLF conversion warnings and no secret matches | None |
+
+- Validation incidents: an early full-suite run in an independent workstream observed one timing race in the existing VISA refresh test; its isolated retry passed, and two later complete maintained-environment runs passed without failure. Adversarial review identified and drove fixes for late scan creation during event pumping, incomplete finalizer tracking, lifecycle-error propagation, manager state sealing, disconnected-driver fidelity, startup rollback/runtime ordering, abnormal-exit status, and UI-thread final teardown before the phase was accepted.
+- Tests not run and reason: no interactive GUI session and no physical-device/vendor integration tests were run; agent hardware execution is prohibited and this phase registers only the in-process mock.
+- User-executed hardware test status: Not applicable to this mock-only phase; not run.
+
+### Inspection
+
+- `git diff --check`: Passed before commit.
+- `git status --short --branch`: Clean immediately after the Phase 3 source commit; this log entry is the only subsequent change.
+- Unexpected/unrelated changes: None.
+- Generated artifacts removed: the external redirected Phase 3 bytecode directory was verified and removed. No generated source-repository artifact is tracked.
+- Security/configuration review: no credentials, private endpoints, real instrument addresses, serials, vendor paths, or hardware-enabling values were added. The active manager creates only the two disconnected mock widgets and does not touch shared VISA/Kinesis runtimes.
+
+### Decision
+
+- Gate passed: Yes.
+- Commit(s): `14128f6` (`Add static device manager ownership`); this evidence entry follows in a documentation commit.
+- Rollback method: revert the Phase 3 source commit and its evidence commit; recovery tag remains `pre-structure-v2`.
+- Remaining risks: the shutdown deadline is cooperative for a synchronous GUI callback already executing; an over-budget callback is detected before scan widgets, devices, or runtimes are torn down. Runtime mutation and safe catalog reconciliation are not yet enabled. Active startup still uses the temporary static profile source until Phase 4.
+- Next authorized phase: Phase 4 — activate the validated checked-in profile loader in the launcher.
+- User input required: None.
