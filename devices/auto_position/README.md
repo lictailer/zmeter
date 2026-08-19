@@ -2,7 +2,7 @@
 
 ## Status
 
-`auto_position` is a standalone, experimental galvo/photodiode positioning prototype. It is not a current ZMeter device integration: the widget has no `.logic` object, uses PyQt5 while ZMeter uses PyQt6, imports `nidaq_hardware` as a top-level module, and loads its UI from the process working directory.
+`auto_position` is a standalone, experimental galvo/photodiode positioning prototype. It is not a current ZMeter device integration: the widget has no `.logic` object, uses PyQt5 while ZMeter uses PyQt6, and imports the legacy NIDAQ hardware layer directly instead of using manager/router ownership. Its UI path is module-relative after the package move, but construction still creates hardware tasks.
 
 Do not add it to the reviewed driver registry or select it in a profile in its present form.
 
@@ -20,15 +20,15 @@ The current source embeds `Dev1` channel names and default scan coordinates. Tho
 
 ## Required work before integration
 
-- port the widget to PyQt6 and package-relative paths/imports;
+- port the widget to PyQt6;
 - inject an already-owned DAQ or use the device command router instead of direct device coupling;
 - move hardware task creation out of constructors;
 - add scan-facing signatures only for deliberate numeric channels;
 - add finite/range validation, stop/force-stop, idempotent disconnect, and final teardown;
 - make all device names, channels, ranges, centers, and output paths profile configuration.
 
-Agents must not instantiate this prototype or run its scan. See [device_contract.md](../documents/device_contract.md) and [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not instantiate this prototype or run its scan. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile auto_position/canonical_position_logic.py auto_position/canonical_position_main.py`. No bench checklist is sanctioned in the current form because construction creates real NI tasks and the module lacks ZMeter lifecycle/safety boundaries. Refactor and simulate it before proposing a **User-executed hardware test**.
+Hardware-independent syntax check: `python -B -m py_compile devices/auto_position/canonical_position_logic.py devices/auto_position/canonical_position_main.py`. No bench checklist is sanctioned in the current form because construction creates real NI tasks and the module lacks ZMeter lifecycle/safety boundaries. Refactor and simulate it before proposing a **User-executed hardware test**.

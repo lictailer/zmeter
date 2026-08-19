@@ -18,7 +18,7 @@ start_zmeter.py
                  -> core.scan_logic.ScanLogic
 ```
 
-The checked-in `config/profiles/mock.json` profile instantiates two disconnected `mockDevice.MockDevice` widgets through the lazy reviewed registry. `start_zmeter.py` contains no device-specific imports or connection values. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; `core/scan_logic_old.py` is retained source but is not on the active path.
+The checked-in `config/profiles/mock.json` profile instantiates two disconnected `devices.mockDevice.mock_device_main.MockDevice` widgets through the lazy reviewed registry. `start_zmeter.py` contains no device-specific imports or connection values. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; `core/scan_logic_old.py` is retained source but is not on the active path.
 
 ## Maintained layout
 
@@ -39,8 +39,9 @@ The checked-in `config/profiles/mock.json` profile instantiates two disconnected
 | `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |
 | `core/all_plot_settings.py`, `core/all_plots.py` | Plot configuration and presentation |
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
-| `mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
-| `<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
+| `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
+| `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
+| `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
 | `documents/` | Canonical repository-wide technical documentation and decisions |
 | `data/` | Default local measurement output; ignored by Git |
@@ -50,12 +51,12 @@ The checked-in `config/profiles/mock.json` profile instantiates two disconnected
 
 ## Device integration inventory
 
-Source packages currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr830_v2`, `sr860`, `opticool`, `montana2`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the target package, dependencies, lifecycle, tests, and device-local documentation before enabling it. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
+Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr830_v2`, `sr860`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the target package, dependencies, lifecycle, tests, and device-local documentation before enabling it. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
 
 Maintained VISA packages (`pem100`, `sp150`, `hp34401a`, `keithley24xx`,
-`sr830_v2`, and `sr860`) use `VisaRuntime`; legacy `sr830/` is explicitly
+`sr830_v2`, and `sr860`) use `VisaRuntime`; legacy `devices/sr830/` is explicitly
 excluded. K10CR1 and BBD30X use one injected `KinesisRuntime` and the same local
-manifest-validated DLL directory. `demoDevice` uses an injected fake VISA
+manifest-validated DLL directory. `devices.demoDevice` uses an injected fake VISA
 manager and does not patch PyVISA globally.
 
 ## Maintenance rule

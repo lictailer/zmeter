@@ -78,7 +78,7 @@ load a vendor runtime or validate physical equipment.
 ### Mock-device tests
 
 ```powershell
-python -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v
+python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
 - Hardware: none; `mockDevice` uses its in-process simulator and sets Qt offscreen.
@@ -98,7 +98,7 @@ The commands are canonical, but successful execution requires the maintained env
 - Shared-runtime tests must inject fake manager/load functions. They must not
   instantiate a real PyVISA manager, import `clr`, call `AddReference`, load a
   vendor DLL, or enumerate hardware. Run the shared-runtime, migrated VISA,
-  K10CR1, and BBD30X fake suites before broader core/mock regressions.
+  K10CR1, BBD30X, and Four9 fake suites before broader core/mock regressions.
 
 ## User-executed hardware tests
 

@@ -26,10 +26,10 @@ Do not assume the first discovered resource is the intended instrument. Producti
 
 `force_stop()` is empty and `terminate_dev()` only prints a message. The indefinite-read stop flag is not the same as final device cleanup, and no `start_scan`/`stop_scan` hooks coordinate monitoring with scans. Implement deterministic stop, join, and disconnect before relying on shutdown.
 
-Agents must not load/run resource discovery, open/reset a meter, change wavelength, read power, or disconnect it. See [device_contract.md](../documents/device_contract.md) and [hardware_safety.md](../documents/hardware_safety.md). Any bench procedure is a **User-executed hardware test**.
+Agents must not load/run resource discovery, open/reset a meter, change wavelength, read power, or disconnect it. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md). Any bench procedure is a **User-executed hardware test**.
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile tlpm/tlpm_hardware.py tlpm/tlpm_logic.py tlpm/tlpm_main.py`. It checks syntax only and does not load `TLPM_64.dll`.
+Hardware-independent syntax check: `python -B -m py_compile devices/tlpm/tlpm_hardware.py devices/tlpm/tlpm_logic.py devices/tlpm/tlpm_main.py`. It checks syntax only and does not load `TLPM_64.dll`.
 
 **User-executed hardware test:** connect only the intended meter so first-resource selection is unambiguous; verify model, serial, sensor, calibration message, and power unit; set a wavelength within the attached sensor's calibrated range; measure a blocked sensor and a known stable optical source; start and stop the 20 Hz monitor; disconnect; and verify the driver session closes. Do not expose the meter to an unknown or over-range source.

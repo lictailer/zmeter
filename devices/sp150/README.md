@@ -16,7 +16,7 @@ Example profile setup:
 
 ```python
 from core.shared_runtime import RuntimeServices
-from sp150.sp150_main import SP150
+from devices.sp150.sp150_main import SP150
 
 services = RuntimeServices()
 mono = SP150(
@@ -58,8 +58,8 @@ After a timeout, cancellation, malformed response, or uncertain move, the user m
 ## Hardware-independent validation
 
 ```powershell
-python -B -m py_compile sp150\sp150_hardware.py sp150\sp150_logic.py sp150\sp150_main.py
-python -B -m unittest discover -s sp150\tests -p "test_*.py" -v
+python -B -m py_compile devices/sp150/sp150_hardware.py devices/sp150/sp150_logic.py devices/sp150/sp150_main.py
+python -B -m unittest discover -s devices/sp150/tests -p "test_*.py" -v
 ```
 
 The tests use an injected `VisaRuntime` with a fake manager. They do not instantiate a real ResourceManager.

@@ -20,8 +20,8 @@ If registered despite the limitations, the logic's only signature-matching gette
 
 The source requires PyQt6, pyserial, the legacy NI DAQ interface, NumPy, SciPy, OpenCV, and Matplotlib. Before integration, remove direct cross-device coupling in favor of the router, make the UI nonblocking, configure paths/channels externally, validate all ranges and units, define recovery/stop behavior, and add hardware-independent tests.
 
-Agents must not enumerate ports, open the serial device, create NI tasks, move the stepper/galvos, or acquire the photodiode. See [device_contract.md](../documents/device_contract.md) and [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not enumerate ports, open the serial device, create NI tasks, move the stepper/galvos, or acquire the photodiode. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile auto_focus/autofocus_logic.py auto_focus/autofocus_main.py`. No bench checklist is sanctioned until the broken object wiring, UI blocking, limits, router use, and lifecycle are corrected and covered by simulation. A later hardware procedure must be labeled **User-executed hardware test**.
+Hardware-independent syntax check: `python -B -m py_compile devices/auto_focus/autofocus_logic.py devices/auto_focus/autofocus_main.py`. No bench checklist is sanctioned until the broken object wiring, UI blocking, limits, router use, and lifecycle are corrected and covered by simulation. A later hardware procedure must be labeled **User-executed hardware test**.

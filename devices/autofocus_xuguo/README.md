@@ -34,10 +34,10 @@ The package writes mapping JSON, offset-history CSV, status logs, and `autoposit
 
 The stop request is polled by mapping/focus helpers, but the widget has no standard `start_scan`, `stop_scan`, or `force_stop`, and `terminate_dev` disconnects without first requesting an active operation to stop. Review partial motion, partial maps, router failures, timeout, and teardown before enabling it.
 
-Agents must not enumerate serial ports, open the Arduino, move/home/zero any axis, route real-device reads/writes, acquire a map, or run autofocus/autoposition. See [device_contract.md](../documents/device_contract.md), [data_format.md](../documents/data_format.md), and [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not enumerate serial ports, open the Arduino, move/home/zero any axis, route real-device reads/writes, acquire a map, or run autofocus/autoposition. See [device_contract.md](../../documents/device_contract.md), [data_format.md](../../documents/data_format.md), and [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile autofocus_xuguo/autofocusXZ_hardware.py autofocus_xuguo/autofocusXZ_logic.py autofocus_xuguo/autofocusXZ_main.py autofocus_xuguo/autopositionXZ_helpers.py`. Algorithm tests should inject simulated router and stepper transports and write only to a temporary directory; none are present yet.
+Hardware-independent syntax check: `python -B -m py_compile devices/autofocus_xuguo/autofocusXZ_hardware.py devices/autofocus_xuguo/autofocusXZ_logic.py devices/autofocus_xuguo/autofocusXZ_main.py devices/autofocus_xuguo/autopositionXZ_helpers.py`. Algorithm tests should inject simulated router and stepper transports and write only to a temporary directory; none are present yet.
 
 No production bench test should run until long work is moved off the UI thread and shutdown is made coherent. After that, the **User-executed hardware test** is: mechanically clear and limit all axes; connect the explicit stepper port and verify the handshake/current position; route X/Y and reference channels with restrictive limits; command current positions first; make one small approved X, Y, and Z move; acquire a minimal 3-by-3 reference/current map; stop during a second map; verify offsets and partial output files; perform a bounded Z profile without applying a fitted move; terminate; and confirm all routed devices and the serial port remain in their intended states.

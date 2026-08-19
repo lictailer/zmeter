@@ -29,10 +29,10 @@ The hardware defaults to a `[-10, 10]` V AO/AI range unless constructed otherwis
 
 The widget pauses its monitor during a scan and `terminate_dev` stops monitoring and closes all tasks. There is no widget `force_stop`; review behavior for active writes, reads, counter gates, and pulse tasks before production use.
 
-Agents must not import/run commands that enumerate NI devices, initialize the device, create tasks, write/read channels, route counters, or generate pulses. The executable `__main__` blocks in the logic and hardware files are hardware bench tests and are user-only. See [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not import/run commands that enumerate NI devices, initialize the device, create tasks, write/read channels, route counters, or generate pulses. The executable `__main__` blocks in the logic and hardware files are hardware bench tests and are user-only. See [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile ni6423/ni6423_hardware.py ni6423/ni6423_logic.py ni6423/ni6423_main.py`. No hardware-independent NI transport test exists yet.
+Hardware-independent syntax check: `python -B -m py_compile devices/ni6423/ni6423_hardware.py devices/ni6423/ni6423_logic.py devices/ni6423/ni6423_main.py`. No hardware-independent NI transport test exists yet.
 
 **User-executed hardware test:** disconnect the DAQ from the experiment and use a reviewed breakout/load; verify the NI device name and every PFI/counter route; connect; write 0 V and then +0.1 V to one AO within configured limits; confirm the mapped feedback input; read one grounded AI; measure a known counter source; stop any pulse task; terminate; and confirm all tasks release. Repeat fault cleanup with one deliberately invalid channel name before reconnecting the experiment.

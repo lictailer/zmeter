@@ -29,10 +29,10 @@ Default sensing compliance arguments are 200 V for voltage sensing and `1e-5` A 
 
 Connection selects voltage source/current sense and enables output. `terminate_dev` requests ramp stop, waits up to two seconds, and closes the hardware; hardware close turns output off and clears status. The widget has no `start_scan`/`stop_scan` hooks.
 
-Agents must not enumerate VISA resources, connect, enable output, source, ramp, read, reset, or disconnect the SMU. See [hardware_safety.md](../documents/hardware_safety.md). Hardware validation is a **User-executed hardware test** only.
+Agents must not enumerate VISA resources, connect, enable output, source, ramp, read, reset, or disconnect the SMU. See [hardware_safety.md](../../documents/hardware_safety.md). Hardware validation is a **User-executed hardware test** only.
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile keithley24xx/keithley24xx_hardware.py keithley24xx/keithley24xx_logic.py keithley24xx/keithley24xx_main.py`.
+Hardware-independent syntax check: `python -B -m py_compile devices/keithley24xx/keithley24xx_hardware.py devices/keithley24xx/keithley24xx_logic.py devices/keithley24xx/keithley24xx_main.py`.
 
 **User-executed hardware test:** isolate the SMU from the experiment and attach a suitable dummy load; set reviewed compliance and source limits on the instrument; connect to the explicit VISA address; command 0 V; ramp only to a user-approved low target; request stop during a second ramp and record the last actual value; test one bounded current-source/readback case; terminate; and verify output is off with an independent meter. Do not use the scan engine until this sequence passes.

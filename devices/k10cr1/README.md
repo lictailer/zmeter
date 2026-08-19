@@ -52,7 +52,7 @@ and retains the latest 500 timestamped entries in memory.
 
 The logic contains an immediate-stop call, but its own comment says it does not work. The widget's `force_stop()` is empty. `terminate_dev()` now disconnects an active session and releases its runtime lease, but there are no `start_scan`/`stop_scan` hooks.
 
-Before enabling the module, implement and simulate bounded stop, idempotent disconnect, shutdown cleanup, range validation, and last-confirmed-position reporting. Agents must not load/run Kinesis discovery, open a mount, home, change velocity, move, stop, or disconnect it. See [hardware_safety.md](../documents/hardware_safety.md).
+Before enabling the module, implement and simulate bounded stop, idempotent disconnect, shutdown cleanup, range validation, and last-confirmed-position reporting. Agents must not load/run Kinesis discovery, open a mount, home, change velocity, move, stop, or disconnect it. See [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 

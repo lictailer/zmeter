@@ -39,7 +39,8 @@ start_zmeter.py
 
 ## Layer responsibilities
 
-Device integrations normally use three layers:
+Device integrations are flat subpackages of `devices/`, imported as
+`devices.<package>`, and normally use three layers:
 
 - **Widget/main:** operator controls and display; translates UI events into logic calls and receives logic signals.
 - **Logic:** scan-facing `get_*`/`set_*` API, operation coordination, signal emission, and worker-thread behavior where needed.

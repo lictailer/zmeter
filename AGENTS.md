@@ -60,7 +60,7 @@ Existing hardware-independent test entry points are:
 
 ```powershell
 python -B -m unittest discover -s tests -p "test_*.py" -v
-python -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v
+python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
 For changed Python, run `python -B -m py_compile <files>`. Add focused hardware-independent checks for changed UI XML, imports, persistence, or shutdown. Record exact commands and results. If blocked, report the reason; never call an unrun check passing.

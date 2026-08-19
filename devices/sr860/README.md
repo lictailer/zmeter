@@ -26,10 +26,10 @@ The hardware documents internal reference frequency as 1 mHz–500 kHz and sine 
 
 Connection checks that identity contains `SR860`, and termination stops UI monitoring then disconnects. The widget does not implement standard `start_scan`, `stop_scan`, or `force_stop`, so automatic scan coordination is incomplete. A 50 ms monitor can otherwise compete with scan reads.
 
-Agents must not enumerate VISA resources, connect, configure, source, read, reset, or disconnect the SR860. The user must validate filters, units, timeouts, monitor coordination, auxiliary limits, and shutdown state. See [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not enumerate VISA resources, connect, configure, source, read, reset, or disconnect the SR860. The user must validate filters, units, timeouts, monitor coordination, auxiliary limits, and shutdown state. See [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile sr860/sr860_hardware.py sr860/sr860_logic.py sr860/sr860_main.py`.
+Hardware-independent syntax check: `python -B -m py_compile devices/sr860/sr860_hardware.py devices/sr860/sr860_logic.py devices/sr860/sr860_main.py`.
 
 **User-executed hardware test:** use a disconnected/dummy signal path; connect to the explicit VISA address and confirm SR860 identity; record existing configuration; read X/Y/R/Theta and overload state; set the sine amplitude to a reviewed low value; verify the scan-visible amplitude setter/readback; write only 0 V to a reviewed auxiliary output; stop monitoring and simulate a timeout; terminate; and confirm the session closes without changing unrelated settings.

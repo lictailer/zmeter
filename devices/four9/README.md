@@ -92,6 +92,17 @@ the server has not cached its first sample yet.
 Automated tests use only injected fake hardware and a local fake TCP server.
 They must never point at a laboratory controller.
 
+Run the hardware-independent checks from the repository root:
+
+```powershell
+python -B -m py_compile devices/four9/four9_hardware.py devices/four9/four9_logic.py devices/four9/four9_main.py
+python -B -m unittest discover -s devices/four9/tests -p "test_*.py" -v
+```
+
+See [device_contract.md](../../documents/device_contract.md),
+[hardware_safety.md](../../documents/hardware_safety.md), and
+[testing.md](../../documents/testing.md).
+
 **User-executed hardware test:** confirm the Four9 control service and cryostat
 are already in a safe reviewed state; connect to the intended host and port;
 read status; set the target equal to the current approved target; verify the

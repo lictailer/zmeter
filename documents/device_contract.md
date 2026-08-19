@@ -2,14 +2,14 @@
 
 ## Purpose
 
-A device package adapts one instrument or simulator to ZMeter without leaking vendor-specific behavior into core scan code. Use `mockDevice/` as the executable reference. `demoDevice/` is historical/template evidence only until reconciled with this contract and current tests.
+A device package adapts one instrument or simulator to ZMeter without leaking vendor-specific behavior into core scan code. Use `devices/mockDevice/` as the executable reference. `devices/demoDevice/` is historical/template evidence only until reconciled with this contract and current tests.
 
 ## Package layout and ownership
 
 The conventional layout is:
 
 ```text
-<device>/
+devices/<device>/
   __init__.py
   <device>_main.py       # QWidget/operator interface
   <device>_logic.py      # scan-facing API and coordination

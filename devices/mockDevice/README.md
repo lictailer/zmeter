@@ -32,4 +32,4 @@ Focused tests are in `devices/mockDevice/tests/test_mock_device.py` and cover di
 python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
-See [device_contract.md](../documents/device_contract.md) and [testing.md](../documents/testing.md).
+See [device_contract.md](../../documents/device_contract.md) and [testing.md](../../documents/testing.md).

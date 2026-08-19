@@ -23,7 +23,7 @@ No lab-safe limits or ZMeter channel mapping are defined here. Keep the address,
 
 There are no scan-visible ZMeter channels or lifecycle methods in the current tree. A future integration must separate transport from logic and UI, validate every motion/output command, provide bounded stop and cleanup behavior, and document which controller/module combinations are supported.
 
-Agents must not run this source or any ANC300 discovery, connection, axis probe, motion, voltage, frequency, mode, or stop command. See [device_contract.md](../documents/device_contract.md) and [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not run this source or any ANC300 discovery, connection, axis probe, motion, voltage, frequency, mode, or stop command. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 

@@ -145,7 +145,7 @@ Real-hardware operation and validation must be performed directly by the user. C
 
 ## Instrument integrations in the repository
 
-The source tree contains integrations or experimental work for several equipment families:
+The flat `devices/` package contains integrations or experimental work for several equipment families:
 
 | Area | Modules present |
 | --- | --- |
@@ -153,7 +153,7 @@ The source tree contains integrations or experimental work for several equipment
 | NI data acquisition | `nidaq`, `ni6423` |
 | Source meters and multimeters | `keithley24xx`, `hp34401a` |
 | Lock-in amplifiers | `sr830`, `sr830_v2`, `sr860` |
-| Cryostats/environment control | `opticool`, `montana2` |
+| Cryostats/environment control | `opticool`, `montana2`, `four9` |
 | Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X` |
 | Positioning/autofocus | `auto_focus`, `auto_position`, `autofocus_xuguo`, `ANC300` |
 
@@ -196,7 +196,7 @@ Run validation only after confirming that the selected command, imports, fixture
 
 ```powershell
 python -B -m unittest discover -s tests -p "test_*.py" -v
-python -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v
+python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
 For changed Python files:
@@ -215,8 +215,9 @@ config/profiles/                Checked mock profile and ignored local-profile b
 core/                           Scan UI, queue, execution, plotting, routing, and persistence
 core/device_management/         Profile loading, reviewed registry, manager ownership
 core/shared_runtime/            Shared VISA/Kinesis ownership and local vendor manifests
-mockDevice/                     Hardware-independent simulated instrument and its tests
-<device>/                       Device-specific widget, logic, hardware, and UI files
+devices/                        Flat package namespace for device integrations
+devices/mockDevice/             Hardware-independent simulated instrument and its tests
+devices/<device>/               Device-specific widget, logic, hardware, and UI files
 tests/                          Hardware-independent core regression tests
 data/                           Default local measurement output
 scan_range_limits.json          Configured scan-output limits

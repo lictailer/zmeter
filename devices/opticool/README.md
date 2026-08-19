@@ -25,10 +25,10 @@ Temperature wait exits on vendor `Stable`, a 50-sample standard-deviation thresh
 
 The widget runs jobs in a `QThread` and exposes an abort button for stable waits, but has no `force_stop`, `start_scan`, or `stop_scan`. `terminate_dev` waits up to two seconds and then disconnects; it does not guarantee a long wait has stopped.
 
-Agents must not load/use the vendor API to connect, set temperature/field, wait, read, abort, or disconnect. Before enabling, the user must review limits, units, approach modes, timeout/abort behavior, and shutdown. See [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not load/use the vendor API to connect, set temperature/field, wait, read, abort, or disconnect. Before enabling, the user must review limits, units, approach modes, timeout/abort behavior, and shutdown. See [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile opticool/opticool_hardware.py opticool/opticool_logic.py opticool/opticool_main.py`. It does not prove that pythonnet or the vendor DLL can load.
+Hardware-independent syntax check: `python -B -m py_compile devices/opticool/opticool_hardware.py devices/opticool/opticool_logic.py devices/opticool/opticool_main.py`. It does not prove that pythonnet or the vendor DLL can load.
 
 **User-executed hardware test:** with the OptiCool in a known safe state, confirm the vendor application and emergency procedures; connect and read temperature/field without changing them; set each target equal to its current readback; exercise and abort both stable-wait paths; make only lab-approved small temperature and field changes inside configured rate/limit bounds; terminate; and verify the instrument remains in the intended holding state. Do not use the current software warning as a temperature interlock.

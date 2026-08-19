@@ -29,10 +29,10 @@ Connection requires a nonempty `*IDN?` response containing `SR830`. VISA timeout
 
 `stop_scan` records whether monitoring was active and stops it; `start_scan` resumes it only when appropriate. `force_stop` stops monitoring and waits for any current logic job to return; termination stops monitoring then disconnects. These methods stop software polling; they do not interrupt an in-flight VISA call or undo instrument settings or auxiliary outputs.
 
-Agents must not enumerate VISA resources, connect, configure, read, write, reset, or disconnect the SR830. Before production use, the user must verify channel filters, timeout/error recovery, aux-output limits, and final instrument state in a **User-executed hardware test**. See [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not enumerate VISA resources, connect, configure, read, write, reset, or disconnect the SR830. Before production use, the user must verify channel filters, timeout/error recovery, aux-output limits, and final instrument state in a **User-executed hardware test**. See [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile sr830_v2/sr830_hardware.py sr830_v2/sr830_logic.py sr830_v2/sr830_main.py`.
+Hardware-independent syntax check: `python -B -m py_compile devices/sr830_v2/sr830_hardware.py devices/sr830_v2/sr830_logic.py devices/sr830_v2/sr830_main.py`.
 
 **User-executed hardware test:** use a disconnected/dummy signal path; connect to the explicit VISA address and confirm SR830 identity; record current settings; read X/Y/R/Theta and status; pause/resume monitoring via scan lifecycle calls; set only a user-approved low sine amplitude and 0 V auxiliary output; simulate a VISA timeout; terminate; and confirm monitoring stops and the session closes without altering unrelated settings.

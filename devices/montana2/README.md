@@ -29,10 +29,10 @@ Do not copy the example IP address in source into shared configuration. The widg
 
 The user can request interruption of the stability wait. `terminate_dev` sets that flag, waits up to two seconds, then disconnects if connected. There are no standard `start_scan`, `stop_scan`, or `force_stop` methods, and long-running state transitions remain active on the cryostat unless explicitly handled.
 
-Agents must not probe the IP, connect, change temperature or system goals, vent, pump, purge, read state, abort goals, or disconnect. Review the complete cryostat state machine and recovery plan in a **User-executed hardware test** before enabling. See [hardware_safety.md](../documents/hardware_safety.md).
+Agents must not probe the IP, connect, change temperature or system goals, vent, pump, purge, read state, abort goals, or disconnect. Review the complete cryostat state machine and recovery plan in a **User-executed hardware test** before enabling. See [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile montana2/montana2_hardware.py montana2/montana2_logic.py montana2/montana2_main.py`. It does not test the bundled network client.
+Hardware-independent syntax check: `python -B -m py_compile devices/montana2/montana2_hardware.py devices/montana2/montana2_logic.py devices/montana2/montana2_main.py`. It does not test the bundled network client.
 
 **User-executed hardware test:** confirm the cryostat's physical state and vendor recovery procedure; connect to the reviewed IP; read system goal/state, pressure, platform temperature, and stability; set the platform target equal to its current readback; exercise stability-wait interruption and timeout using user-approved settings; disconnect and reconnect; then verify the cryostat continues the intended goal. Cooldown, warmup, vent, vacuum, bakeout, and purge each require a separate approved procedure.

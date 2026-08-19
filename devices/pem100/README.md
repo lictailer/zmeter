@@ -16,7 +16,7 @@ Example profile setup:
 
 ```python
 from core.shared_runtime import RuntimeServices
-from pem100.pem100_main import PEM100
+from devices.pem100.pem100_main import PEM100
 
 services = RuntimeServices()
 pem = PEM100(visa_runtime=services.visa)
@@ -51,8 +51,8 @@ Malformed numeric replies, failed acknowledgements, timeouts, and connection fai
 ## Hardware-independent validation
 
 ```powershell
-python -B -m py_compile pem100\pem100_hardware.py pem100\pem100_logic.py pem100\pem100_main.py
-python -B -m unittest discover -s pem100\tests -p "test_*.py" -v
+python -B -m py_compile devices/pem100/pem100_hardware.py devices/pem100/pem100_logic.py devices/pem100/pem100_main.py
+python -B -m unittest discover -s devices/pem100/tests -p "test_*.py" -v
 ```
 
 The tests use an injected `VisaRuntime` with a fake manager. They do not instantiate a real ResourceManager.
