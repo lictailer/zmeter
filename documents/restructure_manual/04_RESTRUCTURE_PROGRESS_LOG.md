@@ -546,3 +546,64 @@ Copy and complete:
 - Remaining risks: manager-owned session mutation and generation-aware/in-flight call gating are not yet enabled. `MainWindow.apply_device_snapshot()` is a tested UI-thread transaction, but Phase 6 must split side-effect-free proposal/preflight from post-lifecycle commit, reject stale generations, and keep profile persistence separate. A real driver with additional stored references or router clients remains ineligible for runtime mutation until its provider/detach contract is reviewed.
 - Next authorized phase: Phase 6 — add mock-only idle-guarded runtime add/disconnect/remove and manager call gating, then integrate the transactional catalog acknowledgement.
 - User input required: None.
+
+## 2026-08-18 — Phase 6: idle-only runtime device management
+
+### Intended outcome
+
+- Acceptance criteria: add, disconnect, and remove reviewed mock devices without blocking the UI; refuse mutation while scans, the queue, manual operations, router/device calls, or device-owned work are active; prevent any call after removal starts; publish exactly one acknowledged catalog generation per successful change; preserve ownership-order teardown and allow a failed pre-teardown boundary to retry without reopening the half-shutdown session.
+- Explicit non-goals: persisting session mutations, enabling a real driver for runtime mutation, changing scalar scan or persistence behavior, moving device packages, array-valued getters, or physical-device validation.
+- Base commit: `127068c`.
+- Related maintenance commits integrated: None.
+
+### Changes
+
+- Files added: `tests/test_device_manager_runtime_mutation.py`, `tests/test_runtime_device_ui.py`.
+- Files modified: `core/device_management/manager.py`, `core/device_management/models.py`, `core/device_management/registry.py`, `core/device_management/__init__.py`, `core/mainWindow.py`, `core/device_command_router.py`, `core/scan.py`, `core/scanlist.py`, focused integration/catalog tests, root/config READMEs, architecture, device contract, testing guidance, and `project_structure.md`.
+- Files moved: None.
+- Files removed: None.
+- API/config impact: `DeviceManager` now exposes generation-bound snapshots, call/session leases, activity reservations, mock-only asynchronous add/disconnect/remove operations, guarded reconciliation, and asynchronous final teardown. Runtime registrations require an explicitly reviewed fast `is_busy` probe. `ChannelFilters` defensively normalizes caller iterables to detached tuples. Profile bytes and schema are unchanged; runtime changes remain session-only.
+- Existing behavior impact: the checked-in profile still starts the same two disconnected mocks in the same order. Deferred automatic VISA discovery and silent skipping of unknown configured channel names remain unchanged and covered end to end. Device-window show/restore/focus behavior and catalog/menu/router publication remain unchanged on successful operations.
+- Scan/data/schema impact: no scalar scan, output, autosave, or persistence schema changed. Scan, queue, manual-set, output-finalization, router, and direct device activity now reserve a shared manager gate so removal cannot race a bound call.
+- Hardware/lifecycle impact: slow construct/connect/disconnect/force-stop/stop/terminate callbacks execute on lifecycle workers; QWidget construction, catalog acknowledgement, close, and delete scheduling remain on the Qt owner thread. Failed termination, close, deletion, or catalog acknowledgement is retained as explicit ERROR/quarantine state and retried or reported rather than silently discarded.
+- Documentation updated: runtime ownership, mutation eligibility, worker/thread-affinity rules, shutdown retry behavior, session-only configuration semantics, and focused Gate C/D commands.
+
+### Runtime mutation and shutdown policy
+
+- Runtime mutation is enabled only for the reviewed `mock_device` registration. Source presence or a lazy registry candidate does not imply runtime eligibility for any real driver.
+- The manager seals admission before construction or lifecycle dispatch, performs side-effect-free UI preflight with an exact manager-issued proposal identity, then commits and publishes only after synchronous UI acknowledgement. Retained records keep their creation generation; removing and re-adding the same label invalidates old proxies.
+- Removal is refused when the target is busy or when a stored session reference would become unavailable. Disconnect keeps the record and its generation; remove terminates and deletes it only after preflight and drain succeed.
+- Application shutdown preserves the established global order: force-stop all devices, stop-scan all devices, then terminate/close/delete each device in ownership order. If the teardown worker cannot start or another pre-commit boundary fails after `ScanList.shutdown()`, the exact shutdown reservation and UI seal remain active; new calls and mutations stay rejected while an explicit retry is allowed.
+
+### Validation
+
+| Exact command/check | Environment | Evidence level | Result | Duration/output |
+| --- | --- | --- | --- | --- |
+| `python -B -m py_compile core/device_management/{models,manager,registry,__init__}.py core/device_command_router.py core/mainWindow.py core/scan.py core/scanlist.py tests/test_device_manager_runtime_mutation.py tests/test_runtime_device_ui.py` | `zmeter_May2026` Python 3.12.12 | Static | Passed | Exit 0 |
+| `python -B -m unittest -q tests.test_device_config tests.test_device_manager tests.test_device_registry tests.test_device_manager_runtime_mutation` | `zmeter_May2026`, fake runtimes | Hardware-independent unit/mock | 56 tests passed | Passed |
+| `python -B -m unittest -q tests.test_device_manager_integration tests.test_runtime_device_ui tests.test_mainwindow_catalog_refresh` | `zmeter_May2026`, offscreen | Hardware-independent integration/GUI | 55 tests passed | Passed |
+| `python -B -m unittest discover -s tests -p 'test_*.py' -q` | `zmeter_May2026`, offscreen where requested by tests | Hardware-independent unit/mock/offscreen GUI | Complete core suite passed 193 tests | 26.496 s on final primary-agent rerun |
+| `python -B -m unittest discover -s mockDevice/tests -p 'test_*.py' -q` | `zmeter_May2026`, offscreen | Mock/simulation/offscreen GUI | 18 tests passed | 0.314 s |
+| Independent adversarial Gate C/D audits | Read-only code review plus deterministic fake/offscreen reproducers | Lifecycle/catalog/router/UI safety review | Clean after generation, proposal capability, mutable-input, worker-dispatch, quarantine/reconcile, call-lease, teardown-order, and synchronous/asynchronous shutdown-retry coverage | Independent selections passed 111 tests and 36 tests |
+| `git diff --check`, staged-file/status review, and changed-file statistics | Repository root | Static/inspection | Passed; only expected LF/CRLF conversion notices | None |
+
+- Validation incidents: adversarial review found and fixed intermediate races involving worker start/delete failures, post-commit reconciliation, target busy probing, mutable caller filter lists, malformed runtime configs, and a half-shutdown session reopening after teardown dispatch failure. Each reproducer became or strengthened a deterministic regression, and the final focused and complete suites passed.
+- Tests not run and reason: no interactive hardware workflow, physical-device test, real VISA enumeration, vendor SDK/DLL load, network instrument action, or PowerPoint/COM hardware workflow was run. Runtime mutation remains deliberately mock-only, so no real-driver bench validation is authorized for this phase.
+- User-executed hardware test status: Pending for any future real-driver eligibility review; not applicable to the checked-in mock profile.
+
+### Inspection
+
+- `git diff --check`: Passed before commit, with line-ending notices only.
+- `git status --short --branch`: clean after the Phase 6 source/documentation commit; this progress entry is the only subsequent change.
+- Unexpected/unrelated changes: None.
+- Generated artifacts removed: None were tracked or staged; test bytecode remained ignored.
+- Security/configuration review: no profile, address, serial, credential, private endpoint, DLL, measurement output, persistence schema, or array-getter work entered the phase.
+
+### Decision
+
+- Gate passed: Yes.
+- Commit(s): `c9aa520` (`Add idle-only runtime device management`); this evidence entry follows in a documentation commit.
+- Rollback method: revert the Phase 6 source/documentation commit and its evidence commit; recovery tag remains `pre-structure-v2`.
+- Remaining risks: runtime mutation is approved only for the mock driver. A real registration remains ineligible until its busy probe, lifecycle worker safety, router detach/reference-provider contract, optional dependencies, and user-executed bench plan are reviewed. Router source-device authentication is future hardening and does not change the current trusted in-process command path. The cooperative deadline limitation for an already-running GUI callback remains unchanged.
+- Next authorized phase: Phase 7 — move packages under `devices/` mechanically, repairing imports and file-relative resources without enabling additional drivers.
+- User input required: None.
