@@ -154,6 +154,12 @@ class MockDeviceLogic(QtCore.QThread):
         self.start()
         return True
 
+    def is_busy(self) -> bool:
+        """Return whether a UI job or simulated ramp is still in progress."""
+        with self._job_lock:
+            pending = self._pending_job is not None
+        return bool(self.isRunning() or pending or self.hardware.ramp_active)
+
     def run(self) -> None:
         with self._job_lock:
             job = self._pending_job
