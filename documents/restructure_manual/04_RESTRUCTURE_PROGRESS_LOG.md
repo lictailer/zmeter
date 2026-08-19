@@ -316,3 +316,57 @@ Copy and complete:
 - Remaining risks: connection-field availability and factory argument enforcement depend on the Phase 2 reviewed registry; active startup has not yet consumed the profile.
 - Next authorized phase: Phase 2 — reviewed lazy driver registry, starting with `mock_device` only.
 - User input required: None.
+
+## 2026-08-18 — Phase 2: reviewed lazy driver registry
+
+### Intended outcome
+
+- Acceptance criteria: a code-reviewed registry maps stable driver IDs to explicit factories, configuration schemas, runtime-service dependencies, lifecycle callbacks, and state probes; lookup remains free of device/vendor imports and hardware effects; disabled entries are never constructed; the initial registry contains only the hardware-safe `mock_device` driver.
+- Explicit non-goals: active launcher integration, dynamic device mutation, real-device registrations, hardware connection, device package moves, or changing deferred VISA discovery.
+- Base commit: `bd784fa`.
+- Related maintenance commits integrated: None.
+
+### Changes
+
+- Files added: `core/device_management/registry.py`, `tests/test_device_registry.py`.
+- Files modified: `core/device_management/__init__.py`, `mockDevice/mock_device_logic.py`.
+- Files moved: None.
+- Files removed: None.
+- API/config impact: added `DriverRegistry`, immutable `DriverRegistration`, guarded `DriverAdapter`, typed registry errors, and `build_default_registry()`. The default registry exposes only `mock_device`, with an explicit `address` schema and no runtime-service dependency.
+- Existing behavior impact: no active startup path changed. `MockDeviceLogic.is_busy()` adds a synchronized public state probe over existing worker/ramp state without changing discovery, reads, writes, or lifecycle behavior.
+- Scan/data/schema impact: None.
+- Hardware/lifecycle impact: registry lookup performs no device/vendor import. Construction is lazy and allowed only for enabled, registered, schema-valid entries. Adapter termination and widget closing are serialized, one-attempt, and idempotent after success or partial failure; later lifecycle calls are rejected after termination.
+- Documentation updated: this append-only evidence entry.
+
+### Validation
+
+| Exact command/check | Environment | Evidence level | Result | Duration/output |
+| --- | --- | --- | --- | --- |
+| `python -B -m py_compile core/device_management/__init__.py core/device_management/registry.py mockDevice/mock_device_logic.py tests/test_device_registry.py` | `zmeter_May2026` Python 3.12.12 with `PYTHONPYCACHEPREFIX=.restructure_tmp/pycache` | Static | Passed | Exit 0 |
+| `python -B -m unittest discover -s tests -p 'test_device_registry.py' -v` | `zmeter_May2026`, offscreen | Hardware-independent unit/subprocess/mock GUI | 11 tests passed, including fresh-process lazy lookup, optional-driver isolation, schema revalidation, runtime-service allowlisting, concurrent partial teardown, failed-close idempotence, terminated-state guards, and disconnected mock construction | 0.252 s |
+| `python -B -m unittest discover -s tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen where requested by tests | Hardware-independent unit/mock/offscreen GUI | 85 tests passed | 1.817 s |
+| `python -B -m unittest discover -s mockDevice/tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen | Mock/simulation/offscreen GUI | 18 tests passed | 0.322 s |
+| Fresh-process default-registry sentinel in `test_device_registry.py` | `zmeter_May2026` | Import-safety unit | No `mockDevice`, PyVISA, pythonnet, NI, Kinesis, or other watched device/vendor module imported during registry build/lookup | Passed |
+| `rg` scan for credentials/secrets in Phase 2 files | Repository root | Security/config inspection | No matches | None |
+| `rg` scan for top-level device/vendor imports in `registry.py` | Repository root | Static import inspection | No matches; the mock widget import is scoped inside its factory | None |
+
+- Validation incidents: the first validation invocation used `pytest`, which is not installed in the maintained environment, and was therefore an environment/tool-selection failure rather than product evidence. The first compile invocation was sandbox-blocked while writing ignored bytecode under the source repository; it was rerun with the established temporary-output approval and passed. All documented `unittest` commands then passed.
+- Tests not run and reason: no manual GUI launch and no real-device/vendor tests; only the in-process mock was constructed, and agent hardware execution is prohibited.
+- User-executed hardware test status: Not applicable to this phase; not run.
+
+### Inspection
+
+- `git diff --check`: Passed before commit.
+- `git status --short --branch`: Clean immediately after the Phase 2 source commit; this log entry is the only subsequent change.
+- Unexpected/unrelated changes: None.
+- Generated artifacts removed: no generated artifact is tracked; ignored `.restructure_tmp/pycache` remains temporary and must be removed before final handoff.
+- Security/configuration review: no credentials, private endpoints, real instrument addresses, serials, or vendor paths were introduced. Disabled/unavailable drivers cannot invoke a factory, and one unavailable factory does not prevent a separately registered healthy driver from being used.
+
+### Decision
+
+- Gate passed: Yes.
+- Commit(s): `82b0639` (`Add lazy mock device registry`); this evidence entry follows in a documentation commit.
+- Rollback method: revert the Phase 2 source commit and its evidence commit; recovery tag remains `pre-structure-v2`.
+- Remaining risks: only `mock_device` is registered; real drivers require individual lifecycle, dependency, connection-schema, and busy-state review. Active startup still uses the legacy direct construction path until the manager/profile integration phases.
+- Next authorized phase: Phase 3 — static `DeviceManager` ownership and unified teardown while preserving startup behavior.
+- User input required: None.
