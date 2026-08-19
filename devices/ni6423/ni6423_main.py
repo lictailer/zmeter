@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
@@ -20,7 +21,7 @@ class NI6423(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__()
-        uic.loadUi("ni6423/ni6423.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("ni6423.ui")), self)
 
         self.logic = NI6423Logic()
 
