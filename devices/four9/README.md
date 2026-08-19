@@ -37,7 +37,7 @@ The stable-wait timeout is code-only and has no UI setting. It can be changed
 after constructing the device:
 
 ```python
-from four9.four9_main import Four9
+from devices.four9.four9_main import Four9
 
 four9 = Four9()
 four9.logic.stable_wait_timeout_s = 3 * 60 * 60
@@ -57,7 +57,7 @@ not changed. When integrating it later, import and register the widget in the
 same way as Montana2:
 
 ```python
-from four9.four9_main import Four9
+from devices.four9.four9_main import Four9
 
 equips["four9"] = Four9()
 ```

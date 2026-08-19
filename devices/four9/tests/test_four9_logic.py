@@ -8,8 +8,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
-from four9.four9_hardware import Four9ProtocolError
-from four9.four9_logic import Four9Logic
+from devices.four9.four9_hardware import Four9ProtocolError
+from devices.four9.four9_logic import Four9Logic
 
 
 def _status(target=10.0, temperature=9.5, stable=False, reason="unstable"):

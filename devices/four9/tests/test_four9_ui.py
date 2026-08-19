@@ -5,9 +5,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
-from four9.four9_logic import Four9Logic
-from four9.four9_main import Four9
-from four9.tests.test_four9_logic import _FakeHardware
+from devices.four9.four9_logic import Four9Logic
+from devices.four9.four9_main import Four9
+from devices.four9.tests.test_four9_logic import _FakeHardware
 
 
 class Four9UiTests(unittest.TestCase):

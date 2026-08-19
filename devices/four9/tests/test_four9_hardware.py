@@ -4,7 +4,7 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
-from four9.four9_hardware import (
+from devices.four9.four9_hardware import (
     Four9ConnectionError,
     Four9Hardware,
     Four9ProtocolError,
