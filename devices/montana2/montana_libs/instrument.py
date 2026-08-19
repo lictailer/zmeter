@@ -10,7 +10,7 @@
 import os
 import os.path as op
 import sys
-sys.path.append(op.abspath(op.join(op.dirname(__file__), os.pardir, os.pardir, 'commonScripting', 'pythonlibs')))
+sys.path.append(op.abspath(op.join(op.dirname(__file__), os.pardir, os.pardir, os.pardir, 'commonScripting', 'pythonlibs')))
 
 from enum import IntEnum
 import requests

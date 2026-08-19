@@ -1,5 +1,6 @@
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from PyQt6 import QtWidgets, QtCore, uic  # type: ignore
@@ -17,7 +18,7 @@ class Montana2(QtWidgets.QWidget):
         super().__init__()
 
         # ---------------- load UI from external .ui file ---------------
-        uic.loadUi("montana2/montana2.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("montana2.ui")), self)
 
         # ---------------- logic layer -------------
         self.logic = Montana2Logic()

@@ -21,7 +21,7 @@ Example usage:
 
 import sys
 import os
-import instrument
+from . import instrument
 from . import genericcryostat
 
 Ports = instrument.Rest_Ports
