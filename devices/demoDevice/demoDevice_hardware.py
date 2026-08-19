@@ -188,7 +188,7 @@ class DemoDeviceHardware:
 # # -----------------------------------------------------------------------------
 # # Stand-alone test with the dummy VISA layer
 if __name__ == "__main__":
-    from demoDevice.dummy_visa import DummyResourceManager
+    from devices.demoDevice.dummy_visa import DummyResourceManager
 
     runtime = VisaRuntime(manager_factory=DummyResourceManager)
     ADDRESS = "DUMMY::INSTR"  # the dummy layer accepts any address string

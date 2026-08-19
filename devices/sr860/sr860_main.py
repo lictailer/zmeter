@@ -1,6 +1,7 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
 from datetime import datetime
+from pathlib import Path
 import numpy as np
 import pyqtgraph as pg
 
@@ -25,7 +26,7 @@ class SR860(QtWidgets.QWidget):
         super().__init__()
 
         # ----- load UI -----
-        uic.loadUi("sr860/sr860.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("sr860.ui")), self)
 
         # ----- helper plot widget (X, Y, R, Theta streams) -----
         w = pg.GraphicsLayoutWidget(show=True)

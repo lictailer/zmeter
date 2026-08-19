@@ -1,6 +1,8 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from keithley24xx.keithley24xx_logic import Keithley24xxLogic
+from pathlib import Path
+
+from .keithley24xx_logic import Keithley24xxLogic
 import numpy as np
 import pyqtgraph as pg
 import time
@@ -12,7 +14,7 @@ from core.shared_runtime.visa_qt import VisaResourceRefresh
 class Keithley24xx(QtWidgets.QWidget):
     def __init__(self, visa_runtime: VisaRuntime | None = None):
         super(Keithley24xx, self).__init__()
-        uic.loadUi("keithley24xx/keithley24xx.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("keithley24xx.ui")), self)
         self.visa_runtime = visa_runtime or VisaRuntime()
         self.logic = Keithley24xxLogic(self.visa_runtime)
         self.connect_sig_slot()

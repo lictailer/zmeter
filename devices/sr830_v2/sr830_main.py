@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 import sys
 
 import numpy as np
@@ -16,7 +17,7 @@ class SR830(QtWidgets.QWidget):
 
     def __init__(self, visa_runtime: VisaRuntime | None = None):
         super().__init__()
-        uic.loadUi("sr830_v2/sr830.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("sr830.ui")), self)
 
         w = pg.GraphicsLayoutWidget(show=True)
         w.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)

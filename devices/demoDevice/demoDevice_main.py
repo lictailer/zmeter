@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from PyQt6 import QtWidgets, QtCore, uic  # type: ignore
@@ -28,7 +29,7 @@ class DemoDevice(QtWidgets.QWidget):
         super().__init__()
 
         # ---------------- load UI from external .ui file ---------------
-        uic.loadUi("demoDevice/demoDevice.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("demoDevice.ui")), self)
 
         # ---------------- logic layer -------------
         self.visa_runtime = visa_runtime or VisaRuntime(

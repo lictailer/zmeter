@@ -3,12 +3,12 @@ from __future__ import annotations
 import unittest
 
 from core.shared_runtime.visa import VisaRuntime
-from demoDevice.demoDevice_hardware import DemoDeviceHardware
-from demoDevice.dummy_visa import DummyResourceManager
-from hp34401a.hp34401a_hardware import HP34401A_Hardware
-from keithley24xx.keithley24xx_hardware import Keithly24xxHardware
-from sr830_v2.sr830_hardware import SR830_Hardware
-from sr860.sr860_hardware import SR860_Hardware
+from devices.demoDevice.demoDevice_hardware import DemoDeviceHardware
+from devices.demoDevice.dummy_visa import DummyResourceManager
+from devices.hp34401a.hp34401a_hardware import HP34401A_Hardware
+from devices.keithley24xx.keithley24xx_hardware import Keithly24xxHardware
+from devices.sr830_v2.sr830_hardware import SR830_Hardware
+from devices.sr860.sr860_hardware import SR860_Hardware
 
 
 class FakeInstrument:

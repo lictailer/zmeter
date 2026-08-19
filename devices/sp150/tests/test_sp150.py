@@ -11,17 +11,17 @@ from PyQt6 import QtWidgets
 
 from core.shared_runtime.visa import VisaRuntime
 
-from sp150.sp150_hardware import (
+from devices.sp150.sp150_hardware import (
     SP150ConnectionError,
     SP150Hardware,
     SP150ProtocolError,
 )
-from sp150.sp150_logic import (
+from devices.sp150.sp150_logic import (
     SP150Logic,
     SP150MoveTimeout,
     SP150OperationCancelled,
 )
-from sp150.sp150_main import SP150
+from devices.sp150.sp150_main import SP150
 
 
 class FakeInstrument:

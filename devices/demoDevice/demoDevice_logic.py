@@ -157,7 +157,7 @@ class DemoDeviceLogic(QtCore.QThread):
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     from core.shared_runtime.visa import VisaRuntime
-    from demoDevice.dummy_visa import DummyResourceManager
+    from devices.demoDevice.dummy_visa import DummyResourceManager
 
     # ADDRESS = "GPIB0::1::INSTR"  # TODO: change to your VISA resource
     ADDRESS = "DUMMY::INSTR"

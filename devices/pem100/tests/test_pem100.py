@@ -11,13 +11,13 @@ from PyQt6 import QtWidgets
 
 from core.shared_runtime.visa import VisaRuntime
 
-from pem100.pem100_hardware import (
+from devices.pem100.pem100_hardware import (
     PEM100ConnectionError,
     PEM100Hardware,
     PEM100ProtocolError,
 )
-from pem100.pem100_logic import PEM100Logic
-from pem100.pem100_main import PEM100
+from devices.pem100.pem100_logic import PEM100Logic
+from devices.pem100.pem100_main import PEM100
 
 
 class FakeInstrument:

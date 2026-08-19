@@ -11,8 +11,8 @@ real :mod:`pyvisa` module or process-global imports.
 Usage example
 -------------
 >>> from core.shared_runtime.visa import VisaRuntime
->>> from demoDevice.dummy_visa import DummyResourceManager
->>> from demoDevice.demoDevice_hardware import DemoDeviceHardware
+>>> from devices.demoDevice.dummy_visa import DummyResourceManager
+>>> from devices.demoDevice.demoDevice_hardware import DemoDeviceHardware
 >>> runtime = VisaRuntime(manager_factory=DummyResourceManager)
 >>> dev = DemoDeviceHardware("DUMMY::INSTR", visa_runtime=runtime)
 >>> print(dev.idn())
