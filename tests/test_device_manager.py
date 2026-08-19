@@ -91,8 +91,8 @@ registry = build_default_registry()
 assert DeviceManager is not None
 assert registry.driver_ids == ("mock_device",)
 watched = (
-    "mockDevice", "pyvisa", "clr", "nidaqmx", "PyDAQmx",
-    "BBD30X", "opticool", "sr830", "sr860", "tlpm",
+    "devices", "pyvisa", "clr", "nidaqmx", "PyDAQmx",
+    "opticool", "sr830", "sr860", "tlpm",
 )
 loaded = sorted(
     name for name in sys.modules

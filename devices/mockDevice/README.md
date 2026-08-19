@@ -26,10 +26,10 @@ The simulator supports fail-after-N, random failure probability, and range-rejec
 
 Any non-empty mock address is accepted; the repository uses names such as `MOCK::TEST`. No vendor driver or instrument is involved.
 
-Focused tests are in `mockDevice/tests/test_mock_device.py` and cover discovery, lifecycle, direct/ramped values, stop behavior, injected faults, range rejection, reset, logging, and offscreen widget behavior. Run them only in a compatible PyQt6/NumPy environment:
+Focused tests are in `devices/mockDevice/tests/test_mock_device.py` and cover discovery, lifecycle, direct/ramped values, stop behavior, injected faults, range rejection, reset, logging, and offscreen widget behavior. Run them only in a compatible PyQt6/NumPy environment:
 
 ```powershell
-python -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v
+python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
 See [device_contract.md](../documents/device_contract.md) and [testing.md](../documents/testing.md).

@@ -349,7 +349,7 @@ class DriverRegistry:
 
 
 def _create_mock_device():
-    from mockDevice.mock_device_main import MockDevice
+    from devices.mockDevice.mock_device_main import MockDevice
 
     return MockDevice()
 

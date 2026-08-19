@@ -8,10 +8,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
-from mockDevice.mock_device_hardware import MockDeviceHardware
-from mockDevice.mock_device_logic import MockDeviceLogic
-from mockDevice.mock_device_main import MockDevice
-from mockDevice.mock_device_simulator import (
+from devices.mockDevice.mock_device_hardware import MockDeviceHardware
+from devices.mockDevice.mock_device_logic import MockDeviceLogic
+from devices.mockDevice.mock_device_main import MockDevice
+from devices.mockDevice.mock_device_simulator import (
     MockDeviceCommandError,
     MockDeviceConnectionError,
     MockDeviceRangeError,
