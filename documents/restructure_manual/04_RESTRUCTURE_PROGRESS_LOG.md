@@ -262,3 +262,57 @@ Copy and complete:
 - The two mandatory-stop decisions recorded during Phase 0 were answered by the user.
 - Safe to begin Phase 1: Yes, subject to the resolved compatibility exceptions above.
 - No source behavior changed while resolving the decisions.
+
+## 2026-08-18 — Phase 1: configuration models and validation
+
+### Intended outcome
+
+- Acceptance criteria: immutable profile models; deterministic, aggregated validation; repository-root-relative paths; checked-in hardware-safe mock profile matching the two current startup labels; no active startup switch; no driver/vendor import, enumeration, construction, or connection during loading.
+- Explicit non-goals: registry/factory construction, manager ownership, launcher changes, runtime mutation, real-device profiles, and strict unknown-channel rejection.
+- Base commit: `6e89226`
+- Related maintenance commits integrated: None.
+
+### Changes
+
+- Files added: `core/device_management/__init__.py`, `core/device_management/models.py`, `core/device_management/config.py`, `config/README.md`, `config/profiles/mock.json`, `config/profiles/example_lab.json`, `tests/test_device_config.py`.
+- Files modified: `.gitignore` for local profiles and `.restructure_tmp/` validation artifacts.
+- Files moved: None.
+- Files removed: None.
+- API/config impact: added schema version 1 profile loading and immutable `ProfileConfig`/`DeviceConfig` models. Added optional `connect_on_start` (default false). Relative profile and configured data paths resolve from the repository root without probing configured output/network paths.
+- Existing behavior impact: None. `start_zmeter.py` still owns the active startup path. Per the user-approved compatibility decision, syntactically valid unknown channel names remain in the model and are silently skipped later by existing channel filtering.
+- Scan/data/schema impact: None. Measurement JSON and scan behavior were not changed.
+- Hardware/lifecycle impact: None. The loader accepts only reviewed registry metadata and imports or constructs no device.
+- Documentation updated: added `config/README.md` with path, local-profile, safety, and deferred unknown-channel policy.
+
+### Validation
+
+| Exact command/check | Environment | Evidence level | Result | Duration/output |
+| --- | --- | --- | --- | --- |
+| `python -B -m py_compile core/device_management/__init__.py core/device_management/models.py core/device_management/config.py tests/test_device_config.py` | `zmeter_May2026` Python 3.12.12 with `PYTHONPYCACHEPREFIX=.restructure_tmp/pycache` | Static | Passed after redirecting bytecode to the ignored validation directory | Exit 0 |
+| `python -B -m unittest discover -s tests -p 'test_device_config.py' -v` | `zmeter_May2026` | Hardware-independent unit/subprocess | 13 tests passed, including duplicate-key rejection, aggregate errors, deep immutability, original JSON indices, checked profile values, silent unknown-channel retention, and fresh-process import safety | 0.193 s |
+| `python -B -m unittest discover -s tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen where requested by tests | Hardware-independent unit/mock/offscreen GUI | 74 tests passed | 1.616 s |
+| `python -B -m unittest discover -s mockDevice/tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen | Mock/simulation/offscreen GUI | 18 tests passed | 0.312 s |
+| Parse every `config/profiles/*.json` with Python `json` | `zmeter_May2026` | Static | 2 profile JSON files parsed | Exit 0 |
+| Fresh-process profile-load sentinel in `test_device_config.py` | `zmeter_May2026` | Import-safety unit | No `mockDevice`, `devices`, `pyvisa`, or `clr` module imported | Passed |
+| `rg` scan for credentials/private endpoints/real addresses in Phase 1 files | Repository root | Security/config inspection | No matches | None |
+
+- Validation incidents: the first compile attempt was blocked by sandbox denial when `py_compile` tried to create source-tree bytecode; it was rerun successfully with bytecode confined to `.restructure_tmp/`. One combined quiet regression invocation emitted no output and was interrupted after approximately 50 seconds; the same core and mock commands were then run separately with verbose output and both passed.
+- Tests not run and reason: no manual GUI launch and no real-device/vendor tests; Phase 1 is a pure configuration layer and agent hardware execution is prohibited.
+- User-executed hardware test status: Not applicable to this phase; not run.
+
+### Inspection
+
+- `git diff --check`: Passed before commit.
+- `git status --short --branch`: Clean immediately after Phase 1 source commit; this log entry is the only subsequent change.
+- Unexpected/unrelated changes: None.
+- Generated artifacts removed: no generated artifact is tracked; ignored `.restructure_tmp/pycache` is retained for later phase compilation and must be removed before final handoff.
+- Security/configuration review: checked-in profiles are mock/empty only; no credentials, private endpoints, real instrument addresses, serials, or lab backup paths were added. Local profile patterns are ignored.
+
+### Decision
+
+- Gate passed: Yes.
+- Commit(s): `25c4767` (`Add validated device profiles`); this evidence entry follows in a documentation commit.
+- Rollback method: revert the Phase 1 source commit and its evidence commit; recovery tag remains `pre-structure-v2`.
+- Remaining risks: connection-field availability and factory argument enforcement depend on the Phase 2 reviewed registry; active startup has not yet consumed the profile.
+- Next authorized phase: Phase 2 — reviewed lazy driver registry, starting with `mock_device` only.
+- User input required: None.
