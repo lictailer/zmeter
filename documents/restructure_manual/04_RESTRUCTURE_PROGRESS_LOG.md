@@ -424,3 +424,64 @@ Copy and complete:
 - Remaining risks: the shutdown deadline is cooperative for a synchronous GUI callback already executing; an over-budget callback is detected before scan widgets, devices, or runtimes are torn down. Runtime mutation and safe catalog reconciliation are not yet enabled. Active startup still uses the temporary static profile source until Phase 4.
 - Next authorized phase: Phase 4 — activate the validated checked-in profile loader in the launcher.
 - User input required: None.
+
+## 2026-08-18 — Phase 4: validated profile-driven launcher
+
+### Intended outcome
+
+- Acceptance criteria: `start_zmeter.py` is a device-agnostic launcher; the checked-in mock JSON profile is the default; an explicit `--profile` selects repository-relative or absolute profiles without fallback; profile paths feed `MainWindow`; labels, filters, disconnected state, title, and shutdown order remain unchanged; startup validation remains free of device/vendor effects.
+- Explicit non-goals: registering real devices, connecting hardware, runtime device mutation, rebuildable catalogs, device-package moves, explicit-only VISA discovery, or strict unknown-channel rejection.
+- Base commit: `3b6c87b`.
+- Related maintenance commits integrated: None.
+
+### Changes
+
+- Files added: None.
+- Files modified: `start_zmeter.py`, `tests/test_device_manager_integration.py`, `tests/test_startup_shared_runtimes.py`, `config/README.md`, `README.md`, `project_structure.md`, `documents/architecture.md`, `documents/environment_windows.md`, `ANC300/README.md`, `auto_position/README.md`, `BBD30X/README.md`.
+- Files moved: None.
+- Files removed: None.
+- API/config impact: the launcher now accepts `--profile PATH`, lets Qt consume its recognized general options first, then strictly rejects unknown launcher options. It validates the selected profile against reviewed registry metadata, constructs one manager, and passes the profile's save/backup paths to `MainWindow`. Missing or invalid explicit profiles print and display the aggregate error, exit nonzero, and never fall back or construct a manager/device.
+- Existing behavior impact: the checked-in default still creates `mock_device_1` then `mock_device_2`, leaves both disconnected, disables backup, saves under `<repository>/data`, preserves exact channel/menu/catalog ordering and the `Main Window` title, and retains Phase 3 shutdown ordering. A new end-to-end test proves that known channels survive while unknown configured channel names are silently skipped.
+- Scan/data/schema impact: None. Measurement/persistence schemas and scan execution are unchanged.
+- Hardware/lifecycle impact: `start_zmeter.py` imports no device or vendor module and contains no device address, serial, channel list, or connection command. Disabled reviewed entries are validated but never reach their lazy factory. The default path uses only the in-process mock and leaves VISA/Kinesis services uninitialized.
+- Documentation updated: launcher/profile selection, local-profile policy, architecture/ownership, Windows setup, maintained structure, and stale device-local `create_equipment()` guidance.
+
+### Implementation scope resolution
+
+- Phase 4's thin-launcher rule conflicts with its sequencing note to retain commented real-device examples until reviewed registry/profile replacements exist. Those examples were inactive, untested, included lab-specific addresses/serials, and were not part of the executable startup contract.
+- Resolution used for this phase: remove the inactive comments from the launcher to enforce the component rule forbidding device-specific imports/values, retain their recovery history in the baseline and recovery tag, and do not register, enable, or claim profile support for any corresponding real driver. Future real-driver enablement still requires its own reviewed registry entry, schema, lifecycle/busy adapter, local ignored profile, and user-executed hardware validation.
+- This resolution changes no runtime behavior and does not copy the retired lab values into shared profiles or documentation.
+
+### Validation
+
+| Exact command/check | Environment | Evidence level | Result | Duration/output |
+| --- | --- | --- | --- | --- |
+| `python -X pycache_prefix=C:\Users\Taylo\Documents\ChatGPT\zmeter\.restructure_phase4_pycache -m py_compile start_zmeter.py tests/test_device_manager_integration.py tests/test_startup_shared_runtimes.py` | `zmeter_May2026` Python 3.12.12 | Static | Passed; redirected bytecode directory verified and removed | Exit 0 |
+| `python -B -m unittest discover -s tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen where requested by tests | Hardware-independent unit/mock/offscreen GUI | Fresh complete rerun passed 133 tests | 9.009 s |
+| `python -B -m unittest discover -s mockDevice/tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen | Mock/simulation/offscreen GUI | 18 tests passed | 0.307 s |
+| `python -B start_zmeter.py -platform offscreen --help` | `zmeter_May2026`, offscreen | CLI/Qt boundary | Help exited 0; Qt consumed `-platform` before strict launcher parsing | 1.355 s |
+| Parse every `config/profiles/*.json` with Python `json` | `zmeter_May2026` | Static | 2 profile JSON files parsed | Exit 0 |
+| Permanent fresh-process launcher import sentinel | `zmeter_May2026` | Import-safety unit | No `mockDevice`, `devices`, PyVISA, pythonnet, NI, Kinesis, or other watched device/vendor module imported | Passed |
+| Independent Phase 4 audit | `zmeter_May2026`, offscreen/fake runtimes | CLI/config/lifecycle review | Clean after fixes; 46 focused tests passed, including deferred VISA and actual Qt argument consumption | Passed |
+| `git diff --check`, active `create_equipment` search, direct launcher device/vendor import search, and credential/secret scan | Repository root | Static/security inspection | Passed; no active references/imports/secret matches, with expected LF/CRLF conversion warnings only | None |
+
+- Validation incidents: the first final full-suite invocation had one timeout in the pre-existing deferred VISA refresh timing test. The test passed immediately in isolation in 0.083 s, and the unchanged complete suite then passed all 133 tests. The independent audit found a `parse_known_args` typo/fallback risk, stale device-local `create_equipment()` instructions, and missing end-to-end silent-skip evidence; each was fixed before acceptance.
+- Tests not run and reason: no interactive GUI session and no physical-device/vendor integration tests were run. The agent did not enumerate resources, validate a vendor runtime, or connect hardware.
+- User-executed hardware test status: Not applicable to the checked-in mock-only profile; not run.
+
+### Inspection
+
+- `git diff --check`: Passed before commit.
+- `git status --short --branch`: Clean immediately after the Phase 4 source/documentation commit; this log entry is the only subsequent change.
+- Unexpected/unrelated changes: None.
+- Generated artifacts removed: the external redirected Phase 4 bytecode directory was resolved, verified, and removed. Temporary test profiles used OS temporary directories and were removed by their contexts.
+- Security/configuration review: the launcher contains no device-specific import, address, serial, connection command, or channel list. No checked profile contains credentials, private endpoints, real instrument identifiers, or lab paths. Explicit invalid profiles do not fall back.
+
+### Decision
+
+- Gate passed: Yes.
+- Commit(s): `a67a8d5` (`Switch launcher to validated profiles`); this evidence entry follows in a documentation commit.
+- Rollback method: revert the Phase 4 source/documentation commit and its evidence commit; recovery tag remains `pre-structure-v2`.
+- Remaining risks: only `mock_device` has a reviewed active registry entry; source presence does not imply profile support. Runtime catalog rebuilding and mutation remain disabled. The known cooperative GUI-finalizer shutdown deadline from Phase 3 remains unchanged.
+- Next authorized phase: Phase 5 — make every catalog consumer rebuild from one authoritative manager snapshot and define safe reference reconciliation.
+- User input required: None.
