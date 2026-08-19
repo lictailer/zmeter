@@ -1,5 +1,6 @@
 import math
 import time
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable
@@ -24,6 +25,26 @@ class ArtificialChannelLogic(QtCore.QObject):
         ((0.0, 0.0), (0.0, 0.0)),
         ((1.0, 0.0), (1.0, 1.0)),
         ((0.0, 1.0), (1.0, -1.0)),
+    )
+    _CONFIGURATION_STATE_ATTRIBUTES = (
+        "original_channel_x_name",
+        "original_channel_y_name",
+        "artificial_channel_x_name",
+        "artificial_channel_y_name",
+        "original_channels",
+        "artificial_channels",
+        "original_channel_limits",
+        "artificial_channel_limits",
+        "coordinate_pairs",
+        "_original_to_artificial_matrix",
+        "_original_to_artificial_offset",
+        "_artificial_to_original_matrix",
+        "equations",
+        "inverse_equations",
+        "_commanded_artificial_values",
+        "_scan_target_artificial_values",
+        "_skip_next_scan_read",
+        "state",
     )
 
     def __init__(
@@ -102,6 +123,8 @@ class ArtificialChannelLogic(QtCore.QObject):
         ],
         original_channel_x_limits: tuple[float, float],
         original_channel_y_limits: tuple[float, float],
+        *,
+        emit_signals: bool = True,
     ) -> dict[str, Any]:
         self.original_channel_x_name = original_channel_x_name
         self.original_channel_y_name = original_channel_y_name
@@ -136,14 +159,43 @@ class ArtificialChannelLogic(QtCore.QObject):
 
         self.construct_coordinate_relation(coordinate_pairs)
         self.state = self._make_state("Unknown", "Unknown", "Unknown", "Unknown")
-        self.sig_target_changed.emit(
-            {
-                self.artificial_channel_x_name: "Unknown",
-                self.artificial_channel_y_name: "Unknown",
-            }
-        )
-        self.sig_state_changed.emit(self.state)
+        if emit_signals:
+            self.emit_configuration_state(
+                target_values={
+                    self.artificial_channel_x_name: "Unknown",
+                    self.artificial_channel_y_name: "Unknown",
+                }
+            )
         return dict(self.state)
+
+    def capture_configuration_state(self) -> dict[str, Any]:
+        """Return a detached checkpoint for an atomic UI configuration edit."""
+
+        return {
+            attribute: deepcopy(getattr(self, attribute))
+            for attribute in self._CONFIGURATION_STATE_ATTRIBUTES
+        }
+
+    def restore_configuration_state(
+        self,
+        checkpoint: dict[str, Any],
+        *,
+        emit_signals: bool = True,
+    ) -> None:
+        """Restore a checkpoint without issuing any device read or write."""
+
+        for attribute in self._CONFIGURATION_STATE_ATTRIBUTES:
+            setattr(self, attribute, deepcopy(checkpoint[attribute]))
+        if emit_signals:
+            self.emit_configuration_state()
+
+    def emit_configuration_state(self, *, target_values=None) -> None:
+        """Publish the current target and state after a committed config edit."""
+
+        if target_values is None:
+            target_values = self._scan_target_artificial_values
+        self.sig_target_changed.emit(dict(target_values))
+        self.sig_state_changed.emit(dict(self.state))
 
     def has_artificial_channel(self, channel_name: str) -> bool:
         return channel_name in self.artificial_channels

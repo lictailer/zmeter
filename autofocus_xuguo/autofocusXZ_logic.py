@@ -131,6 +131,34 @@ class AutofocusXZLogic(QtCore.QObject):
         )
         self._emit_status("Command router configured.")
 
+    def detach_command_router(self) -> None:
+        """Idempotently detach both command-bus helpers."""
+
+        self.autofocus_hardware.detach_command_router()
+        self.autoposition_hardware.detach_command_router()
+        self.command_router = None
+
+    def command_router_children(self):
+        return (self.autofocus_hardware, self.autoposition_hardware)
+
+    def find_catalog_references(
+        self,
+        *,
+        removed_setters=(),
+        removed_getters=(),
+        removed_device_labels=(),
+    ) -> tuple[str, ...]:
+        references = []
+        for hardware in self.command_router_children():
+            references.extend(
+                hardware.find_catalog_references(
+                    removed_setters=removed_setters,
+                    removed_getters=removed_getters,
+                    removed_device_labels=removed_device_labels,
+                )
+            )
+        return tuple(references)
+
     def configure_save_path(self, save_path: str | os.PathLike[str]) -> None:
         self.save_path = str(save_path)
         self._emit_report_paths()

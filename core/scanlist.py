@@ -3,6 +3,7 @@ import copy
 import time
 import datetime as _dt
 import traceback
+from dataclasses import dataclass
 import PyQt6.QtWidgets as QtWidgets
 import PyQt6.QtCore as QtCore
 import PyQt6.QtGui as QtGui
@@ -41,6 +42,46 @@ class ScanListShutdownStopError(RuntimeError):
             f"{name}: {type(exc).__name__}: {exc}" for name, exc in self.failures
         )
         super().__init__(f"Scan stop request failed during shutdown: {details}")
+
+
+class ScanCatalogRollbackError(RuntimeError):
+    """Raised when catalog publication and its local rollback both fail."""
+
+    def __init__(self, refresh_error, rollback_failures):
+        self.refresh_error = refresh_error
+        self.rollback_failures = tuple(rollback_failures)
+        details = "; ".join(
+            f"{location}: {type(exc).__name__}: {exc}"
+            for location, exc in self.rollback_failures
+        )
+        super().__init__(
+            f"Catalog consumer refresh failed ({type(refresh_error).__name__}: "
+            f"{refresh_error}); rollback also failed: {details}"
+        )
+
+
+@dataclass(frozen=True)
+class ReferenceUse:
+    """A deterministic channel/device reference retained by a scan-list item."""
+
+    device_id: str | None
+    kind: str
+    access: str
+    collection: str
+    owner_kind: str
+    owner_name: str
+    level: str | None
+    channel: str
+    path: str
+    resolved: bool
+
+    def __str__(self):
+        resolution = "resolved" if self.resolved else "unresolved"
+        device = self.device_id or "unknown device"
+        return (
+            f"{self.collection} {self.owner_kind} '{self.owner_name}' "
+            f"{self.path}: {self.channel} ({device}, {resolution})"
+        )
 
 
 class ScanItem(QtWidgets.QLabel):
@@ -114,6 +155,9 @@ class ScanItem(QtWidgets.QLabel):
         info_snapshot["comments"] = self.scan.comments_textEdit.toPlainText()
         info_snapshot["plots_per_page"] = self.scan.PlotsPerPage.currentText()
         return info_snapshot
+
+    def refresh_catalog(self, setter_equipment_info, getter_equipment_info):
+        self.scan.refresh_catalog(setter_equipment_info, getter_equipment_info)
 
     def start_scan(self, info):
         self.start.emit(info)
@@ -302,23 +346,35 @@ class ScanListWidget(QtWidgets.QWidget):
         self.setLayout(self.layout)
         self.allow_swap = allow_swap
         self.allow_add = allow_add
-        self.setter_equipment_info = setter_equipment_info
-        self.getter_equipment_info = getter_equipment_info
+        self.setter_equipment_info = copy.deepcopy(setter_equipment_info or {})
+        self.getter_equipment_info = copy.deepcopy(getter_equipment_info or {})
         self.on_item_cloned = on_item_cloned
         self.accept_scan_items = accept_scan_items
 
     def setter_equipment_info_updated(self, info):
-        for i in range(self.layout.count()):
-            item = self.layout.itemAt(i).widget()
-            if type(item) == ScanItem:
-                print("hellow")
-                item.scan.when_setter_equipment_info_change(info)
+        self.refresh_catalog(info, self.getter_equipment_info)
 
     def getter_equipment_info_updated(self, info):
-        for i in range(self.layout.count()):
-            item = self.layout.itemAt(i).widget()
-            if type(item) == ScanItem:
-                item.scan.when_getter_equipment_info_change(info)
+        self.refresh_catalog(self.setter_equipment_info, info)
+
+    def refresh_catalog(
+        self,
+        setter_equipment_info,
+        getter_equipment_info,
+        *,
+        refresh_items=True,
+    ):
+        """Replace clone-source catalogs and optionally refresh contained scans."""
+        self.setter_equipment_info = copy.deepcopy(setter_equipment_info or {})
+        self.getter_equipment_info = copy.deepcopy(getter_equipment_info or {})
+        if not refresh_items:
+            return
+        for item in self.get_widgets():
+            if isinstance(item, ScanItem):
+                item.refresh_catalog(
+                    self.setter_equipment_info,
+                    self.getter_equipment_info,
+                )
 
     def dragEnterEvent(self, e):
         e.accept()
@@ -365,16 +421,7 @@ class ScanListWidget(QtWidgets.QWidget):
             if isinstance(widget, ScanItem) and (not self.accept_scan_items):
                 return
             if type(widget) == ScanItem:
-                plot_setting_info = widget.snapshot_info()
-                name = copy.deepcopy(widget.name)
-                main_window = widget.main_window
-                new_item = ScanItem(
-                    name=name,
-                    info=plot_setting_info,
-                    setter_equipment_info=self.setter_equipment_info,
-                    main_window=main_window,
-                    getter_equipment_info=self.getter_equipment_info,
-                )
+                new_item = self.clone_scan_item(widget)
                 self.layout.insertWidget(
                     i,
                     new_item,
@@ -390,6 +437,16 @@ class ScanListWidget(QtWidgets.QWidget):
                 if callable(self.on_item_cloned):
                     self.on_item_cloned(new_item, self)
         e.accept()
+
+    def clone_scan_item(self, widget):
+        """Clone a scan using this list's latest catalog publication."""
+        return ScanItem(
+            name=copy.deepcopy(widget.name),
+            info=widget.snapshot_info(),
+            setter_equipment_info=self.setter_equipment_info,
+            main_window=widget.main_window,
+            getter_equipment_info=self.getter_equipment_info,
+        )
 
     def get_widgets(self):
         ans = []
@@ -510,8 +567,16 @@ class ScanList(QtWidgets.QWidget):
         self.gridLayout.setColumnStretch(2, 1)  # queue
         self.gridLayout.setColumnStretch(3, 1)  # past/log column
         self.info = info
-        self.setter_equipment_info = setter_equipment_info
-        self.getter_equipment_info = getter_equipment_info
+        self.setter_equipment_info = copy.deepcopy(setter_equipment_info or {})
+        self.getter_equipment_info = copy.deepcopy(getter_equipment_info or {})
+        self._channel_device_history = {}
+        self._current_catalog_channels = set()
+        self._current_setter_channels = set()
+        self._current_getter_channels = set()
+        self._remember_catalog_channels(
+            self.setter_equipment_info,
+            self.getter_equipment_info,
+        )
         self.logic = ScanListLogic()
         self.main_window = main_window
         self._log_ready = False
@@ -588,17 +653,111 @@ class ScanList(QtWidgets.QWidget):
         self.stop.emit(scan)
 
     def setter_equipment_info_updated(self, info):
-        self.setter_equipment_info = info
-        self.list_available.setter_equipment_info_updated(self.setter_equipment_info)
-        self.list_queue.setter_equipment_info_updated(self.setter_equipment_info)
-        self.manual_set_menu.set_choices(self.setter_equipment_info or {})
-        self.manual_set_menu.name = ""
-        self.manual_set_menu.button.setText("Select channel")
+        self.refresh_catalog(info, self.getter_equipment_info)
 
     def getter_equipment_info_updated(self, info):
-        self.getter_equipment_info = info
-        self.list_available.getter_equipment_info_updated(self.getter_equipment_info)
-        self.list_queue.getter_equipment_info_updated(self.getter_equipment_info)
+        self.refresh_catalog(self.setter_equipment_info, info)
+
+    def refresh_catalog(self, setter_equipment_info, getter_equipment_info):
+        """Publish one display catalog to every current scan-list consumer."""
+        old_setters = copy.deepcopy(self.setter_equipment_info)
+        old_getters = copy.deepcopy(self.getter_equipment_info)
+        old_channel_history = dict(self._channel_device_history)
+        scan_items = tuple(self.iter_scan_items())
+
+        try:
+            self._apply_catalog_to_consumers(
+                setter_equipment_info,
+                getter_equipment_info,
+                scan_items,
+            )
+        except Exception as refresh_error:
+            rollback_failures = self._rollback_catalog_consumers(
+                old_setters,
+                old_getters,
+                old_channel_history,
+                scan_items,
+            )
+            if rollback_failures:
+                raise ScanCatalogRollbackError(
+                    refresh_error,
+                    rollback_failures,
+                ) from refresh_error
+            raise
+
+    def _apply_catalog_to_consumers(
+        self,
+        setter_equipment_info,
+        getter_equipment_info,
+        scan_items,
+    ):
+        self.setter_equipment_info = copy.deepcopy(setter_equipment_info or {})
+        self.getter_equipment_info = copy.deepcopy(getter_equipment_info or {})
+        self._remember_catalog_channels(
+            self.setter_equipment_info,
+            self.getter_equipment_info,
+        )
+        self._store_container_catalogs(
+            self.setter_equipment_info,
+            self.getter_equipment_info,
+        )
+
+        for item in scan_items:
+            item.refresh_catalog(
+                self.setter_equipment_info,
+                self.getter_equipment_info,
+            )
+        self.manual_set_menu.set_choices(self.setter_equipment_info)
+
+    def _store_container_catalogs(
+        self,
+        setter_equipment_info,
+        getter_equipment_info,
+    ):
+        # Each list stores the source data used when it later drag-clones an
+        # item. Update those snapshots without refreshing the same item twice.
+        for container in (
+            self.list_available,
+            self.list_queue,
+            self.list_manual,
+            self.list_past,
+        ):
+            container.refresh_catalog(
+                setter_equipment_info,
+                getter_equipment_info,
+                refresh_items=False,
+            )
+
+    def _rollback_catalog_consumers(
+        self,
+        old_setters,
+        old_getters,
+        old_channel_history,
+        scan_items,
+    ):
+        failures = []
+        self.setter_equipment_info = copy.deepcopy(old_setters)
+        self.getter_equipment_info = copy.deepcopy(old_getters)
+        self._channel_device_history = dict(old_channel_history)
+        self._remember_catalog_channels(old_setters, old_getters)
+
+        try:
+            self._store_container_catalogs(old_setters, old_getters)
+        except Exception as exc:
+            failures.append(("scan-list containers", exc))
+
+        for item in scan_items:
+            try:
+                item.refresh_catalog(old_setters, old_getters)
+            except Exception as exc:
+                name = str(getattr(item, "name", None) or "unnamed")
+                failures.append((f"scan '{name}'", exc))
+
+        try:
+            self.manual_set_menu.set_choices(old_setters)
+        except Exception as exc:
+            failures.append(("manual-set menu", exc))
+        return tuple(failures)
 
     def start_queue(self):
         if self._shutdown_sealed:
@@ -797,32 +956,258 @@ class ScanList(QtWidgets.QWidget):
     def _log_error(self, message: str):
         self._append_log_entry(message, level="ERROR")
         
-    def _scan_items_snapshot(self):
-        """Return each known scan item once, including detached queue workers."""
-        items = []
+    @staticmethod
+    def _catalog_leaf_names(value, path=()):
+        if isinstance(value, (list, tuple)):
+            for entry in value:
+                yield from ScanList._catalog_leaf_names(entry, path)
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                next_path = (*path, str(key))
+                if isinstance(child, int):
+                    yield "_".join(next_path)
+                else:
+                    yield from ScanList._catalog_leaf_names(child, next_path)
+            return
+        if value is not None:
+            yield "_".join((*path, str(value)))
+
+    def _remember_catalog_channels(
+        self,
+        setter_equipment_info,
+        getter_equipment_info,
+    ):
+        current_by_access = {"set": set(), "get": set()}
+        for access, catalog in (
+            ("set", setter_equipment_info or {}),
+            ("get", getter_equipment_info or {}),
+        ):
+            if not isinstance(catalog, dict):
+                continue
+            for device_id, choices in catalog.items():
+                for local_channel in self._catalog_leaf_names(choices):
+                    full_channel = f"{device_id}_{local_channel}"
+                    current_by_access[access].add(full_channel)
+                    self._channel_device_history.setdefault(
+                        full_channel,
+                        str(device_id),
+                    )
+        self._current_setter_channels = current_by_access["set"]
+        self._current_getter_channels = current_by_access["get"]
+        self._current_catalog_channels = (
+            self._current_setter_channels | self._current_getter_channels
+        )
+
+    def _items_with_locations(self):
+        """Snapshot every scan/manual item once with a deterministic location."""
+        located_items = []
         seen = set()
 
-        def append_scan_items(widgets):
+        def append_items(collection, widgets):
             for widget in widgets:
-                if not isinstance(widget, ScanItem) or id(widget) in seen:
+                if not isinstance(widget, (ScanItem, ManualSetItem)):
+                    continue
+                if id(widget) in seen:
                     continue
                 seen.add(id(widget))
-                items.append(widget)
+                located_items.append((collection, widget))
 
-        for container in (self.list_available, self.list_queue, self.list_past):
+        for collection, attribute_name in (
+            ("available", "list_available"),
+            ("queue", "list_queue"),
+            ("past", "list_past"),
+            ("manual", "list_manual"),
+        ):
+            container = getattr(self, attribute_name, None)
+            if container is None:
+                continue
             try:
-                widgets = container.get_widgets()
+                append_items(collection, container.get_widgets())
             except RuntimeError:
                 continue
-            append_scan_items(widgets)
 
-        current_worker = getattr(self.logic, "current_worker", None)
-        append_scan_items((current_worker,))
+        append_items("active", (getattr(self.logic, "current_worker", None),))
         try:
-            append_scan_items(tuple(getattr(self.logic, "workers", ())))
+            append_items("queue_worker", tuple(getattr(self.logic, "workers", ())))
         except RuntimeError:
             pass
-        return items
+        return tuple(located_items)
+
+    def iter_scan_items(self):
+        """Iterate every live scan item once, including detached queue workers."""
+        return iter(
+            tuple(
+                item
+                for _collection, item in self._items_with_locations()
+                if isinstance(item, ScanItem)
+            )
+        )
+
+    def iter_manual_set_items(self):
+        """Iterate manual items in manual/queue/past and detached worker state."""
+        return iter(
+            tuple(
+                item
+                for _collection, item in self._items_with_locations()
+                if isinstance(item, ManualSetItem)
+            )
+        )
+
+    def reference_uses(self):
+        """Return all live channel references without rewriting definitions."""
+        uses = []
+        template_info = self.info if isinstance(self.info, dict) else {}
+        template_name = str(template_info.get("name", "New Scan") or "New Scan")
+        for reference in Scan.channel_references_from_info(template_info):
+            uses.append(
+                self._make_reference_use(
+                    collection="available-template",
+                    owner_kind="scan-template",
+                    owner_name=template_name,
+                    kind=reference.kind,
+                    access=reference.access,
+                    level=reference.level,
+                    channel=reference.channel,
+                    path=reference.path,
+                )
+            )
+
+        for collection, item in self._items_with_locations():
+            if isinstance(item, ScanItem):
+                try:
+                    owner_name = str(
+                        item.scan.lineEdit.text()
+                        or getattr(item, "name", "")
+                        or "unnamed"
+                    )
+                    channel_references = item.scan.channel_references()
+                except RuntimeError as exc:
+                    if "wrapped C/C++ object" in str(exc):
+                        continue
+                    raise
+                for reference in channel_references:
+                    uses.append(
+                        self._make_reference_use(
+                            collection=collection,
+                            owner_kind="scan",
+                            owner_name=owner_name,
+                            kind=reference.kind,
+                            access=reference.access,
+                            level=reference.level or None,
+                            channel=reference.channel,
+                            path=reference.path,
+                        )
+                    )
+                continue
+
+            channel = str(item.channel_name).strip()
+            if channel == "" or channel.lower() in {"none", "void"}:
+                continue
+            uses.append(
+                self._make_reference_use(
+                    collection=collection,
+                    owner_kind="manual-set",
+                    owner_name=item.text(),
+                    kind="manual_set_item",
+                    access="set",
+                    level=None,
+                    channel=channel,
+                    path="channel_name",
+                )
+            )
+        return tuple(uses)
+
+    def _make_reference_use(
+        self,
+        *,
+        collection,
+        owner_kind,
+        owner_name,
+        kind,
+        access,
+        level,
+        channel,
+        path,
+    ):
+        return ReferenceUse(
+            device_id=self._channel_device_history.get(channel),
+            kind=kind,
+            access=access,
+            collection=collection,
+            owner_kind=owner_kind,
+            owner_name=owner_name,
+            level=level,
+            channel=channel,
+            path=path,
+            resolved=channel in (
+                self._current_setter_channels
+                if access == "set"
+                else self._current_getter_channels
+            ),
+        )
+
+    def find_channel_references(
+        self,
+        *,
+        removed_setters=(),
+        removed_getters=(),
+    ):
+        """Find exact direction-aware uses of channels proposed for removal."""
+        removed_setters = frozenset(removed_setters)
+        removed_getters = frozenset(removed_getters)
+        return tuple(
+            use
+            for use in self.reference_uses()
+            if (
+                use.access == "set"
+                and use.channel in removed_setters
+            )
+            or (
+                use.access == "get"
+                and use.channel in removed_getters
+            )
+        )
+
+    def find_device_references(self, device_id):
+        """Return references attributed to an exact catalog device ID."""
+        device_id = str(device_id)
+        return tuple(
+            use for use in self.reference_uses() if use.device_id == device_id
+        )
+
+    def catalog_mutation_blockers(self):
+        """Describe active queue/scan work that blocks catalog publication."""
+        blockers = []
+        if self.logic.isRunning():
+            blockers.append("queue thread")
+        if (
+            self._queue_run_started
+            and not self._queue_completion_delivered
+        ):
+            blockers.append("queue UI completion")
+        for item in self.iter_scan_items():
+            try:
+                name = str(
+                    item.scan.lineEdit.text()
+                    or getattr(item, "name", "")
+                    or "unnamed"
+                )
+                if item.scan.logic.isRunning():
+                    blockers.append(f"scan thread '{name}'")
+                elif not item.scan.outputs_finalized:
+                    blockers.append(f"scan output finalizer '{name}'")
+            except RuntimeError as exc:
+                if "wrapped C/C++ object" not in str(exc):
+                    raise
+        return tuple(blockers)
+
+    def is_idle_for_catalog_mutation(self):
+        return not self.catalog_mutation_blockers()
+
+    def _scan_items_snapshot(self):
+        """Compatibility snapshot used by the shutdown safety barrier."""
+        return list(self.iter_scan_items())
 
     def _seal_scan_item_for_shutdown(self, item):
         try:

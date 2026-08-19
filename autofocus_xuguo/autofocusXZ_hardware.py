@@ -192,6 +192,8 @@ class _CommandBusHardware:
     @device_label.setter
     def device_label(self, value: str) -> None:
         self.source_device = str(value)
+        if self._client is not None:
+            self._client.close()
         self._client = None
 
     def configure_command_router(
@@ -202,7 +204,17 @@ class _CommandBusHardware:
         self.command_router = command_router
         if source_device is not None:
             self.source_device = str(source_device)
+        if self._client is not None:
+            self._client.close()
         self._client = None
+
+    def detach_command_router(self) -> None:
+        """Release command-bus signals so catalog injection is reversible."""
+
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+        self.command_router = None
 
     def list_available_channels(self) -> dict[str, Any]:
         response = self._request_via_client(
@@ -239,6 +251,8 @@ class _CommandBusHardware:
         return response["value"]
 
     def _disconnect_command_client(self) -> None:
+        if self._client is not None:
+            self._client.close()
         self._client = None
 
     def _request_via_client(self, send) -> dict[str, Any]:
@@ -418,6 +432,24 @@ class AutofocusXZHardware(_CommandBusHardware):
         self.reference_target_device = str(target_device)
         self.reference_channel = str(channel)
 
+    def find_catalog_references(
+        self,
+        *,
+        removed_setters=(),
+        removed_getters=(),
+        removed_device_labels=(),
+    ) -> tuple[str, ...]:
+        del removed_setters
+        if self.reference_target_device is None or self.reference_channel is None:
+            return ()
+        full_channel = f"{self.reference_target_device}_{self.reference_channel}"
+        if (
+            full_channel in set(removed_getters)
+            or self.reference_target_device in set(removed_device_labels)
+        ):
+            return (f"autofocus reference getter: {full_channel}",)
+        return ()
+
     def read_reference_value(self) -> float:
         if self.reference_target_device is None or self.reference_channel is None:
             raise RuntimeError("Reference channel is not configured.")
@@ -485,6 +517,37 @@ class AutoPositionXZHardware(_CommandBusHardware):
         self._validate_channel_target(target_device, channel, name="reference")
         self.reference_target_device = str(target_device)
         self.reference_channel = str(channel)
+
+    def find_catalog_references(
+        self,
+        *,
+        removed_setters=(),
+        removed_getters=(),
+        removed_device_labels=(),
+    ) -> tuple[str, ...]:
+        removed_setters = set(removed_setters)
+        removed_getters = set(removed_getters)
+        removed_device_labels = set(removed_device_labels)
+        references = []
+        for description, access, device, channel in (
+            ("autoposition x setter", "set", self.x_target_device, self.x_channel),
+            ("autoposition y setter", "set", self.y_target_device, self.y_channel),
+            (
+                "autoposition reference getter",
+                "get",
+                self.reference_target_device,
+                self.reference_channel,
+            ),
+        ):
+            if device is None or channel is None:
+                continue
+            full_channel = f"{device}_{channel}"
+            removed_channels = (
+                removed_setters if access == "set" else removed_getters
+            )
+            if full_channel in removed_channels or device in removed_device_labels:
+                references.append(f"{description}: {full_channel}")
+        return tuple(references)
 
     def move_absoluteX(self, value: float) -> float:
         target_device, channel = self._require_x_channel()

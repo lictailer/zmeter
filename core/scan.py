@@ -1,4 +1,6 @@
 import datetime as _dt
+from dataclasses import dataclass
+import re
 from .scan_info import *
 from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
@@ -10,6 +12,20 @@ from .all_plots import ImagePlot
 import os, shutil
 from .append_to_ppt import add_slide_with_qpixmap
 
+
+_AVERAGE_GETTER_REFERENCE = re.compile(r"^level(\d+)_average_(.+)$")
+_PLOT_CHANNEL_REFERENCE = re.compile(r"^L\d+([SG])\d+_(.+)$")
+
+
+@dataclass(frozen=True)
+class ScanChannelReference:
+    """One channel occurrence retained by a live scan definition."""
+
+    kind: str
+    access: str
+    level: str | None
+    channel: str
+    path: str
 
 
 class Scan(QtWidgets.QWidget):
@@ -274,6 +290,158 @@ class Scan(QtWidgets.QWidget):
     def set_getter_equipment_info(self, info):
         self.getter_equipment_info = info
         self.all_level_setting.set_getter_equipment_info(self.getter_equipment_info)
+
+    def refresh_catalog(self, setter_equipment_info, getter_equipment_info):
+        """Refresh both scan menus without rewriting the scan definition."""
+        self.setter_equipment_info = setter_equipment_info
+        self.getter_equipment_info = getter_equipment_info
+        self.all_level_setting.refresh_catalog_choices(
+            setter_equipment_info,
+            getter_equipment_info,
+        )
+
+    def channel_references(self):
+        """Return immutable references from the live level editor model.
+
+        The live ``AllLevelSetting`` model is authoritative while an editor is
+        open.  In particular, this avoids reporting the older ``ScanItem.info``
+        copy while an edit is still being reflected through Qt signals.
+        """
+        level_model = getattr(
+            getattr(self, "all_level_setting", None),
+            "all_level_info",
+            self.info.get("levels", {}),
+        )
+        plot_model = getattr(
+            getattr(self, "all_plot_setting", None),
+            "info",
+            self.info.get("plots", {}),
+        )
+        return self.channel_references_from_models(level_model, plot_model)
+
+    @classmethod
+    def channel_references_from_info(cls, info):
+        """Return references retained by a scan template/persisted dictionary."""
+        if not isinstance(info, dict):
+            return ()
+        return cls.channel_references_from_models(
+            info.get("levels", {}),
+            info.get("plots", {}),
+        )
+
+    @classmethod
+    def channel_references_from_models(cls, level_model, plot_model):
+        references = []
+
+        for level_key, level_info in (level_model or {}).items():
+            if not isinstance(level_info, dict):
+                continue
+
+            setters = level_info.get("setters", {})
+            if isinstance(setters, dict):
+                for setter_key, setter_info in setters.items():
+                    if not isinstance(setter_info, dict):
+                        continue
+                    channel = cls._reference_channel(setter_info.get("channel"))
+                    if channel is None:
+                        continue
+                    references.append(
+                        ScanChannelReference(
+                            kind="setter",
+                            access="set",
+                            level=str(level_key),
+                            channel=channel,
+                            path=(
+                                f"levels.{level_key}.setters.{setter_key}.channel"
+                            ),
+                        )
+                    )
+
+            getters = level_info.get("getters", ())
+            if isinstance(getters, (list, tuple)):
+                for getter_index, getter_token in enumerate(getters):
+                    channel = cls._reference_channel(getter_token)
+                    if channel is None:
+                        continue
+                    kind = "getter"
+                    average_match = _AVERAGE_GETTER_REFERENCE.match(channel)
+                    if average_match is not None:
+                        kind = "average_getter"
+                        channel = average_match.group(2)
+                    references.append(
+                        ScanChannelReference(
+                            kind=kind,
+                            access="get",
+                            level=str(level_key),
+                            channel=channel,
+                            path=f"levels.{level_key}.getters[{getter_index}]",
+                        )
+                    )
+
+            for manual_key in ("manual_set_before", "manual_set_after"):
+                manual_sets = level_info.get(manual_key, ())
+                if not isinstance(manual_sets, (list, tuple)):
+                    continue
+                for manual_index, mapping in enumerate(manual_sets):
+                    if not isinstance(mapping, dict):
+                        continue
+                    for channel_name in mapping:
+                        channel = cls._reference_channel(channel_name)
+                        if channel is None:
+                            continue
+                        references.append(
+                            ScanChannelReference(
+                                kind=manual_key,
+                                access="set",
+                                level=str(level_key),
+                                channel=channel,
+                                path=(
+                                    f"levels.{level_key}.{manual_key}"
+                                    f"[{manual_index}]"
+                                ),
+                            )
+                        )
+
+        for plot_kind, plots in (plot_model or {}).items():
+            if not isinstance(plots, dict):
+                continue
+            for plot_key, plot_info in plots.items():
+                if not isinstance(plot_info, dict):
+                    continue
+                for field, token in plot_info.items():
+                    token = cls._reference_channel(token)
+                    if token is None:
+                        continue
+                    plot_match = _PLOT_CHANNEL_REFERENCE.match(token)
+                    if plot_match is None:
+                        continue
+                    direction, channel = plot_match.groups()
+                    kind = "plot_setter" if direction == "S" else "plot_getter"
+                    access = "set" if direction == "S" else "get"
+                    average_match = _AVERAGE_GETTER_REFERENCE.match(channel)
+                    if average_match is not None:
+                        kind = "plot_average_getter"
+                        channel = average_match.group(2)
+                    references.append(
+                        ScanChannelReference(
+                            kind=kind,
+                            access=access,
+                            level=None,
+                            channel=channel,
+                            path=f"plots.{plot_kind}.{plot_key}.{field}",
+                        )
+                    )
+
+        return tuple(references)
+
+    @staticmethod
+    def _reference_channel(channel):
+        if not isinstance(channel, str):
+            return None
+        channel = channel.strip()
+        if channel == "" or channel.lower() in {"none", "void"}:
+            return None
+        return channel
 
     def populate(self):
         self.lineEdit.setText(self.info['name'])

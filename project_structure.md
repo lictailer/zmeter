@@ -27,6 +27,7 @@ The checked-in `config/profiles/mock.json` profile instantiates two disconnected
 | `start_zmeter.py` | Thin command-line profile selection and application/session orchestration |
 | `config/` | Validated checked-in mock profile, examples, and ignored local-profile boundary |
 | `core/device_management/` | Immutable profile models, validation, reviewed lazy registry, device ownership and lifecycle reports |
+| `core/device_catalog.py` | Immutable rebuilt channel/catalog snapshots and typed refusal errors |
 | `core/mainWindow.py` | App UI, catalog discovery, routing, range checks, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queued/manual/past items and sequential queue execution |
 | `core/scan.py` | Scan editor/window, plot updates, run logging, save/load/PPT/autosave UI integration |

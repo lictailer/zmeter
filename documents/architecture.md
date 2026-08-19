@@ -30,7 +30,8 @@ start_zmeter.py
   schedule worker-thread discovery for the next Qt event-loop turn; this may
   create the shared manager but does not open a device session. Kinesis
   validation, `clr`, DLL loading, and device connections remain explicit.
-- `MainWindow` consumes the manager's initial ordered snapshot and currently owns discovered scan catalogs, global range configuration, artificial channels, the shared `DeviceCommandRouter`, and scan-quiescence coordination. Runtime catalog rebuilding is introduced in a later focused phase.
+- `MainWindow` turns an ordered manager snapshot into one immutable `DeviceCatalogSnapshot`. A replacement is built and validated before publication, then the callable maps, display choices, scan/manual menus, artificial-channel choices, active range-limit view, device buttons, and router catalog are reconciled as one UI-thread transaction. A consumer failure restores the preceding snapshot.
+- Catalog replacement is allowed only while scan and queue work, deferred output finalization, and queue UI completion are idle. If a removed label or full channel is still referenced by an open/template/queued/past scan, manual item, or artificial-channel configuration, replacement is refused; definitions are never silently rewritten.
 - `ScanList` owns available, queued, manual, and completed items. Its worker runs queue items sequentially and exposes stop-now and stop-after-current behavior.
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.
 - `ScanLogic` owns scan traversal, per-level data arrays, grouped scan I/O, timing, pause/stop checkpoints, progress, and autosave triggers.
@@ -65,6 +66,8 @@ Do not block the GUI thread with device I/O, polling loops, ramps, or long waits
 - variadic signatures are rejected.
 
 Startup-profile filters may reduce the exposed channels. Full scan channel names are `<device_label>_<channel>`; matching uses the exact registered label prefix, so labels may contain underscores.
+
+Catalog snapshots are detached read-only views. Repeated publication must not retain a removed device's bound callables, duplicate buttons/actions/signals, or mutate an older snapshot. Unknown names in a profile allowlist continue to be silently skipped, but an already stored unknown channel still counts as a reference to its exact device label when removal is considered.
 
 For cross-device operations, use the injected `DeviceCommandRouter`/`DeviceCommandClient`. The router publishes readable/writable catalogs and routes validated `read`, `write`, and `list_catalog` requests through `MainWindow`. Device modules must not import or reach into one another directly.
 

@@ -256,6 +256,7 @@ class DeviceCommandClient(QtCore.QObject):
         self.command_router = command_router
         self.source_device = source_device
         self._pending_request_ids: set[str] = set()
+        self._closed = False
 
         self.command_router.sig_command_responded.connect(self._handle_response)
         self.command_router.sig_catalog_changed.connect(self._forward_catalog_changed)
@@ -307,6 +308,8 @@ class DeviceCommandClient(QtCore.QObject):
         value,
         request_id: str | None = None,
     ) -> str:
+        if self._closed:
+            raise RuntimeError("device command client is closed")
         request_id = request_id or str(uuid.uuid4())
         self._pending_request_ids.add(request_id)
         self.command_router.sig_command_requested.emit(
@@ -321,8 +324,26 @@ class DeviceCommandClient(QtCore.QObject):
         )
         return request_id
 
+    def close(self) -> None:
+        """Idempotently detach this client from router broadcasts."""
+
+        if self._closed:
+            return
+        self._closed = True
+        self._pending_request_ids.clear()
+        for signal, slot in (
+            (self.command_router.sig_command_responded, self._handle_response),
+            (self.command_router.sig_catalog_changed, self._forward_catalog_changed),
+        ):
+            try:
+                signal.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass
+
     @QtCore.pyqtSlot(object)
     def _handle_response(self, response: object) -> None:
+        if self._closed:
+            return
         if not isinstance(response, dict):
             return
         request_id = response.get("request_id")
@@ -333,4 +354,6 @@ class DeviceCommandClient(QtCore.QObject):
 
     @QtCore.pyqtSlot(object)
     def _forward_catalog_changed(self, catalog: object) -> None:
+        if self._closed:
+            return
         self.sig_catalog_changed.emit(catalog)

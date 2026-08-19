@@ -5,11 +5,19 @@ import re
 import sys
 import time
 from copy import deepcopy
+from dataclasses import replace
 
 import numpy as np
 from PyQt6 import QtWidgets, uic, QtCore, QtGui
 
-from .device_management import DeviceLifecycleError
+from .device_catalog import (
+    DeviceCatalogBusyError,
+    DeviceCatalogError,
+    DeviceCatalogReferenceError,
+    DeviceCatalogRollbackError,
+    DeviceCatalogSnapshot,
+)
+from .device_management import DeviceLifecycleError, DeviceSnapshot
 
 # from sr830.sr830_main import SR830
 # from sr860.sr860_main import SR860
@@ -96,21 +104,27 @@ class MainWindow(QtWidgets.QWidget):
                 raise ValueError(
                     "device_manager cannot be combined with legacy equipment arguments"
                 )
-            device_snapshot = device_manager.snapshot()
-            self.equips = dict(device_snapshot.equipment)
-            self.equips_set_channels = dict(device_snapshot.setter_filters)
-            self.equips_get_channels = dict(device_snapshot.getter_filters)
+            initial_device_snapshot = device_manager.snapshot()
         else:
-            self.equips = equips if equips is not None else {}
-            self.equips_set_channels = (
-                equips_set_channels if equips_set_channels is not None else {}
+            initial_device_snapshot = DeviceSnapshot(
+                profile_name="legacy",
+                records=(),
+                equipment=equips if equips is not None else {},
+                setter_filters=(
+                    equips_set_channels if equips_set_channels is not None else {}
+                ),
+                getter_filters=(
+                    equips_get_channels if equips_get_channels is not None else {}
+                ),
             )
-            self.equips_get_channels = (
-                equips_get_channels if equips_get_channels is not None else {}
-            )
+        self._applied_device_snapshot = initial_device_snapshot
+        self.equips = dict(initial_device_snapshot.equipment)
+        self.equips_set_channels = dict(initial_device_snapshot.setter_filters)
+        self.equips_get_channels = dict(initial_device_snapshot.getter_filters)
         self._session_shutdown_in_progress = False
         self._session_shutdown_complete = False
         self._session_shutdown_report = None
+        self._catalog_mutation_in_progress = False
         # ------------------------------------------------------------
 
         # {equipment name (e.g. lockin_0) : {variable name : set method},....}
@@ -123,6 +137,7 @@ class MainWindow(QtWidgets.QWidget):
         self.getter_equipment_info = {}
         self.device_channel_catalog = {}
         self.scan_range_limits = {}
+        self.active_scan_range_limits = {}
         self._skip_next_scan_read_from_global_limit = False
         self._force_stop_requested = False
         self.scan_range_limits_path = self._default_scan_range_limits_path()
@@ -130,9 +145,15 @@ class MainWindow(QtWidgets.QWidget):
         self.make_equipment_info()
         self.setup_default_channel_info()
         self.setup_artificial_channel_info()
+        self._catalog_snapshot = self._capture_current_catalog_snapshot(
+            initial_device_snapshot.profile_name
+        )
+        self.device_channel_catalog = self._mutable_router_catalog(
+            self._catalog_snapshot
+        )
         self.command_router = DeviceCommandRouter(main_window=self, parent=self)
         self.inject_command_router_metadata()
-        self.refresh_device_catalog()
+        self.command_router.publish_catalog(self.device_channel_catalog)
 
         self.scanlist = ScanList(
             info=self.info,
@@ -161,18 +182,11 @@ class MainWindow(QtWidgets.QWidget):
         self.devices_grid_layout.setVerticalSpacing(4)
 
         self.open_equipment_buttons = []
-        for index, (equipment_name, equipment) in enumerate(self.equips.items()):
-            # equipment.show()
-            equipment.setWindowTitle(equipment_name)
-            open_button = QtWidgets.QPushButton()
-            open_button.setText(equipment_name)
-            self.open_equipment_buttons.append(open_button)
-            row = index // 6
-            column = index % 6
-            self.devices_grid_layout.addWidget(open_button, row, column)
-            open_button.clicked.connect(
-                lambda _checked=False, window=equipment: self._show_and_focus_window(window)
-            )
+        self._equipment_buttons_by_label = {}
+        self._equipment_button_windows = {}
+        initial_button_plan = self._prepare_device_button_reconciliation(self.equips)
+        self._commit_device_button_reconciliation(initial_button_plan)
+        self._finalize_device_button_reconciliation(initial_button_plan)
 
     def _show_and_focus_window(self, window):
         if window is None:
@@ -188,6 +202,177 @@ class MainWindow(QtWidgets.QWidget):
 
     def open_scan_list_window_clicked(self):
         self._show_and_focus_window(self.scanlist)
+
+    def _prepare_device_button_reconciliation(self, equipment):
+        """Build a side-effect-minimal button plan before changing the layout."""
+
+        existing_buttons = dict(getattr(self, "_equipment_buttons_by_label", {}))
+        existing_windows = dict(getattr(self, "_equipment_button_windows", {}))
+        planned_buttons = {}
+        created_buttons = []
+        old_window_titles = []
+
+        try:
+            for equipment_name, window in equipment.items():
+                window_title = getattr(window, "windowTitle", None)
+                old_window_titles.append(
+                    (
+                        window,
+                        window_title() if callable(window_title) else None,
+                    )
+                )
+                window.setWindowTitle(equipment_name)
+                if (
+                    equipment_name in existing_buttons
+                    and existing_windows.get(equipment_name) is window
+                ):
+                    button = existing_buttons[equipment_name]
+                else:
+                    button = QtWidgets.QPushButton()
+                    button.setText(equipment_name)
+                    button.clicked.connect(
+                        lambda _checked=False, target=window: (
+                            self._show_and_focus_window(target)
+                        )
+                    )
+                    created_buttons.append(button)
+                planned_buttons[equipment_name] = button
+        except Exception as prepare_error:
+            rollback_failures = []
+            for window, title in reversed(old_window_titles):
+                if title is not None:
+                    try:
+                        window.setWindowTitle(title)
+                    except Exception as rollback_error:
+                        rollback_failures.append(
+                            ("restore prepared device window title", rollback_error)
+                        )
+            for button in created_buttons:
+                try:
+                    button.deleteLater()
+                except Exception as rollback_error:
+                    rollback_failures.append(
+                        ("dispose prepared device button", rollback_error)
+                    )
+            if rollback_failures:
+                raise DeviceCatalogRollbackError(
+                    prepare_error,
+                    rollback_failures,
+                ) from prepare_error
+            raise
+
+        return {
+            "old_buttons": existing_buttons,
+            "old_windows": existing_windows,
+            "new_buttons": planned_buttons,
+            "new_windows": dict(equipment),
+            "created_buttons": tuple(created_buttons),
+            "old_window_titles": tuple(old_window_titles),
+        }
+
+    def _commit_device_button_reconciliation(self, plan) -> None:
+        """Apply one prepared layout replacement, restoring the old grid on error."""
+
+        old_buttons = plan["old_buttons"]
+        new_buttons = plan["new_buttons"]
+        layout = self.devices_grid_layout
+
+        try:
+            for button in old_buttons.values():
+                layout.removeWidget(button)
+            for index, button in enumerate(new_buttons.values()):
+                layout.addWidget(button, index // 6, index % 6)
+        except Exception as commit_error:
+            try:
+                self._rollback_device_button_reconciliation(plan)
+            except DeviceCatalogRollbackError as rollback_error:
+                raise DeviceCatalogRollbackError(
+                    commit_error,
+                    rollback_error.failures,
+                ) from commit_error
+            raise
+
+        retained_ids = {id(button) for button in new_buttons.values()}
+        for button in old_buttons.values():
+            if id(button) in retained_ids:
+                continue
+            button.hide()
+
+        self._equipment_buttons_by_label = dict(new_buttons)
+        self._equipment_button_windows = dict(plan["new_windows"])
+        self.open_equipment_buttons = list(new_buttons.values())
+
+    def _rollback_device_button_reconciliation(self, plan) -> None:
+        layout = self.devices_grid_layout
+        rollback_failures = []
+
+        def attempt(operation, callback):
+            try:
+                callback()
+            except Exception as rollback_error:
+                rollback_failures.append((operation, rollback_error))
+
+        for button in plan["new_buttons"].values():
+            attempt("remove staged device button", lambda button=button: layout.removeWidget(button))
+        for index, button in enumerate(plan["old_buttons"].values()):
+            attempt("show previous device button", button.show)
+            attempt(
+                "restore previous device button",
+                lambda index=index, button=button: layout.addWidget(
+                    button,
+                    index // 6,
+                    index % 6,
+                ),
+            )
+        for button in plan["created_buttons"]:
+            try:
+                button.clicked.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            attempt("hide staged device button", button.hide)
+            attempt(
+                "detach staged device button",
+                lambda button=button: button.setParent(None),
+            )
+            attempt("dispose staged device button", button.deleteLater)
+        self._equipment_buttons_by_label = dict(plan["old_buttons"])
+        self._equipment_button_windows = dict(plan["old_windows"])
+        self.open_equipment_buttons = list(plan["old_buttons"].values())
+        if rollback_failures:
+            raise DeviceCatalogRollbackError(
+                RuntimeError("device button reconciliation rollback failed"),
+                rollback_failures,
+            )
+
+    @staticmethod
+    def _finalize_device_button_reconciliation(plan) -> None:
+        retained_ids = {id(button) for button in plan["new_buttons"].values()}
+        for button in plan["old_buttons"].values():
+            if id(button) in retained_ids:
+                continue
+            try:
+                button.clicked.disconnect()
+                button.setParent(None)
+                button.deleteLater()
+            except (RuntimeError, TypeError):
+                pass
+
+    @staticmethod
+    def _restore_prepared_device_titles(plan) -> None:
+        rollback_failures = []
+        for window, title in reversed(plan["old_window_titles"]):
+            if title is not None:
+                try:
+                    window.setWindowTitle(title)
+                except Exception as rollback_error:
+                    rollback_failures.append(
+                        ("restore prepared device window title", rollback_error)
+                    )
+        if rollback_failures:
+            raise DeviceCatalogRollbackError(
+                RuntimeError("device title restoration failed"),
+                rollback_failures,
+            )
 
     # artificial channels
 
@@ -206,6 +391,7 @@ class MainWindow(QtWidgets.QWidget):
         self.artificial_channel_2d = ArtificialChannel2D(
             logic=self.artificial_channel_logic,
             setter_equipment_info=self.setter_equipment_info,
+            on_config_preflight=self.preflight_artificial_channel_config,
             on_config_applied=self.on_artificial_channel_config_applied,
             parent=None,
         )
@@ -386,6 +572,7 @@ class MainWindow(QtWidgets.QWidget):
             print(f"[ScanRange] {warning}")
 
         self.scan_range_limits = parsed_limits
+        self._refresh_active_scan_range_limits()
         message = (
             f"[ScanRange] Loaded {len(parsed_limits)} limit entries from '{file_path}'."
         )
@@ -394,11 +581,29 @@ class MainWindow(QtWidgets.QWidget):
         return True
 
     def on_artificial_channel_config_applied(self):
-        self.update_artificial_channel_scan_info()
-        self.refresh_device_catalog()
-        if hasattr(self, "scanlist"):
-            self.scanlist.setter_equipment_info_updated(self.setter_equipment_info)
-            self.scanlist.getter_equipment_info_updated(self.getter_equipment_info)
+        self.apply_device_snapshot(self._applied_device_snapshot)
+        self.equations = dict(self.artificial_channel_logic.equations)
+
+    def preflight_artificial_channel_config(
+        self,
+        *,
+        original_channel_x_name,
+        original_channel_y_name,
+        artificial_channel_x_name,
+        artificial_channel_y_name,
+    ):
+        del original_channel_x_name, original_channel_y_name
+        if self._catalog_mutation_in_progress:
+            raise DeviceCatalogBusyError(("catalog replacement in progress",))
+        self._ensure_catalog_mutation_idle()
+        staged_snapshot = self._build_catalog_snapshot(
+            self._applied_device_snapshot,
+            artificial_channels=(
+                artificial_channel_x_name,
+                artificial_channel_y_name,
+            ),
+        )
+        self._preflight_catalog_references(staged_snapshot)
 
     def write_artificial_channel(self, val, variable):
         self.artificial_channel_logic.set_channel_value(variable, val)
@@ -418,6 +623,707 @@ class MainWindow(QtWidgets.QWidget):
 
     ## Adding devices and make equipment info
 
+    @property
+    def current_catalog_snapshot(self) -> DeviceCatalogSnapshot:
+        return self._catalog_snapshot
+
+    @property
+    def catalog_snapshot(self) -> DeviceCatalogSnapshot:
+        return self._catalog_snapshot
+
+    def _build_catalog_snapshot(
+        self,
+        device_snapshot,
+        *,
+        artificial_channels=None,
+    ) -> DeviceCatalogSnapshot:
+        equipment = dict(device_snapshot.equipment)
+        setter_filters = dict(device_snapshot.setter_filters)
+        getter_filters = dict(device_snapshot.getter_filters)
+        setter_callables = {}
+        getter_callables = {}
+
+        for equipment_label, equipment_window in equipment.items():
+            setters, getters = self._discover_variables_dictionary(
+                equipment_window,
+                equipment_label,
+                setter_filters.get(equipment_label),
+                getter_filters.get(equipment_label),
+            )
+            setter_callables[equipment_label] = setters
+            getter_callables[equipment_label] = getters
+
+        setter_callables["default"] = {
+            "wait": self._set_default_wait,
+            "count": self._set_default_count,
+        }
+        getter_callables["default"] = {}
+
+        if hasattr(self, "artificial_channel_logic"):
+            if artificial_channels is None:
+                artificial_channels = self.artificial_channel_logic.artificial_channels
+            setter_callables["artificial_channel"] = {
+                channel: self._make_artificial_channel_writer(channel)
+                for channel in artificial_channels
+            }
+            getter_callables["artificial_channel"] = {
+                channel: self._make_artificial_channel_reader(channel)
+                for channel in artificial_channels
+            }
+
+        setter_channels = {
+            label: tuple(channels)
+            for label, channels in (
+                (label, channel_map.keys())
+                for label, channel_map in setter_callables.items()
+            )
+        }
+        getter_channels = {
+            label: tuple(channels)
+            for label, channels in (
+                (label, channel_map.keys())
+                for label, channel_map in getter_callables.items()
+            )
+        }
+        router_catalog = self.build_device_channel_catalog(
+            setter_channels,
+            getter_channels,
+        )
+        active_scan_range_limits = self._build_active_scan_range_limits(
+            setter_channels
+        )
+        return DeviceCatalogSnapshot(
+            profile_name=device_snapshot.profile_name,
+            equipment=equipment,
+            setter_filters=setter_filters,
+            getter_filters=getter_filters,
+            setter_callables=setter_callables,
+            getter_callables=getter_callables,
+            setter_channels=setter_channels,
+            getter_channels=getter_channels,
+            router_catalog=router_catalog,
+            active_scan_range_limits=active_scan_range_limits,
+        )
+
+    def _capture_current_catalog_snapshot(self, profile_name):
+        return DeviceCatalogSnapshot(
+            profile_name=profile_name,
+            equipment=self.equips,
+            setter_filters=self.equips_set_channels,
+            getter_filters=self.equips_get_channels,
+            setter_callables=self.setter_equipment_info_for_scanning,
+            getter_callables=self.getter_equipment_info_for_scanning,
+            setter_channels=self.setter_equipment_info,
+            getter_channels=self.getter_equipment_info,
+            router_catalog=self.build_device_channel_catalog(),
+            active_scan_range_limits=self._build_active_scan_range_limits(
+                self.setter_equipment_info
+            ),
+        )
+
+    @staticmethod
+    def _mutable_router_catalog(snapshot):
+        return {
+            label: {
+                "readable": list(channel_info["readable"]),
+                "writable": list(channel_info["writable"]),
+            }
+            for label, channel_info in snapshot.router_catalog.items()
+        }
+
+    @staticmethod
+    def _mutable_callable_maps(values):
+        return {
+            label: dict(channel_map)
+            for label, channel_map in values.items()
+        }
+
+    @staticmethod
+    def _mutable_channel_maps(values):
+        return {
+            label: list(channel_names)
+            for label, channel_names in values.items()
+        }
+
+    def _install_catalog_snapshot(self, snapshot) -> None:
+        self.equips = dict(snapshot.equipment)
+        self.equips_set_channels = dict(snapshot.setter_filters)
+        self.equips_get_channels = dict(snapshot.getter_filters)
+        self.setter_equipment_info_for_scanning = self._mutable_callable_maps(
+            snapshot.setter_callables
+        )
+        self.getter_equipment_info_for_scanning = self._mutable_callable_maps(
+            snapshot.getter_callables
+        )
+        self.setter_equipment_info = self._mutable_channel_maps(
+            snapshot.setter_channels
+        )
+        self.getter_equipment_info = self._mutable_channel_maps(
+            snapshot.getter_channels
+        )
+        self.device_channel_catalog = self._mutable_router_catalog(snapshot)
+        self.active_scan_range_limits = dict(snapshot.active_scan_range_limits)
+        self._catalog_snapshot = snapshot
+
+    @staticmethod
+    def _full_channels(channel_maps):
+        return {
+            f"{device_label}_{channel_name}"
+            for device_label, channel_names in channel_maps.items()
+            for channel_name in channel_names
+        }
+
+    def _build_active_scan_range_limits(self, setter_channels):
+        writable = {
+            (device_label, channel_name)
+            for device_label, channel_names in setter_channels.items()
+            for channel_name in channel_names
+        }
+        return {
+            key: bounds
+            for key, bounds in self.scan_range_limits.items()
+            if key in writable
+        }
+
+    def _refresh_active_scan_range_limits(self) -> None:
+        snapshot = getattr(self, "_catalog_snapshot", None)
+        if snapshot is None:
+            self.active_scan_range_limits = {}
+            return
+        active_limits = self._build_active_scan_range_limits(
+            snapshot.setter_channels
+        )
+        snapshot = replace(
+            snapshot,
+            active_scan_range_limits=active_limits,
+        )
+        self._catalog_snapshot = snapshot
+        self.active_scan_range_limits = dict(snapshot.active_scan_range_limits)
+
+    @staticmethod
+    def _normalize_reference_descriptions(references):
+        if references is None:
+            return ()
+        if isinstance(references, str):
+            return (references,)
+        if isinstance(references, dict):
+            references = references.values()
+        try:
+            return tuple(str(reference) for reference in references)
+        except TypeError:
+            return (str(references),)
+
+    def _scanlist_channel_references(self, removed_setters, removed_getters):
+        scanlist = getattr(self, "scanlist", None)
+        finder = getattr(scanlist, "find_channel_references", None)
+        if not callable(finder):
+            return ()
+        references = finder(
+            removed_setters=removed_setters,
+            removed_getters=removed_getters,
+        )
+        return self._normalize_reference_descriptions(references)
+
+    def _artificial_channel_references(self, removed_setters):
+        artificial_window = getattr(self, "artificial_channel_2d", None)
+        logic = getattr(self, "artificial_channel_logic", None)
+        if artificial_window is None or logic is None:
+            return ()
+
+        candidates = (
+            ("artificial-channel active x", logic.original_channel_x_name),
+            ("artificial-channel active y", logic.original_channel_y_name),
+            (
+                "artificial-channel draft x",
+                artificial_window.ocx_nested_menu.name
+                or artificial_window.ocx_nested_menu.unresolved_name,
+            ),
+            (
+                "artificial-channel draft y",
+                artificial_window.ocy_nested_menu.name
+                or artificial_window.ocy_nested_menu.unresolved_name,
+            ),
+        )
+        return tuple(
+            f"{source}: {channel_name}"
+            for source, channel_name in candidates
+            if channel_name in removed_setters
+        )
+
+    def _device_owned_catalog_references(
+        self,
+        removed_setters,
+        removed_getters,
+        removed_device_labels,
+    ):
+        references = []
+        for equipment in self.equips.values():
+            finder = getattr(equipment, "find_catalog_references", None)
+            if not callable(finder):
+                continue
+            references.extend(
+                self._normalize_reference_descriptions(
+                    finder(
+                        removed_setters=removed_setters,
+                        removed_getters=removed_getters,
+                        removed_device_labels=removed_device_labels,
+                    )
+                )
+            )
+        return tuple(references)
+
+    def find_channel_references(
+        self,
+        removed_setters,
+        removed_getters=(),
+        removed_device_labels=(),
+    ):
+        removed_setters = set(removed_setters)
+        removed_getters = set(removed_getters)
+        removed_device_labels = set(removed_device_labels)
+        references = (
+            *self._scanlist_channel_references(removed_setters, removed_getters),
+            *self._artificial_channel_references(removed_setters),
+            *self._device_owned_catalog_references(
+                removed_setters,
+                removed_getters,
+                removed_device_labels,
+            ),
+        )
+        return tuple(dict.fromkeys(references))
+
+    def _reference_device_label(self, channel_name):
+        candidates = [
+            label
+            for label in self._catalog_snapshot.equipment
+            if channel_name.startswith(f"{label}_")
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=len)
+
+    def find_device_references(self, label):
+        snapshot = self._catalog_snapshot
+        removed_setters = {
+            f"{label}_{channel_name}"
+            for channel_name in snapshot.setter_channels.get(label, ())
+        }
+        removed_getters = {
+            f"{label}_{channel_name}"
+            for channel_name in snapshot.getter_channels.get(label, ())
+        }
+        references = list(
+            self.find_channel_references(
+                removed_setters,
+                removed_getters,
+                removed_device_labels={label},
+            )
+        )
+
+        scanlist = getattr(self, "scanlist", None)
+        scan_finder = getattr(scanlist, "find_device_references", None)
+        if callable(scan_finder):
+            references.extend(
+                self._normalize_reference_descriptions(scan_finder(label))
+            )
+        reference_uses = getattr(scanlist, "reference_uses", None)
+        if callable(reference_uses):
+            for reference in reference_uses():
+                if self._reference_device_label(str(reference.channel)) == label:
+                    references.append(str(reference))
+
+        artificial_window = getattr(self, "artificial_channel_2d", None)
+        logic = getattr(self, "artificial_channel_logic", None)
+        if artificial_window is not None and logic is not None:
+            candidates = (
+                ("artificial-channel active x", logic.original_channel_x_name),
+                ("artificial-channel active y", logic.original_channel_y_name),
+                (
+                    "artificial-channel draft x",
+                    artificial_window.ocx_nested_menu.name
+                    or artificial_window.ocx_nested_menu.unresolved_name,
+                ),
+                (
+                    "artificial-channel draft y",
+                    artificial_window.ocy_nested_menu.name
+                    or artificial_window.ocy_nested_menu.unresolved_name,
+                ),
+            )
+            references.extend(
+                f"{source}: {channel_name}"
+                for source, channel_name in candidates
+                if self._reference_device_label(channel_name) == label
+            )
+        return tuple(dict.fromkeys(references))
+
+    def _preflight_catalog_references(self, new_snapshot):
+        old_snapshot = getattr(self, "_catalog_snapshot", None)
+        if old_snapshot is None:
+            return
+        removed_setters = self._full_channels(old_snapshot.setter_channels) - (
+            self._full_channels(new_snapshot.setter_channels)
+        )
+        removed_getters = self._full_channels(old_snapshot.getter_channels) - (
+            self._full_channels(new_snapshot.getter_channels)
+        )
+        removed_labels = set(old_snapshot.equipment) - set(new_snapshot.equipment)
+        if not removed_setters and not removed_getters and not removed_labels:
+            return
+        references = list(
+            self.find_channel_references(
+                removed_setters,
+                removed_getters,
+                removed_device_labels=removed_labels,
+            )
+        )
+        for label in sorted(removed_labels):
+            references.extend(self.find_device_references(label))
+        references = tuple(dict.fromkeys(references))
+        if references:
+            raise DeviceCatalogReferenceError(
+                removed_setters,
+                removed_getters,
+                references,
+                removed_labels,
+            )
+
+    @staticmethod
+    def _router_metadata_objects(equipment):
+        objects = []
+        seen = set()
+
+        def append_object(obj):
+            if obj is None or id(obj) in seen:
+                return
+            seen.add(id(obj))
+            objects.append(obj)
+            children_getter = getattr(obj, "command_router_children", None)
+            if callable(children_getter):
+                children = tuple(children_getter())
+            else:
+                children = (
+                    getattr(obj, "logic", None),
+                    getattr(obj, "hardware", None),
+                )
+            for child in children:
+                append_object(child)
+
+        for equipment_window in equipment:
+            append_object(equipment_window)
+        return tuple(objects)
+
+    def _capture_router_metadata_for_replacements(self, equipment):
+        old_equipment = getattr(self, "equips", {})
+        new_labels_by_identity = {}
+        for device_label, equipment_window in equipment.items():
+            new_labels_by_identity.setdefault(id(equipment_window), []).append(device_label)
+        for old_label, equipment_window in old_equipment.items():
+            new_labels = new_labels_by_identity.get(id(equipment_window), ())
+            if new_labels and old_label not in new_labels:
+                raise DeviceCatalogError(
+                    "device labels are stable; applying one existing instance under "
+                    f"a new label is unsupported ({old_label!r} -> {new_labels[0]!r})"
+                )
+        if any(len(labels) > 1 for labels in new_labels_by_identity.values()):
+            raise DeviceCatalogError(
+                "one device instance cannot be published under multiple labels"
+            )
+
+        replacements = {
+            device_label: equipment_window
+            for device_label, equipment_window in equipment.items()
+            if old_equipment.get(device_label) is not equipment_window
+        }
+        removed = {
+            device_label: equipment_window
+            for device_label, equipment_window in old_equipment.items()
+            if equipment.get(device_label) is not equipment_window
+        }
+        replacement_objects = self._router_metadata_objects(replacements.values())
+        retained_object_ids = {
+            id(obj) for obj in self._router_metadata_objects(equipment.values())
+        }
+        removed_objects = tuple(
+            obj
+            for obj in self._router_metadata_objects(removed.values())
+            if id(obj) not in retained_object_ids
+        )
+        affected_objects = (*replacement_objects, *removed_objects)
+        for obj in affected_objects:
+            configure_router = getattr(obj, "configure_command_router", None)
+            detach_router = getattr(obj, "detach_command_router", None)
+            if callable(configure_router) and not callable(detach_router):
+                raise DeviceCatalogError(
+                    "runtime catalog replacement requires objects with "
+                    "configure_command_router() to also implement an idempotent "
+                    "detach_command_router() rollback hook"
+                )
+        missing = object()
+        captured = []
+        for obj in affected_objects:
+            captured.append(
+                (
+                    obj,
+                    {
+                        attribute: getattr(obj, attribute, missing)
+                        for attribute in (
+                            "command_router",
+                            "device_label",
+                            "source_device",
+                        )
+                    },
+                )
+            )
+        return {
+            "replacements": replacements,
+            "removed": removed,
+            "replacement_objects": replacement_objects,
+            "removed_objects": removed_objects,
+            "missing": missing,
+            "captured": tuple(captured),
+        }
+
+    @staticmethod
+    def _restore_router_metadata(capture) -> None:
+        missing = capture["missing"]
+        for obj, attributes in reversed(capture["captured"]):
+            for attribute, value in attributes.items():
+                try:
+                    if value is missing:
+                        delattr(obj, attribute)
+                    else:
+                        setattr(obj, attribute, value)
+                except (AttributeError, RuntimeError):
+                    pass
+
+    def _inject_router_metadata_for_replacements(self, equipment, capture):
+        visited_objects = set()
+        for device_label, equipment_window in capture["replacements"].items():
+            self._inject_command_router_into_object(
+                equipment_window,
+                device_label=device_label,
+                visited_objects=visited_objects,
+            )
+
+    def _detach_router_metadata_from_objects(self, objects):
+        for obj in reversed(tuple(objects)):
+            detach_router = getattr(obj, "detach_command_router", None)
+            if callable(detach_router):
+                detach_router()
+            for attribute in ("command_router", "device_label", "source_device"):
+                try:
+                    delattr(obj, attribute)
+                except (AttributeError, RuntimeError):
+                    pass
+
+    def _restore_removed_router_attachments(self, capture):
+        visited_objects = set()
+        for device_label, equipment_window in capture["removed"].items():
+            self._inject_command_router_into_object(
+                equipment_window,
+                device_label=device_label,
+                visited_objects=visited_objects,
+            )
+
+    def _refresh_scanlist_catalog(self, snapshot):
+        scanlist = getattr(self, "scanlist", None)
+        if scanlist is None:
+            return
+        setter_info = self._mutable_channel_maps(snapshot.setter_channels)
+        getter_info = self._mutable_channel_maps(snapshot.getter_channels)
+        refresh_catalog = getattr(scanlist, "refresh_catalog", None)
+        if callable(refresh_catalog):
+            refresh_catalog(setter_info, getter_info)
+            return
+        scanlist.setter_equipment_info_updated(setter_info)
+        scanlist.getter_equipment_info_updated(getter_info)
+
+    def _restore_artificial_channel_choices(self, snapshot, selections):
+        artificial_window = getattr(self, "artificial_channel_2d", None)
+        if artificial_window is None:
+            return
+        artificial_window.refresh_channel_choices(
+            self._mutable_channel_maps(snapshot.setter_channels)
+        )
+        artificial_window.ocx_nested_menu.set_chosen_one(selections[0])
+        artificial_window.ocy_nested_menu.set_chosen_one(selections[1])
+
+    def _ensure_catalog_mutation_idle(self) -> None:
+        scanlist = getattr(self, "scanlist", None)
+        blockers_getter = getattr(scanlist, "catalog_mutation_blockers", None)
+        if not callable(blockers_getter):
+            return
+        blockers = tuple(blockers_getter())
+        if blockers:
+            raise DeviceCatalogBusyError(blockers)
+
+    def apply_device_snapshot(
+        self,
+        device_snapshot,
+    ) -> DeviceCatalogSnapshot:
+        """Atomically rebuild and publish every catalog consumer from one input."""
+
+        if QtCore.QThread.currentThread() is not self.thread():
+            raise RuntimeError("device catalog snapshots must be applied on the UI thread")
+
+        if self._catalog_mutation_in_progress:
+            raise DeviceCatalogBusyError(("catalog replacement in progress",))
+        self._catalog_mutation_in_progress = True
+        try:
+            return self._apply_device_snapshot_transaction(device_snapshot)
+        finally:
+            self._catalog_mutation_in_progress = False
+
+    def _apply_device_snapshot_transaction(self, device_snapshot):
+        self._ensure_catalog_mutation_idle()
+        staged_snapshot = self._build_catalog_snapshot(device_snapshot)
+        self._preflight_catalog_references(staged_snapshot)
+
+        metadata_capture = self._capture_router_metadata_for_replacements(
+            staged_snapshot.equipment
+        )
+        try:
+            self._inject_router_metadata_for_replacements(
+                staged_snapshot.equipment,
+                metadata_capture,
+            )
+            button_plan = self._prepare_device_button_reconciliation(
+                staged_snapshot.equipment
+            )
+        except Exception as apply_error:
+            rollback_failures = []
+            for operation, callback in (
+                (
+                    "detach staged router metadata",
+                    lambda: self._detach_router_metadata_from_objects(
+                        metadata_capture["replacement_objects"]
+                    ),
+                ),
+                (
+                    "restore router metadata attributes",
+                    lambda: self._restore_router_metadata(metadata_capture),
+                ),
+            ):
+                try:
+                    callback()
+                except Exception as rollback_error:
+                    rollback_failures.append((operation, rollback_error))
+            if rollback_failures:
+                raise DeviceCatalogRollbackError(
+                    apply_error,
+                    rollback_failures,
+                ) from apply_error
+            raise
+
+        old_snapshot = self._catalog_snapshot
+        old_device_snapshot = self._applied_device_snapshot
+        artificial_window = getattr(self, "artificial_channel_2d", None)
+        old_artificial_selections = (
+            artificial_window.ocx_nested_menu.name
+            or artificial_window.ocx_nested_menu.unresolved_name,
+            artificial_window.ocy_nested_menu.name
+            or artificial_window.ocy_nested_menu.unresolved_name,
+        )
+        artificial_refreshed = False
+        scanlist_refreshed = False
+        installed = False
+        button_commit_attempted = False
+        publication_attempted = False
+        removed_metadata_detached = False
+
+        try:
+            removed_metadata_detached = True
+            self._detach_router_metadata_from_objects(
+                metadata_capture["removed_objects"]
+            )
+            self._install_catalog_snapshot(staged_snapshot)
+            self._applied_device_snapshot = device_snapshot
+            installed = True
+
+            if artificial_window is not None:
+                artificial_refreshed = True
+                artificial_window.refresh_channel_choices(
+                    self._mutable_channel_maps(staged_snapshot.setter_channels)
+                )
+
+            scanlist_refreshed = True
+            self._refresh_scanlist_catalog(staged_snapshot)
+            button_commit_attempted = True
+            self._commit_device_button_reconciliation(button_plan)
+            publication_attempted = True
+            self.command_router.publish_catalog(self.device_channel_catalog)
+        except Exception as apply_error:
+            rollback_failures = []
+
+            def attempt_rollback(operation, callback):
+                try:
+                    callback()
+                except Exception as rollback_error:
+                    rollback_failures.append((operation, rollback_error))
+
+            if button_commit_attempted:
+                attempt_rollback(
+                    "restore device buttons",
+                    lambda: self._rollback_device_button_reconciliation(button_plan),
+                )
+            if installed:
+                def restore_authoritative_snapshot():
+                    self._install_catalog_snapshot(old_snapshot)
+                    self._applied_device_snapshot = old_device_snapshot
+
+                attempt_rollback(
+                    "restore authoritative catalog snapshot",
+                    restore_authoritative_snapshot,
+                )
+            if scanlist_refreshed:
+                attempt_rollback(
+                    "restore scan-list consumers",
+                    lambda: self._refresh_scanlist_catalog(old_snapshot),
+                )
+            if artificial_refreshed:
+                attempt_rollback(
+                    "restore artificial-channel choices",
+                    lambda: self._restore_artificial_channel_choices(
+                        old_snapshot,
+                        old_artificial_selections,
+                    ),
+                )
+            attempt_rollback(
+                "restore device window titles",
+                lambda: self._restore_prepared_device_titles(button_plan),
+            )
+            attempt_rollback(
+                "detach staged router metadata",
+                lambda: self._detach_router_metadata_from_objects(
+                    metadata_capture["replacement_objects"]
+                ),
+            )
+            attempt_rollback(
+                "restore router metadata attributes",
+                lambda: self._restore_router_metadata(metadata_capture),
+            )
+            if removed_metadata_detached:
+                attempt_rollback(
+                    "restore removed router attachments",
+                    lambda: self._restore_removed_router_attachments(metadata_capture),
+                )
+            if publication_attempted:
+                attempt_rollback(
+                    "republish previous router catalog",
+                    lambda: self.command_router.publish_catalog(
+                        self._mutable_router_catalog(old_snapshot)
+                    ),
+                )
+            if rollback_failures:
+                raise DeviceCatalogRollbackError(
+                    apply_error,
+                    rollback_failures,
+                ) from apply_error
+            raise
+
+        self._finalize_device_button_reconciliation(button_plan)
+        return staged_snapshot
+
     def make_equipment_info(self):
         for key, equipment in self.equips.items():
 
@@ -430,6 +1336,20 @@ class MainWindow(QtWidgets.QWidget):
             self.getter_equipment_info[key] = list(get_variable.keys())
 
     def make_variables_dictionary(self, equipment, equipment_label):
+        return self._discover_variables_dictionary(
+            equipment,
+            equipment_label,
+            self.equips_set_channels.get(equipment_label),
+            self.equips_get_channels.get(equipment_label),
+        )
+
+    def _discover_variables_dictionary(
+        self,
+        equipment,
+        equipment_label,
+        requested_set_channels,
+        requested_get_channels,
+    ):
         get_variables = {}
         set_variables = {}
         logic = getattr(equipment, "logic", None)
@@ -437,6 +1357,18 @@ class MainWindow(QtWidgets.QWidget):
             return set_variables, get_variables
 
         for method_name in dir(logic):
+            if not method_name.startswith(("get_", "set_")):
+                continue
+            try:
+                static_member = inspect.getattr_static(logic, method_name)
+            except AttributeError:
+                continue
+            if isinstance(static_member, (staticmethod, classmethod)):
+                static_member = static_member.__func__
+            if not callable(static_member):
+                # Avoid evaluating properties and arbitrary descriptors merely
+                # because their names resemble scan channels.
+                continue
             method = getattr(logic, method_name)
             if not callable(method):
                 continue
@@ -445,9 +1377,6 @@ class MainWindow(QtWidgets.QWidget):
             elif method_name.startswith("set_") and self._is_valid_setter(method):
                 set_variables[method_name[4:]] = method
         
-        requested_set_channels = self.equips_set_channels.get(equipment_label)
-        requested_get_channels = self.equips_get_channels.get(equipment_label)
-
         set_variables = self.filter_scan_channels(set_variables, requested_set_channels)
         get_variables = self.filter_scan_channels(get_variables, requested_get_channels)
         return set_variables, get_variables
@@ -522,24 +1451,26 @@ class MainWindow(QtWidgets.QWidget):
 
         return {key: value for key, value in variables.items() if key in normalized}
 
-    def build_device_channel_catalog(self):
-        device_names = set(self.setter_equipment_info) | set(self.getter_equipment_info)
+    def build_device_channel_catalog(self, setter_info=None, getter_info=None):
+        if setter_info is None:
+            setter_info = self.setter_equipment_info
+        if getter_info is None:
+            getter_info = self.getter_equipment_info
+        device_names = set(setter_info) | set(getter_info)
         catalog = {}
         for device_name in sorted(device_names):
             catalog[device_name] = {
-                "readable": list(self.getter_equipment_info.get(device_name, [])),
-                "writable": list(self.setter_equipment_info.get(device_name, [])),
+                "readable": list(getter_info.get(device_name, [])),
+                "writable": list(setter_info.get(device_name, [])),
             }
         return catalog
 
     def refresh_device_catalog(self):
-        self.device_channel_catalog = self.build_device_channel_catalog()
-        if hasattr(self, "command_router"):
-            self.command_router.publish_catalog(self.device_channel_catalog)
-        return self.device_channel_catalog
+        snapshot = self.apply_device_snapshot(self._applied_device_snapshot)
+        return self._mutable_router_catalog(snapshot)
 
     def get_device_channel_catalog(self):
-        return deepcopy(self.device_channel_catalog)
+        return self._mutable_router_catalog(self._catalog_snapshot)
 
     def inject_command_router_metadata(self):
         visited_objects = set()
@@ -573,11 +1504,21 @@ class MainWindow(QtWidgets.QWidget):
         visited_objects.add(object_id)
 
         configure_router = getattr(obj, "configure_command_router", None)
+        configured_root = False
         if callable(configure_router):
-            try:
+            signature = self._safe_signature(configure_router)
+            accepts_source_device = signature is not None and (
+                "source_device" in signature.parameters
+                or any(
+                    parameter.kind == inspect.Parameter.VAR_KEYWORD
+                    for parameter in signature.parameters.values()
+                )
+            )
+            if accepts_source_device:
                 configure_router(self.command_router, source_device=device_label)
-            except TypeError:
+            else:
                 configure_router(self.command_router)
+            configured_root = True
 
         try:
             obj.device_label = device_label
@@ -589,8 +1530,18 @@ class MainWindow(QtWidgets.QWidget):
         except Exception:
             pass
 
-        for child_attr in ("logic", "hardware"):
-            child = getattr(obj, child_attr, None)
+        if configured_root:
+            return
+
+        children_getter = getattr(obj, "command_router_children", None)
+        if callable(children_getter):
+            children = tuple(children_getter())
+        else:
+            children = (
+                getattr(obj, "logic", None),
+                getattr(obj, "hardware", None),
+            )
+        for child in children:
             if child is not None:
                 self._inject_command_router_into_object(
                     child,
@@ -632,7 +1583,7 @@ class MainWindow(QtWidgets.QWidget):
             # exact prefix match: label followed by an underscore
             if master.startswith(f"{label}_"): #elif
                 variable = self.get_variable(master, label)
-                scan_range_limits = getattr(self, "scan_range_limits", {})
+                scan_range_limits = getattr(self, "active_scan_range_limits", {})
                 limits = scan_range_limits.get((label, variable))
                 if limits is not None:
                     low_limit, high_limit = limits

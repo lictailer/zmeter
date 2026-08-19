@@ -298,6 +298,23 @@ class AllLevelSetting(QtWidgets.QWidget):
         self._cleanup_stale_average_getters()
         self._refresh_record_labels()
         self.sig_info_changed.emit(self.all_level_info)
+
+    def refresh_catalog_choices(
+        self,
+        setter_equipment_info,
+        getter_equipment_info,
+    ):
+        """Refresh menus only; never reconcile or emit scan definitions.
+
+        Catalog publication is not an operator edit.  In particular, it must
+        not remove an unresolved averaged getter or cause plot combo boxes to
+        select a fallback before the owning window's reference preflight.
+        """
+        self.setter_equipment_info = setter_equipment_info or {}
+        self.getter_equipment_info = getter_equipment_info or {}
+        for _level_index, level_widget in self._iter_level_widgets():
+            level_widget.set_setter_equipment_info(self.setter_equipment_info)
+        self._refresh_getter_menus()
         
     def _iter_level_widgets(self):
         for i in range(self.verticalLayout.count()):

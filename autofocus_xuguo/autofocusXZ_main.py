@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import sys
 import traceback
+from copy import deepcopy
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,7 @@ class AutofocusXZMain(QtWidgets.QWidget):
         self.logic = logic or AutofocusXZLogic(save_path=default_save_path)
 
         self._channel_catalog: dict[str, Any] = {}
+        self._catalog_signal_router: Any = None
         self._selector_pairs: dict[str, dict[str, Any]] = {}
         self._last_progress_log_line_idx: int | None = None
 
@@ -80,15 +82,60 @@ class AutofocusXZMain(QtWidgets.QWidget):
         command_router: Any,
         source_device: str | None = None,
     ) -> None:
+        if self._catalog_signal_router is not None:
+            try:
+                self._catalog_signal_router.sig_catalog_changed.disconnect(
+                    self._on_router_catalog_changed
+                )
+            except (RuntimeError, TypeError):
+                pass
         if source_device:
             self.device_label = str(source_device)
         self.command_router = command_router
+        self._catalog_signal_router = command_router
+        command_router.sig_catalog_changed.connect(self._on_router_catalog_changed)
         self.logic.configure_command_router(
             command_router=command_router,
             source_device=self.device_label,
         )
         self._append_status(f"Router injected for {self.device_label}.")
-        self._on_refresh_channels()
+
+    def detach_command_router(self) -> None:
+        """Release router clients so a failed catalog edit can roll back."""
+
+        if self._catalog_signal_router is not None:
+            try:
+                self._catalog_signal_router.sig_catalog_changed.disconnect(
+                    self._on_router_catalog_changed
+                )
+            except (RuntimeError, TypeError):
+                pass
+        self._catalog_signal_router = None
+        self.logic.detach_command_router()
+        self.command_router = None
+
+    def command_router_children(self):
+        return (self.logic,)
+
+    def find_catalog_references(
+        self,
+        *,
+        removed_setters=(),
+        removed_getters=(),
+        removed_device_labels=(),
+    ) -> tuple[str, ...]:
+        return self.logic.find_catalog_references(
+            removed_setters=removed_setters,
+            removed_getters=removed_getters,
+            removed_device_labels=removed_device_labels,
+        )
+
+    @QtCore.pyqtSlot(object)
+    def _on_router_catalog_changed(self, catalog: object) -> None:
+        if not isinstance(catalog, dict):
+            return
+        self._channel_catalog = deepcopy(catalog)
+        self._refresh_all_channel_selectors(preserve=True)
 
     def terminate_dev(self) -> None:
         try:

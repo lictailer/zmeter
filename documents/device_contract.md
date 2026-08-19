@@ -39,6 +39,12 @@ Do not expose helper/control methods with these prefixes unless they are valid s
 
 The startup profile may supply setter/getter allowlists. `None` exposes all valid methods; unknown requested names are ignored. Support profile filtering rather than removing useful public methods for one lab.
 
+Runtime catalog changes are definition preserving. A device or channel must not
+be removed from the active session while it is referenced by an open, template,
+queued, completed, or manual scan configuration, or by an artificial-channel
+configuration. The operator must resolve the reference first; core code must
+not rename, clear, or substitute the stored channel silently.
+
 ## Signals and threads
 
 - Widget mutation occurs on the Qt UI thread through signals/slots.
@@ -79,6 +85,26 @@ An active device widget should provide the following where applicable:
 ## Cross-device commands
 
 Direct imports or references between device modules are forbidden. Accept router injection through `configure_command_router(router, source_device=...)` when custom setup is needed, or use the injected `command_router`/`device_label` metadata. Prefer `DeviceCommandClient` for asynchronous catalog/read/write requests and correlate responses by request ID.
+
+If `configure_command_router(...)` creates clients, signal connections, or other
+state, the device must also provide an idempotent `detach_command_router()` that
+closes those clients and reverses the attachment. A driver with additional
+stored cross-device selections must expose them through its reviewed catalog
+reference provider before runtime removal can be enabled for that driver.
+
+A composite device may expose `command_router_children()` so catalog rollback
+can checkpoint and detach its full object graph. When an object implements
+`configure_command_router(...)`, that hook owns router injection for all of its
+descendants; core does not call child configure hooks again. Core still walks
+`command_router_children()` while capturing and detaching state, so every
+`detach_command_router()` in the graph must be safe when called repeatedly.
+
+A registered device that stores cross-device selections must implement
+`find_catalog_references(*, removed_setters, removed_getters,
+removed_device_labels)`. It returns stable, human-readable descriptions for
+every stored reference intersecting those full-channel or exact-label sets.
+The hook must be side-effect free and include unresolved selections associated
+with a removed device, not only channels currently exported by the catalog.
 
 Router availability does not bypass device validation. A target write still travels through `MainWindow.write_info()` and its configured global range checks.
 

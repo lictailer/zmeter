@@ -53,6 +53,12 @@ python -B -m unittest discover -s tests -p "test_*.py" -v
 - Writes: no intentional lab data; Qt/platform caches may depend on environment.
 - Proves: covered artificial-channel range/skip/ramp, scan-abort, and force-stop flag behavior.
 
+The core suite also includes offscreen catalog transaction tests. They exercise
+repeated refresh, synthetic add/remove, reference refusal, consumer rollback,
+device-button reconciliation, router publication, range-limit visibility, and
+the available/queue/manual/past/template scan consumers without loading a real
+driver.
+
 ### Mock-device tests
 
 ```powershell
