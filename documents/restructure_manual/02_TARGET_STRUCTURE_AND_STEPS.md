@@ -245,4 +245,3 @@ After this restructure is stable, array-valued getter work may begin from the ne
 - spectrometer/camera full-array channels.
 
 No placeholder object-array storage, array shape guessing, or partial spectrum support should be introduced here.
-

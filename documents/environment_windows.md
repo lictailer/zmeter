@@ -53,7 +53,7 @@ The default startup profile is `config/profiles/mock.json`. Select an ignored re
 
 Profiles control registered device labels, declared connection values, startup-connection policy, optional channel filters, local save path, and backup root. A code-reviewed registry entry controls actual construction, runtime injection, and lifecycle adaptation; disabled entries are never constructed. Real addresses, serial numbers, NI names, credentials, and lab paths must remain in ignored local profiles and must not be generalized into core code or canonical docs.
 
-`scan_range_limits.json` is loaded from the repository root by default. UI files are loaded relative to the current working directory. The environment YAML contains a machine-specific exported `prefix`; Conda normally creates the named environment from `name`, and maintainers should review/remove hardcoded export prefixes when regenerating the file.
+`scan_range_limits.json` is loaded from the repository root by default. Core UI files retain their repository/current-working-directory lookup, while device-package UI files resolve relative to their Python modules under `devices/`. The environment YAML contains a machine-specific exported `prefix`; Conda normally creates the named environment from `name`, and maintainers should review/remove hardcoded export prefixes when regenerating the file.
 
 Shared Kinesis does not use an environment variable, global `PATH` mutation,
 Program Files fallback, or device-local DLL search. The tracked

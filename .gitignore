@@ -28,4 +28,3 @@ config/profiles/local/
 
 # Editor settings
 .vscode/
-/keithley24xx/__pycache__

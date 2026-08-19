@@ -90,6 +90,20 @@ The commands are canonical, but successful execution requires the maintained env
 
 ## Additional focused checks
 
+The scalar scan and persistence contracts have dedicated hardware-independent
+characterization suites:
+
+```powershell
+python -B -m unittest -v tests.test_scan_regression tests.test_scan_persistence
+```
+
+They cover nested scalar shape/dtype/order, grouped reads and writes, averaged
+getters, signal metadata, pause/resume/stop, queue order, the hourly autosave
+trigger, empty and populated JSON round trips, `NaN` encoding, fields and level
+ordering, comments/logs, collision naming, serial discovery, canonical
+`autosave.json` replacement, disabled backup behavior, and intercepted
+PowerPoint/COM/`Z:\` paths. All files are confined to an OS temporary directory.
+
 - Parse changed `.ui` files with a hardware-independent XML parser or load only the affected widget offscreen with simulated dependencies.
 - For persistence changes, save to a temporary directory, reload, compare schema/data including `NaN`, verify duplicate naming, and test partial-write/failure reporting.
 - For threading changes, use deterministic barriers/events and bounded waits; never rely on long sleeps or real transport timing.

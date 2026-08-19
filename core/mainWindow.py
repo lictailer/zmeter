@@ -20,13 +20,6 @@ from .device_catalog import (
 )
 from .device_management import DeviceLifecycleError, DeviceManagerError, DeviceSnapshot
 
-# from sr830.sr830_main import SR830
-# from sr860.sr860_main import SR860
-# from nidaq.nidaq_main import NIDAQ
-# from keithley24xx.keithley24xx_main import Keithley24xx
-# from k10cr1.k10cr1_main import K10CR1
-# from tlpm.tlpm_main import TLPM
-
 from .scan_info import *
 from .scanlist import (
     ScanList,
@@ -116,9 +109,9 @@ class MainWindow(QtWidgets.QWidget):
             )
             self.backup_Path.setPlainText(default_backup_path)
 
-        # Equipment instances may come from the static DeviceManager snapshot
-        # or from the legacy constructor dictionaries used by standalone tests
-        # and scripts. Manager ownership is intentionally static in this phase.
+        # Equipment instances normally come from manager-owned snapshots, which
+        # may change through guarded session mutations. Legacy constructor
+        # dictionaries remain available only to standalone tests and scripts.
         self.device_manager = device_manager
         if device_manager is not None:
             if any(

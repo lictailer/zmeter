@@ -40,8 +40,8 @@ Do not install every vendor package by default. Start with the mock configuratio
 
 Maintained VISA devices share one lazy `VisaRuntime` manager while retaining
 exclusive instrument sessions. K10CR1 and BBD30X share one lazy,
-manifest-validated `KinesisRuntime`. Local vendor binaries live only in the
-ignored `core/shared_runtime/vendor/thorlabs_kinesis/` folder; see its README
+manifest-validated `KinesisRuntime`. The shared Kinesis vendor binaries live in
+the tracked `core/shared_runtime/vendor/thorlabs_kinesis/` folder; see its README
 before enabling either motion device.
 
 ## Installation

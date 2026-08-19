@@ -211,4 +211,3 @@ The user must review and execute this procedure. Success applies only to the exa
 - [ ] Final diff contains no unrelated changes or generated artifacts.
 - [ ] Source branch is ready for user review but not merged/pushed without authorization.
 - [ ] Array-valued getter work remains deferred.
-
