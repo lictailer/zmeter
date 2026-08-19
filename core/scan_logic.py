@@ -827,11 +827,16 @@ class ScanLogic(QtCore.QThread):
             if hasattr(self.main_window, "reset_skip_next_scan_read_from_global_limit"):
                 self.main_window.reset_skip_next_scan_read_from_global_limit()
             
-            # Re-enable equipment that was stopped for scanning
-            self.main_window.start_equipments()
-            
-            # Notify GUI that scan is complete
-            self.sig_scan_finished.emit()
+            # Surface restart failures without suppressing GUI finalization.
+            try:
+                self.main_window.start_equipments()
+            except Exception as exc:
+                self.sig_scan_error.emit(
+                    "Equipment restart failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            finally:
+                self.sig_scan_finished.emit()
 
     def run(self):
         """

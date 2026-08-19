@@ -11,6 +11,38 @@ from .scan import Scan
 from .nested_menu import NestedMenu
 
 
+class ScanListShutdownTimeoutError(TimeoutError):
+    """Raised when scans or the queue do not quiesce before shutdown's deadline."""
+
+    def __init__(self, timeout_ms, pending):
+        self.timeout_ms = int(timeout_ms)
+        self.pending = tuple(pending)
+        pending_text = ", ".join(self.pending) if self.pending else "unknown work"
+        super().__init__(
+            f"Scan-list shutdown did not quiesce within {self.timeout_ms} ms: "
+            f"{pending_text}"
+        )
+
+
+class ScanListShutdownThreadError(RuntimeError):
+    """Raised when scan-list shutdown is called outside its Qt owner thread."""
+
+
+class ScanListShutdownInProgressError(RuntimeError):
+    """Raised when shutdown is called reentrantly before quiescence is known."""
+
+
+class ScanListShutdownStopError(RuntimeError):
+    """Raised after quiescence when one or more scan stop requests failed."""
+
+    def __init__(self, failures):
+        self.failures = tuple(failures)
+        details = "; ".join(
+            f"{name}: {type(exc).__name__}: {exc}" for name, exc in self.failures
+        )
+        super().__init__(f"Scan stop request failed during shutdown: {details}")
+
+
 class ScanItem(QtWidgets.QLabel):
     sig_info_changed = QtCore.pyqtSignal(object)
     start = QtCore.pyqtSignal(object)
@@ -483,6 +515,11 @@ class ScanList(QtWidgets.QWidget):
         self.logic = ScanListLogic()
         self.main_window = main_window
         self._log_ready = False
+        self._shutdown_complete = False
+        self._shutdown_in_progress = False
+        self._shutdown_sealed = False
+        self._queue_run_started = False
+        self._queue_completion_delivered = True
 
         self.logStatus_textEdit.setReadOnly(True)
         self.logStatus_textEdit.document().setMaximumBlockCount(self.MAX_UI_LOG_LINES)
@@ -537,11 +574,14 @@ class ScanList(QtWidgets.QWidget):
         self.logic.sig_item_started.connect(self.on_queue_item_started)
         self.logic.sig_item_finished.connect(self.on_queue_item_finished)
         self.logic.sig_queue_stopped.connect(self.on_queue_stopped)
+        self.logic.finished.connect(self._on_queue_thread_finished)
         self.pb_new_scan.clicked.connect(self.add_empty_scan_item)
         self.manual_add_item_pushButton.clicked.connect(self.add_manual_set_item_from_ui)
         self._log_ready = True
 
     def start_scan(self, info):
+        if self._shutdown_sealed:
+            return
         self.start.emit(info)
 
     def stop_scan(self, scan):
@@ -561,6 +601,9 @@ class ScanList(QtWidgets.QWidget):
         self.list_queue.getter_equipment_info_updated(self.getter_equipment_info)
 
     def start_queue(self):
+        if self._shutdown_sealed:
+            self._log_warning("Queue start ignored: scan list is shutting down.")
+            return
         if self.logic.isRunning():
             self._log_warning("Queue start ignored: queue is already running.")
             return
@@ -571,7 +614,14 @@ class ScanList(QtWidgets.QWidget):
 
         self.logic.reset_control_flags()
         self.logic.workers = queues
-        self.logic.start()
+        self._queue_run_started = True
+        self._queue_completion_delivered = False
+        try:
+            self.logic.start()
+        except Exception:
+            self._queue_run_started = False
+            self._queue_completion_delivered = True
+            raise
         self._log_info(f"Queue started with {len(queues)} item(s).")
 
     def stop_current_scan(self):
@@ -645,6 +695,12 @@ class ScanList(QtWidgets.QWidget):
         else:
             self._log_warning(f"Queue stopped: {reason}")
 
+    @QtCore.pyqtSlot()
+    def _on_queue_thread_finished(self):
+        # This queued acknowledgement is emitted after the queue's earlier UI
+        # signals, so shutdown can prove those mutations have been delivered.
+        self._queue_completion_delivered = True
+
     def handle_delete_request(self, widget):
         if isinstance(widget, ScanItem):
             if widget.scan.logic.isRunning():
@@ -674,7 +730,9 @@ class ScanList(QtWidgets.QWidget):
             layout_obj.removeWidget(widget)
 
     def on_item_cloned_between_lists(self, item, _target_list):
-        pass
+        if self._shutdown_sealed:
+            item.scan._shutdown_requested = True
+            item.scan._start_new_scan_after_stop = False
 
     def clear_past(self):
         for i, w in enumerate(self.list_past.get_widgets()):
@@ -682,6 +740,8 @@ class ScanList(QtWidgets.QWidget):
             w.deleteLater()
 
     def add_empty_scan_item(self):
+        if self._shutdown_sealed:
+            return
         si = ScanItem(
             name="New Scan",
             info=self.info,
@@ -693,10 +753,14 @@ class ScanList(QtWidgets.QWidget):
         # self.available_info.append(si.info)
 
     def add_empty_manual_set_item(self):
+        if self._shutdown_sealed:
+            return
         item = ManualSetItem("default_wait", 0.0, main_window=self.main_window)
         self.list_manual.add_item(item)
 
     def add_manual_set_item_from_ui(self):
+        if self._shutdown_sealed:
+            return
         channel_name = str(getattr(self.manual_set_menu, "name", "")).strip()
         if channel_name in {"", "none", "void"}:
             self._log_warning("Manual-set add ignored: no channel selected.")
@@ -733,31 +797,227 @@ class ScanList(QtWidgets.QWidget):
     def _log_error(self, message: str):
         self._append_log_entry(message, level="ERROR")
         
-    def _cleanup(self):
-        """Close every Scan window and stop the worker thread."""
-        for container in (self.list_available,
-                          self.list_queue,
-                          self.list_past):
-            for w in container.get_widgets():
-                if isinstance(w, ScanItem):
-                    try:
-                        w.scan.close()
-                    except RuntimeError:
-                        pass
+    def _scan_items_snapshot(self):
+        """Return each known scan item once, including detached queue workers."""
+        items = []
+        seen = set()
 
+        def append_scan_items(widgets):
+            for widget in widgets:
+                if not isinstance(widget, ScanItem) or id(widget) in seen:
+                    continue
+                seen.add(id(widget))
+                items.append(widget)
+
+        for container in (self.list_available, self.list_queue, self.list_past):
+            try:
+                widgets = container.get_widgets()
+            except RuntimeError:
+                continue
+            append_scan_items(widgets)
+
+        current_worker = getattr(self.logic, "current_worker", None)
+        append_scan_items((current_worker,))
+        try:
+            append_scan_items(tuple(getattr(self.logic, "workers", ())))
+        except RuntimeError:
+            pass
+        return items
+
+    def _seal_scan_item_for_shutdown(self, item):
+        try:
+            item.scan._shutdown_requested = True
+            item.scan._start_new_scan_after_stop = False
+        except RuntimeError as exc:
+            if "wrapped C/C++ object" not in str(exc):
+                raise
+
+    def _request_scan_stop_for_shutdown(self, item):
+        """Clear restart state and request stop in the scan item's Qt thread."""
+        try:
+            if item.thread() == QtCore.QThread.currentThread():
+                item._request_stop_from_queue()
+            else:
+                QtCore.QMetaObject.invokeMethod(
+                    item,
+                    "_request_stop_from_queue",
+                    QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+                )
+        except RuntimeError as exc:
+            # The item may have been deleted by an already-queued UI action.
+            if "wrapped C/C++ object" in str(exc):
+                return
+            raise
+
+    def _shutdown_pending(self, scan_items):
+        pending = []
         if self.logic.isRunning():
-            self.logic.requestInterruption()
-            self.logic.quit()
-            self.logic.wait()
+            pending.append("queue thread")
+        if (
+            getattr(self, "_queue_run_started", False)
+            and not getattr(self, "_queue_completion_delivered", True)
+        ):
+            pending.append("queue UI completion")
+
+        for item in scan_items:
+            try:
+                scan = item.scan
+                name = str(getattr(item, "name", None) or item.text() or "unnamed")
+                if scan.logic.isRunning():
+                    pending.append(f"scan thread '{name}'")
+                outputs_finalized = getattr(scan, "outputs_finalized", None)
+                if outputs_finalized is None:
+                    outputs_finalized = (
+                        getattr(scan, "_outputs_finalized", True)
+                        and not getattr(scan, "_finalize_outputs_scheduled", False)
+                    )
+                if not outputs_finalized:
+                    pending.append(f"output finalizer '{name}'")
+            except RuntimeError as exc:
+                if "wrapped C/C++ object" not in str(exc):
+                    raise
+        return pending
+
+    def _close_scan_widgets(self, scan_items):
+        for item in scan_items:
+            try:
+                item.scan.close()
+            except RuntimeError:
+                pass
 
     # ---------- public API ----------
-    def shutdown(self):
+    def shutdown(self, timeout_ms=30_000):
         """
-        Call this *from your code* when you really want to
-        tear everything down and then close the main widget.
+        Stop queue/scan work, finish pending outputs, then close scan widgets.
+
+        This method must be called from the GUI thread. The timeout is a
+        cooperative deadline: Qt callbacks already executing on the GUI thread
+        cannot be preempted, but an over-budget callback causes a typed timeout
+        before any widget closes or application-level device teardown begins.
+        A timeout or stop-request failure leaves the session sealed against new
+        scan/manual work until shutdown is retried. This method never terminates
+        devices itself.
         """
-        self._cleanup()
-        super().close()            # now close normally
+        if self.thread() != QtCore.QThread.currentThread():
+            raise ScanListShutdownThreadError(
+                "ScanList.shutdown() must run in the scan list's Qt owner thread."
+            )
+        if self._shutdown_complete:
+            return
+        if self._shutdown_in_progress:
+            raise ScanListShutdownInProgressError(
+                "ScanList.shutdown() is already waiting for quiescence."
+            )
+
+        timeout_ms = max(0, int(timeout_ms))
+        # A failed attempt remains sealed: resuming only part of the old/new
+        # queue after a timeout would permit device writes in an uncertain state.
+        self._shutdown_sealed = True
+        self._shutdown_in_progress = True
+        scan_items = []
+        seen_items = set()
+        stop_requested_while_running = set()
+        stop_request_failures = {}
+        stable_quiescent_passes = 0
+        timer = QtCore.QElapsedTimer()
+        timer.start()
+
+        try:
+            if self.logic.isRunning():
+                self._queue_run_started = True
+                self._queue_completion_delivered = False
+
+            while True:
+                # Reassert after every nested event-loop pass in case queue
+                # startup had already been posted before shutdown began.
+                if not getattr(self.logic, "stop_now_requested", False):
+                    self.logic.request_stop_now()
+
+                # Queue signals can move an item between lists while events are
+                # pumped, so merge fresh snapshots into one deduplicated set.
+                for item in self._scan_items_snapshot():
+                    if id(item) not in seen_items:
+                        seen_items.add(id(item))
+                        scan_items.append(item)
+
+                currently_running = set()
+                for item in scan_items:
+                    try:
+                        self._seal_scan_item_for_shutdown(item)
+                        if item.scan.logic.isRunning():
+                            item_id = id(item)
+                            currently_running.add(item_id)
+                            if item_id not in stop_requested_while_running:
+                                try:
+                                    self._request_scan_stop_for_shutdown(item)
+                                except Exception as exc:
+                                    name = str(
+                                        getattr(item, "name", None)
+                                        or item.text()
+                                        or "unnamed"
+                                    )
+                                    stop_request_failures.setdefault(
+                                        item_id, (name, exc)
+                                    )
+                                stop_requested_while_running.add(item_id)
+                    except RuntimeError as exc:
+                        if "wrapped C/C++ object" not in str(exc):
+                            raise
+                stop_requested_while_running.intersection_update(currently_running)
+
+                app = QtCore.QCoreApplication.instance()
+                if app is not None:
+                    app.processEvents(
+                        QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                    )
+
+                new_items_after_events = False
+                for item in self._scan_items_snapshot():
+                    if id(item) in seen_items:
+                        continue
+                    seen_items.add(id(item))
+                    scan_items.append(item)
+                    self._seal_scan_item_for_shutdown(item)
+                    new_items_after_events = True
+
+                if self.logic.isRunning():
+                    self._queue_run_started = True
+                    self._queue_completion_delivered = False
+
+                pending = self._shutdown_pending(scan_items)
+                elapsed_ms = timer.elapsed()
+                deadline_exceeded = elapsed_ms > timeout_ms or (
+                    (pending or new_items_after_events) and elapsed_ms >= timeout_ms
+                )
+                if deadline_exceeded:
+                    if not pending:
+                        if new_items_after_events:
+                            pending = ["scan-list mutation during shutdown"]
+                        else:
+                            pending = ["GUI callback exceeded shutdown deadline"]
+                    raise ScanListShutdownTimeoutError(timeout_ms, pending)
+
+                if pending or new_items_after_events:
+                    stable_quiescent_passes = 0
+                else:
+                    stable_quiescent_passes += 1
+                    # A second empty pump drains work posted by the first pass,
+                    # including deferred finalizers and queue UI signals.
+                    if stable_quiescent_passes >= 2:
+                        break
+
+                # Let worker threads advance without monopolizing the GUI CPU;
+                # the next iteration immediately pumps Qt events again.
+                QtCore.QThread.msleep(5)
+
+            if stop_request_failures:
+                raise ScanListShutdownStopError(stop_request_failures.values())
+
+            self._close_scan_widgets(scan_items)
+            super().close()
+            self._shutdown_complete = True
+        finally:
+            self._shutdown_in_progress = False
 
 
 if __name__ == "__main__":

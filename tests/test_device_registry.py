@@ -346,6 +346,10 @@ class DefaultMockRegistryTests(unittest.TestCase):
         self.assertEqual(adapter.device_id, "mock_device_1")
         self.assertFalse(adapter.connected())
         self.assertFalse(adapter.busy())
+        with self.assertRaisesRegex(RuntimeError, "not connected"):
+            adapter.stop_scan()
+        with self.assertRaisesRegex(RuntimeError, "not connected"):
+            adapter.start_scan()
 
         self.assertEqual(adapter.connect(), "MOCK::INSTR")
         self.assertTrue(adapter.connected())

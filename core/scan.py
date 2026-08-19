@@ -37,6 +37,7 @@ class Scan(QtWidgets.QWidget):
         self.getter_equipment_info = getter_equipment_info
 
         self._start_new_scan_after_stop = False
+        self._shutdown_requested = False
 
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
@@ -99,6 +100,7 @@ class Scan(QtWidgets.QWidget):
         self._run_error_message = None
         self._stop_intent_logged = False
         self._finalize_outputs_scheduled = False
+        self._outputs_finalized = True
         self.logStatus_textEdit.setReadOnly(True)
         self.logStatus_textEdit.document().setMaximumBlockCount(self.MAX_UI_LOG_LINES)
         self._replace_current_scan_log(self.info.get("scan_log", []))
@@ -120,6 +122,11 @@ class Scan(QtWidgets.QWidget):
         if isinstance(plots_info, dict):
             self.all_plot_setting.update_ui(plots_info)
         self.logic.sig_scan_finished.connect(self.scan_finished)
+
+    @property
+    def outputs_finalized(self) -> bool:
+        """Return whether GUI-thread output work for the last run is complete."""
+        return bool(self._outputs_finalized and not self._finalize_outputs_scheduled)
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
         base = self._next_unique_data_name()
@@ -238,6 +245,7 @@ class Scan(QtWidgets.QWidget):
         Defer heavyweight save/export work by one event-loop turn so the
         last plot repaint can be processed before GUI-thread save operations.
         """
+        restart_after_finalize = False
         try:
             self.when_save_plots_clicked()
             self.when_save_clicked()
@@ -247,9 +255,13 @@ class Scan(QtWidgets.QWidget):
             # If user clicked "Scan" while paused, we queued a fresh scan start
             if getattr(self, "_start_new_scan_after_stop", False):
                 self._start_new_scan_after_stop = False
-                self._start_scan_now()
+                restart_after_finalize = True
         finally:
             self._finalize_outputs_scheduled = False
+            self._outputs_finalized = True
+
+        if restart_after_finalize:
+            self._start_scan_now()
 
     def handle_scan_error(self, error_message: str):
         self._run_error_message = error_message
@@ -462,6 +474,10 @@ class Scan(QtWidgets.QWidget):
 
     def _start_scan_now(self):
         """Start a fresh scan using current self.info settings."""
+        if self._shutdown_requested:
+            self._start_new_scan_after_stop = False
+            return
+
         if hasattr(self, "unique_data_name"):
             del self.unique_data_name
 
@@ -479,11 +495,22 @@ class Scan(QtWidgets.QWidget):
         self._log_info(self._build_start_summary())
 
         self.update_all_plots()
-        self.logic.start()
+        self._outputs_finalized = False
+        try:
+            self.logic.start()
+        except Exception:
+            self._outputs_finalized = True
+            raise
 
     def _request_logic_stop(self):
         """Request a clean stop from ScanLogic, including paused state."""
-        self.main_window.force_stop_equipments()
+        force_stop_error = None
+        try:
+            self.main_window.force_stop_equipments()
+        except Exception as exc:
+            # Always tell ScanLogic to stop even when a device's best-effort
+            # force-stop callback reports a failure.
+            force_stop_error = exc
 
         if hasattr(self.logic, "request_stop"):
             self.logic.request_stop()
@@ -493,6 +520,8 @@ class Scan(QtWidgets.QWidget):
                 self.logic.received_pause = False
 
         self.logic.stop_scan = True
+        if force_stop_error is not None:
+            raise force_stop_error
 
     def when_stop_clicked(self):
         self._start_new_scan_after_stop = False
@@ -508,6 +537,10 @@ class Scan(QtWidgets.QWidget):
         self._request_logic_stop()
 
     def when_scan_clicked(self):
+        if self._shutdown_requested:
+            self._start_new_scan_after_stop = False
+            return
+
         # If a scan is already running (paused or not), stop it first.
         # scan_finished() will save current data, then we start a fresh scan.
         if self.logic.isRunning():
@@ -553,6 +586,10 @@ class Scan(QtWidgets.QWidget):
             # but without that infrastructure, this fallback only works if your loop polls the flag.
 
     def start_scan(self):
+        if self._shutdown_requested:
+            self._start_new_scan_after_stop = False
+            return
+
         if hasattr(self, "unique_data_name"):
             del self.unique_data_name
         self.logic.reset_flags()
@@ -560,7 +597,12 @@ class Scan(QtWidgets.QWidget):
         self.logic.initilize_data(self.info)
         self.main_window.stop_equipments_for_scanning()
         self._stop_all_equipment_monitors()
-        self.logic.start()
+        self._outputs_finalized = False
+        try:
+            self.logic.start()
+        except Exception:
+            self._outputs_finalized = True
+            raise
         while self.logic.isRunning():
             time.sleep(0.1)
     

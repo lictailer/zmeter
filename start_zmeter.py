@@ -1,10 +1,21 @@
 import os
 import sys
+from pathlib import Path
 
 from PyQt6 import QtWidgets
 
 from core.scan_info import ScanInfo
 from core.mainWindow import MainWindow
+from core.scanlist import ScanListShutdownStopError, ScanListShutdownTimeoutError
+from core.device_management import (
+    ChannelFilters,
+    DeviceConfig,
+    DeviceManager,
+    DeviceStartupError,
+    ProfileConfig,
+    ProfilePaths,
+    build_default_registry,
+)
 from core.shared_runtime import RuntimeServices
 
 # ------------------------------------------------------------
@@ -39,6 +50,42 @@ from mockDevice.mock_device_main import MockDevice
 save_path = os.path.join(os.getcwd(), "data")
 # backup_main_path = r"Z:\\Xuguo\\SHG Desktop Backup"
 backup_main_path = None
+
+
+def _static_mock_profile() -> ProfileConfig:
+    """Return the Phase 3 in-memory startup configuration.
+
+    Phase 4 replaces this temporary static source with the checked-in profile
+    loader. Keeping the boundary explicit makes the launcher switch separately
+    reviewable while DeviceManager already owns the active instances.
+    """
+    repository_root = Path(__file__).resolve().parent
+    devices = tuple(
+        DeviceConfig(
+            id=device_id,
+            driver="mock_device",
+            enabled=True,
+            connect_on_start=False,
+            connection={"address": "MOCK::INSTR"},
+            scan_channels=ChannelFilters(setters=None, getters=None),
+        )
+        for device_id in ("mock_device_1", "mock_device_2")
+    )
+    return ProfileConfig(
+        schema_version=1,
+        profile="static_mock",
+        paths=ProfilePaths(save=Path(save_path), backup=None),
+        devices=devices,
+        source_path=Path(__file__).resolve(),
+        repository_root=repository_root,
+    )
+
+
+def create_device_manager(runtime_services: RuntimeServices) -> DeviceManager:
+    """Construct the current static mock set behind manager ownership."""
+    manager = DeviceManager(build_default_registry(), runtime_services)
+    manager.load_profile(_static_mock_profile())
+    return manager
 
 
 def create_equipment(runtime_services: RuntimeServices):
@@ -117,30 +164,88 @@ def main():
     # ------------------------------------------------------------
     app = QtWidgets.QApplication(sys.argv)
     runtime_services = RuntimeServices()
-
-    # Hardware setup (widgets can be created safely now)
-    equips, equips_set_channels, equips_get_channels = create_equipment(
-        runtime_services
-    )
-
-    window = MainWindow(
-        info=ScanInfo,
-        save_path=save_path,
-        backup_main_path=backup_main_path,
-        equips=equips,
-        equips_set_channels=equips_set_channels,
-        equips_get_channels=equips_get_channels,
-    )
-    window.show()
-    window.setWindowTitle("Main Window")
+    device_manager = None
+    window = None
+    startup_error = None
+    pending_shutdown_error = None
+    safe_to_release_runtimes = True
     try:
+        # Phase 3 keeps the device list static while transferring ownership to
+        # DeviceManager. The checked-in JSON profile becomes active in Phase 4.
+        try:
+            device_manager = create_device_manager(runtime_services)
+        except DeviceStartupError as exc:
+            startup_error = exc
+            raise
+        window = MainWindow(
+            info=ScanInfo,
+            save_path=save_path,
+            backup_main_path=backup_main_path,
+            device_manager=device_manager,
+        )
+        window.show()
+        window.setWindowTitle("Main Window")
         return app.exec()
     finally:
-        diagnostics = runtime_services.shutdown()
-        for family in ("visa", "kinesis"):
-            error = diagnostics.get(f"{family}_error")
-            if error:
-                print(f"Shared {family} shutdown warning: {error}")
+        primary_exception_active = sys.exc_info()[0] is not None
+        if window is not None:
+            try:
+                window.shutdown_session()
+            except (ScanListShutdownTimeoutError, ScanListShutdownStopError) as first_exc:
+                print(
+                    "Application shutdown warning: initial scan quiescence "
+                    f"failed ({type(first_exc).__name__}: {first_exc}); "
+                    "requesting one final force-stop and retry."
+                )
+                try:
+                    if device_manager is not None:
+                        force_report = device_manager.force_stop_all()
+                        for failure in force_report.failures:
+                            print(
+                                "Device force-stop warning: "
+                                f"{failure.describe()}"
+                            )
+                    window.shutdown_session(timeout_ms=30_000)
+                except (
+                    ScanListShutdownTimeoutError,
+                    ScanListShutdownStopError,
+                ) as retry_exc:
+                    safe_to_release_runtimes = False
+                    pending_shutdown_error = retry_exc
+                    print(
+                        "Application shutdown warning: scan activity was not "
+                        "safely quiesced after retry "
+                        f"({type(retry_exc).__name__}: {retry_exc}). "
+                        "Device and shared-runtime teardown were skipped."
+                    )
+
+        if (
+            startup_error is not None
+            and startup_error.cleanup_report.failures
+        ):
+            safe_to_release_runtimes = False
+            for failure in startup_error.cleanup_report.failures:
+                print(f"Startup rollback warning: {failure.describe()}")
+
+        if device_manager is not None and safe_to_release_runtimes:
+            report = device_manager.teardown_all()
+            for failure in report.failures:
+                print(f"Device shutdown warning: {failure.describe()}")
+            if report.failures:
+                safe_to_release_runtimes = False
+
+        if safe_to_release_runtimes:
+            diagnostics = runtime_services.shutdown()
+            for family in ("visa", "kinesis"):
+                error = diagnostics.get(f"{family}_error")
+                if error:
+                    print(f"Shared {family} shutdown warning: {error}")
+
+        # A normal event-loop return must not report success when its final
+        # quiescence barrier failed. If another exception is already unwinding,
+        # preserve that primary failure instead of masking it here.
+        if pending_shutdown_error is not None and not primary_exception_active:
+            raise pending_shutdown_error
 
 
 if __name__ == "__main__":

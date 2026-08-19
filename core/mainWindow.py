@@ -9,6 +9,7 @@ from copy import deepcopy
 import numpy as np
 from PyQt6 import QtWidgets, uic, QtCore, QtGui
 
+from .device_management import DeviceLifecycleError
 
 # from sr830.sr830_main import SR830
 # from sr860.sr860_main import SR860
@@ -18,7 +19,11 @@ from PyQt6 import QtWidgets, uic, QtCore, QtGui
 # from tlpm.tlpm_main import TLPM
 
 from .scan_info import *
-from .scanlist import ScanList
+from .scanlist import (
+    ScanList,
+    ScanListShutdownStopError,
+    ScanListShutdownTimeoutError,
+)
 from .artificial_channel_logic import ArtificialChannelLogic
 from .artificial_channel_2d_main import ArtificialChannel2D
 from .device_command_router import DeviceCommandRouter
@@ -38,6 +43,7 @@ class MainWindow(QtWidgets.QWidget):
         equips=None,
         equips_set_channels=None,
         equips_get_channels=None,
+        device_manager=None,
     ):
         super().__init__()
         print("Loading the Main Window")
@@ -74,15 +80,37 @@ class MainWindow(QtWidgets.QWidget):
             )
             self.backup_Path.setPlainText(default_backup_path)
 
-        # Equipment instances (already connected) provided by caller.
-        # Fall back to an empty dict for headless usage/testing.
-        self.equips = equips if equips is not None else {}
-        self.equips_set_channels = (
-            equips_set_channels if equips_set_channels is not None else {}
-        )
-        self.equips_get_channels = (
-            equips_get_channels if equips_get_channels is not None else {}
-        )
+        # Equipment instances may come from the static DeviceManager snapshot
+        # or from the legacy constructor dictionaries used by standalone tests
+        # and scripts. Manager ownership is intentionally static in this phase.
+        self.device_manager = device_manager
+        if device_manager is not None:
+            if any(
+                value is not None
+                for value in (
+                    equips,
+                    equips_set_channels,
+                    equips_get_channels,
+                )
+            ):
+                raise ValueError(
+                    "device_manager cannot be combined with legacy equipment arguments"
+                )
+            device_snapshot = device_manager.snapshot()
+            self.equips = dict(device_snapshot.equipment)
+            self.equips_set_channels = dict(device_snapshot.setter_filters)
+            self.equips_get_channels = dict(device_snapshot.getter_filters)
+        else:
+            self.equips = equips if equips is not None else {}
+            self.equips_set_channels = (
+                equips_set_channels if equips_set_channels is not None else {}
+            )
+            self.equips_get_channels = (
+                equips_get_channels if equips_get_channels is not None else {}
+            )
+        self._session_shutdown_in_progress = False
+        self._session_shutdown_complete = False
+        self._session_shutdown_report = None
         # ------------------------------------------------------------
 
         # {equipment name (e.g. lockin_0) : {variable name : set method},....}
@@ -719,22 +747,90 @@ class MainWindow(QtWidgets.QWidget):
         self.scanlist.serial.setValue(max_found + 1 if max_found >= 0 else 0)
 
     def stop_equipments_for_scanning(self):
-        # need fix
+        device_manager = getattr(self, "device_manager", None)
+        if device_manager is not None:
+            report = device_manager.stop_for_scan()
+            self._raise_lifecycle_failures(report)
+            return report
         for name, equipment in self.equips.items():
             if hasattr(equipment, "stop_scan"):
                 equipment.stop_scan()
 
     def start_equipments(self):
         self._force_stop_requested = False
+        device_manager = getattr(self, "device_manager", None)
+        if device_manager is not None:
+            report = device_manager.start_after_scan()
+            self._raise_lifecycle_failures(report)
+            return report
         for name, equipment in self.equips.items():
             if hasattr(equipment, "start_scan"):
                 equipment.start_scan()
 
     def force_stop_equipments(self):
         self._force_stop_requested = True
+        device_manager = getattr(self, "device_manager", None)
+        if device_manager is not None:
+            report = device_manager.force_stop_all()
+            self._raise_lifecycle_failures(report)
+            return report
         for name, equipment in self.equips.items():
             if hasattr(equipment, "force_stop"):
                 equipment.force_stop()
+
+    def _report_lifecycle_failures(self, report):
+        if report is None:
+            return
+        for failure in getattr(report, "failures", ()):
+            print(f"Device lifecycle warning: {failure.describe()}")
+
+    def _raise_lifecycle_failures(self, report):
+        self._report_lifecycle_failures(report)
+        if getattr(report, "failures", ()):
+            raise DeviceLifecycleError(report)
+
+    def shutdown_session(self, *, timeout_ms=10000):
+        """Quiesce scans and tear down all devices exactly once.
+
+        This method intentionally does not ask for confirmation so the launcher
+        can reuse it on abnormal event-loop exits. A timeout leaves devices and
+        shared runtimes untouched because safe quiescence was not proven.
+        """
+        if self._session_shutdown_complete:
+            return self._session_shutdown_report
+        if self._session_shutdown_in_progress:
+            raise RuntimeError("application shutdown is already in progress")
+
+        self._session_shutdown_in_progress = True
+        try:
+            self.scanlist.shutdown(timeout_ms=timeout_ms)
+
+            if hasattr(self, "artificial_channel_2d"):
+                self.artificial_channel_2d.close()
+            if hasattr(self, "scan_range_window"):
+                self.scan_range_window.close()
+
+            if self.device_manager is not None:
+                report = self.device_manager.teardown_all()
+                self._report_lifecycle_failures(report)
+                self._session_shutdown_report = report
+                if report.failures:
+                    raise DeviceLifecycleError(report)
+            else:
+                self.force_stop_equipments()
+                self.stop_equipments_for_scanning()
+                for equipment_name, equipment in self.equips.items():
+                    print("Terminating", equipment_name)
+                    equipment.terminate_dev()
+                    equipment.close()
+                report = None
+
+            self._session_shutdown_report = report
+            self._session_shutdown_complete = True
+            print("Main Window terminated.")
+            return report
+        finally:
+            self._session_shutdown_in_progress = False
 
 
     def closeEvent(self, event: QtGui.QCloseEvent):          # <- keep the type
@@ -748,19 +844,21 @@ class MainWindow(QtWidgets.QWidget):
         )
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-            # proceed with the regular shutdown
-            if hasattr(self, "artificial_channel_2d"):
-                self.artificial_channel_2d.close()
-            if hasattr(self, "scan_range_window"):
-                self.scan_range_window.close()
-            self.scanlist.shutdown()
-            self.force_stop_equipments()
-            self.stop_equipments_for_scanning()
-            for equipment_name, equipment in self.equips.items():
-                print("Terminating", equipment_name)
-                equipment.terminate_dev()
-                equipment.close()
-            print("Main Window terminated.")
+            try:
+                self.shutdown_session()
+            except (
+                DeviceLifecycleError,
+                ScanListShutdownTimeoutError,
+                ScanListShutdownStopError,
+            ) as exc:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    "Shutdown Delayed",
+                    "Equipment was not disconnected because safe scan "
+                    f"shutdown did not complete: {exc}",
+                )
+                event.ignore()
+                return
             event.accept()                                   # actually close
         else:
             event.ignore()                                   # stay open
