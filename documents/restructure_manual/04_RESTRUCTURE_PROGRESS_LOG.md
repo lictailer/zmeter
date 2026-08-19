@@ -485,3 +485,64 @@ Copy and complete:
 - Remaining risks: only `mock_device` has a reviewed active registry entry; source presence does not imply profile support. Runtime catalog rebuilding and mutation remain disabled. The known cooperative GUI-finalizer shutdown deadline from Phase 3 remains unchanged.
 - Next authorized phase: Phase 5 — make every catalog consumer rebuild from one authoritative manager snapshot and define safe reference reconciliation.
 - User input required: None.
+
+## 2026-08-18 — Phase 5: rebuildable transactional device catalogs
+
+### Intended outcome
+
+- Acceptance criteria: one immutable catalog snapshot is rebuilt from a manager snapshot; callable/display/router/UI consumers refresh together; repeated refresh does not duplicate controls or signals; synthetic add/remove and rollback are deterministic; a stored reference to a removed label or channel refuses the change without rewriting a scan definition.
+- Explicit non-goals: manager-owned runtime add/disconnect/remove, persistence of session mutations, registration or activation of a real driver, mechanical package moves, array-valued getters, or physical-device validation.
+- Base commit: `bd9aac9`.
+- Related maintenance commits integrated: None.
+
+### Changes
+
+- Files added: `core/device_catalog.py`, `tests/test_mainwindow_catalog_refresh.py`, `tests/test_scan_catalog_consumers.py`.
+- Files modified: `core/mainWindow.py`, `core/scanlist.py`, `core/scan.py`, `core/all_level.py`, `core/nested_menu.py`, `core/artificial_channel_2d_main.py`, `core/artificial_channel_logic.py`, `core/device_command_router.py`, `autofocus_xuguo/autofocusXZ_main.py`, `autofocus_xuguo/autofocusXZ_logic.py`, `autofocus_xuguo/autofocusXZ_hardware.py`, `documents/architecture.md`, `documents/device_contract.md`, `documents/testing.md`, `project_structure.md`.
+- Files moved: None.
+- Files removed: None.
+- API/config impact: `MainWindow.apply_device_snapshot()` now builds and publishes an immutable `DeviceCatalogSnapshot`; `ScanList.refresh_catalog()`, reference inventory, and idle-blocker APIs cover the available, queue, past, manual, active, detached-worker, and New Scan template surfaces. Device-specific stored cross-device choices may participate through the reviewed reference-provider hook. Configuration/profile schemas are unchanged.
+- Existing behavior impact: startup still presents the two disconnected mocks in profile order. Device button show/restore/focus behavior, exact underscore-label routing, artificial-channel operation, range enforcement, scan definitions, and silent skipping of unknown configured channel names are preserved. Deferred automatic VISA discovery is unchanged.
+- Scan/data/schema impact: scan execution and scalar storage/persistence formats are unchanged. Catalog refresh updates menu choices without emitting definition changes, clearing averaged getters, defaulting plots, or rewriting unresolved selections.
+- Hardware/lifecycle impact: none. Phase 5 applies synthetic snapshots only; runtime manager mutation remains disabled. Reversible router attach/detach and closed-client behavior were added so a future failed add/remove cannot retain hidden signal subscribers.
+- Documentation updated: architecture, device/router contract, hardware-independent catalog testing, and maintained module inventory.
+
+### Reference and removal policy
+
+- A catalog change is refused when its old-minus-new full setter/getter channels or exact removed labels intersect any open/template/queued/past/active/detached scan reference, manual-set item, artificial active/draft selection, or registered device-owned reference provider.
+- Unknown stored channel names continue to be silently absent from exported allowlisted channels, but they still count as an exact device-label reference for removal safety.
+- Artificial-channel rename is treated as channel removal. Preflight occurs before mutation, and target/state signals are emitted only after the logic and catalog transaction commits.
+- Stable device IDs cannot be rekeyed by reusing the same instance under a new label. Removal and later construction of a new generation belongs to Phase 6.
+
+### Validation
+
+| Exact command/check | Environment | Evidence level | Result | Duration/output |
+| --- | --- | --- | --- | --- |
+| `python -X pycache_prefix=C:\Users\Taylo\Documents\ChatGPT\zmeter\.restructure_phase5_pycache -B -m py_compile <all changed Python files>` | `zmeter_May2026` Python 3.12.12 | Static | Passed; redirected bytecode directory verified and removed | Exit 0 |
+| `python -B -m unittest tests.test_mainwindow_catalog_refresh tests.test_scan_catalog_consumers -v` | `zmeter_May2026`, offscreen | Hardware-independent unit/mock/offscreen GUI | Final focused catalog/consumer matrix passed 24 tests | 11.096 s |
+| Broader relevant config/registry/manager/startup/catalog/VISA suite | `zmeter_May2026`, offscreen/fake runtimes | Hardware-independent integration | 60 tests passed | 16.823 s |
+| `python -B -m unittest discover -s tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen where requested by tests | Hardware-independent unit/mock/offscreen GUI | Complete core suite passed 157 tests | 21.369 s |
+| `python -B -m unittest discover -s mockDevice/tests -p 'test_*.py' -v` | `zmeter_May2026`, offscreen | Mock/simulation/offscreen GUI | 18 tests passed | 0.293 s |
+| Independent Phase 5 adversarial audit | Read-only code review plus focused offscreen tests | Catalog/router/UI safety review | Clean after failed-removal, router-after-removal, rollback aggregation, reentrancy, queue-completion, and stale-action coverage | Passed |
+| `git diff --check`, changed-file/status review, generated-artifact cleanup, and secret/address scan | Repository root | Static/security inspection | Passed; only expected LF/CRLF conversion warnings; no new address, credential, profile, cache, or data artifact | None |
+
+- Validation incidents: an intermediate test expected a channel-named property to be evaluated during discovery. Discovery was deliberately hardened to inspect only static callable descriptors, and the test was corrected to separately prove both property non-evaluation and genuine staging failure rollback. The final focused, broader, and complete suites passed.
+- Tests not run and reason: no interactive GUI workflow, physical-device test, real VISA enumeration, vendor SDK/DLL load, network instrument action, or PowerPoint/COM hardware workflow was run. None is authorized or required for the mock-only Phase 5 gate.
+- User-executed hardware test status: Pending for any future real-driver enablement; not applicable to the checked-in mock profile.
+
+### Inspection
+
+- `git diff --check`: Passed before commit, with line-ending notices only.
+- `git status --short --branch`: clean after the Phase 5 source/documentation commit; this progress entry is the only subsequent change.
+- Unexpected/unrelated changes: None.
+- Generated artifacts removed: the explicitly resolved external `.restructure_phase5_pycache` directory was removed after validation.
+- Security/configuration review: no profile, address, serial, credential, private endpoint, DLL, measurement output, persistence schema, or array-getter work entered the phase.
+
+### Decision
+
+- Gate passed: Yes.
+- Commit(s): `e663318` (`Make device catalogs rebuildable`); this evidence entry follows in a documentation commit.
+- Rollback method: revert the Phase 5 source/documentation commit and its evidence commit; recovery tag remains `pre-structure-v2`.
+- Remaining risks: manager-owned session mutation and generation-aware/in-flight call gating are not yet enabled. `MainWindow.apply_device_snapshot()` is a tested UI-thread transaction, but Phase 6 must split side-effect-free proposal/preflight from post-lifecycle commit, reject stale generations, and keep profile persistence separate. A real driver with additional stored references or router clients remains ineligible for runtime mutation until its provider/detach contract is reviewed.
+- Next authorized phase: Phase 6 — add mock-only idle-guarded runtime add/disconnect/remove and manager call gating, then integrate the transactional catalog acknowledgement.
+- User input required: None.
