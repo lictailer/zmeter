@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from PyQt6 import QtWidgets, uic
 import serial.tools.list_ports
 import scipy.io as sio
-from nidaq.nidaq_hardware import NIDAQHardWare
-from auto_focus.autofocus_logic import ANC_and_DAQ_xyz, stepper_and_galvo_xyz, autofocus_logic
+from devices.nidaq.nidaq_hardware import NIDAQHardWare
+from devices.auto_focus.autofocus_logic import ANC_and_DAQ_xyz, stepper_and_galvo_xyz, autofocus_logic
 from PyQt6 import QtWidgets, uic, QtTest
 
 class autofocus_main(QtWidgets.QWidget):

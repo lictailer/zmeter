@@ -5,7 +5,7 @@ from scipy.io import loadmat, savemat
 from scipy.ndimage import shift as ndi_shift
 from skimage.registration import phase_cross_correlation
 import matplotlib.pyplot as plt
-from nidaq_hardware import NIDAQHardWare
+from devices.nidaq.nidaq_hardware import NIDAQHardWare
 
 # ─── USER PARAMETERS ───────────────────────────────────────────────────────────
 GALVO_X    = '/Dev1/AO0'    # DAQ analog‑out channel for X

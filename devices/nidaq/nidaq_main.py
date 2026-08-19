@@ -1,5 +1,6 @@
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
+from pathlib import Path
 import numpy as np
 import pyqtgraph as pg
 
@@ -14,7 +15,7 @@ class NIDAQ(QtWidgets.QWidget):
 
     def __init__(self):
         super(NIDAQ, self).__init__()
-        uic.loadUi(r"nidaq/nidaq.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("nidaq.ui")), self)
         self.logic = NIDAQLogic()
 
         self.connect_sig_slot()

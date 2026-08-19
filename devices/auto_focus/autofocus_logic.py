@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import time
 
@@ -234,7 +234,7 @@ class autofocus_logic:
 
 
 if __name__ == "__main__":
-    from nidaq.nidaq_hardware import NIDAQHardWare  # Ensure this module is available
+    from devices.nidaq.nidaq_hardware import NIDAQHardWare  # Ensure this module is available
 
     # Initialize hardware system
     my_daq = NIDAQHardWare()

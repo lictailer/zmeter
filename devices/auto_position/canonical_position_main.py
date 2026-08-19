@@ -1,12 +1,19 @@
+from pathlib import Path
+
 from PyQt5 import QtWidgets, uic
-import canonical_position_logic as logic
-from nidaq_hardware import NIDAQHardWare
+
+try:
+    from . import canonical_position_logic as logic
+except ImportError:
+    import canonical_position_logic as logic
+
+from devices.nidaq.nidaq_hardware import NIDAQHardWare
 
 class auto_position_app(QtWidgets.QWidget):
     def __init__(self,daq):
         super(auto_position_app, self).__init__()
         # Load the .ui created in Qt Designer
-        uic.loadUi('auto_position_GUI.ui', self)
+        uic.loadUi(str(Path(__file__).with_name("auto_position_GUI.ui")), self)
         self.daq = daq
         self.RESULTS_DIR = None
         # set their text to the defaults in logic.py
