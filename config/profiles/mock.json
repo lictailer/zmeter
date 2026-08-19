@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "profile": "mock",
+  "paths": {
+    "save": "./data",
+    "backup": null
+  },
+  "devices": [
+    {
+      "id": "mock_device_1",
+      "driver": "mock_device",
+      "enabled": true,
+      "connect_on_start": false,
+      "connection": {
+        "address": "MOCK::INSTR"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "mock_device_2",
+      "driver": "mock_device",
+      "enabled": true,
+      "connect_on_start": false,
+      "connection": {
+        "address": "MOCK::INSTR"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    }
+  ]
+}
