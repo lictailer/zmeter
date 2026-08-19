@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from ctypes import cdll, c_long, c_uint32, c_uint16, c_uint8, byref, create_string_buffer, c_bool, c_char, c_char_p, c_int, c_int16, c_int8, c_double, c_float, sizeof, c_voidp, Structure
 
 _VI_ERROR = (-2147483647-1)
@@ -237,11 +237,15 @@ class TLPM_Hardware:
 
     def __init__(self):
         if sizeof(c_voidp) == 4:
-            self.dll = cdll.LoadLibrary("TLPM_32.dll")
+            self.dll = cdll.LoadLibrary(
+                str(Path(__file__).with_name("TLPM_32.dll"))
+            )
         else:
             #     self.dll = cdll.LoadLibrary(r"C:\Users\QM\Desktop\test\Python\TLPM_64.dll")
         #     self.dll = cdll.LoadLibrary(r"C:\Program Files\IVI Foundation\VISA\Win64\Bin\TLPM_64.dll")
-            self.dll = cdll.LoadLibrary(r"tlpm\TLPM_64.dll")
+            self.dll = cdll.LoadLibrary(
+                str(Path(__file__).with_name("TLPM_64.dll"))
+            )
             
 
         self.devSession = c_long()

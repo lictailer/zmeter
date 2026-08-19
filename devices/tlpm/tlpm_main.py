@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
 from .tlpm_logic import TLPMLogic
@@ -8,7 +10,7 @@ import pyqtgraph as pg
 class TLPM(QtWidgets.QWidget):
     def __init__(self):
         super(TLPM, self).__init__()
-        uic.loadUi("tlpm/tlpm.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("tlpm.ui")), self)
         self.logic = TLPMLogic()
         self.connect_sig_slot()
         self.power_log = np.zeros(1000)
