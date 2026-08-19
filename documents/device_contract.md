@@ -52,6 +52,10 @@ not rename, clear, or substitute the stored channel silently.
 - Serialize access to transports that cannot safely accept concurrent UI, monitor, scan, or router operations.
 - A long operation must have a bounded stop path and publish the actual completed state, especially after a partial ramp.
 - Exceptions must preserve context and reach the UI/scan controller; do not silently convert an uncertain hardware state into success.
+- A registration marked `runtime_mutation_allowed=True` must provide a fast,
+  side-effect-free, reviewed `is_busy(instance)` probe covering every
+  device-owned worker, ramp, discovery, monitor, and other operation that would
+  make disconnect/removal unsafe. A missing or failed probe must fail closed.
 
 ## Device logs
 
@@ -80,7 +84,23 @@ An active device widget should provide the following where applicable:
 | `terminate_dev()` | Final teardown: stop workers, release resources, and disconnect |
 | `close()` | Widget close may hide the window; application shutdown must still call final teardown |
 
-`MainWindow` calls `stop_scan()` before a scan, `start_scan()` after scan cleanup, `force_stop()` on scan stop/shutdown, and `terminate_dev()` followed by `close()` on confirmed application exit. Methods should be safe when disconnected, partially initialized, already stopped, or called more than once.
+`MainWindow` delegates these actions through `DeviceManager`. Scan preparation
+and cleanup retain their existing calling threads. Runtime connect, disconnect,
+force-stop, stop-scan, and termination callbacks run on manager lifecycle
+workers and must not mutate a `QWidget` directly; publish UI changes through
+signals. Final widget `close()` and `deleteLater()` remain on the manager's Qt
+UI-owner thread. Methods should be safe when disconnected, partially
+initialized, already stopped, or called more than once. The manager preserves
+one-attempt termination/close errors and will not release shared runtimes after
+uncertain cleanup.
+
+Runtime mutation eligibility is a separate code-review decision from startup
+registration. Before enabling it, the adapter must define coherent
+add/connect/disconnect/remove behavior, the busy probe above, bounded stop and
+termination behavior, reversible router attachment, and complete stored catalog
+reference reporting. The checked-in registry currently enables runtime mutation
+only for the mock driver; real drivers require separate user-executed bench
+review after these contracts are satisfied.
 
 ## Cross-device commands
 
@@ -122,12 +142,15 @@ Router availability does not bypass device validation. A target write still trav
 2. Verify getter/setter signatures and units; ensure helpers are not accidentally discovered.
 3. Define connect/disconnect, scan start/stop, force stop, termination, and partial-failure behavior.
 4. Make optional imports safe when the device is not enabled.
-5. Register a stable label and constructor in a lab startup/profile; add exact address/configuration locally.
+5. Register a stable driver ID and constructor, then select stable instance labels and exact connection configuration in a local startup profile.
 6. Add channel filters only when that profile needs a subset.
 7. Review `scan_range_limits.json` and device-local limits for matching labels, channels, units, and precedence.
 8. Use the router for any cross-device operation.
-9. Validate with mocks/unit/offscreen GUI before proposing a user-executed bench procedure.
-10. Update environment, safety, structure, and device documentation where affected.
+9. Leave runtime mutation disabled unless the busy, lifecycle-worker,
+   reference-provider, and router-detach contracts above have been reviewed and
+   tested explicitly.
+10. Validate with mocks/unit/offscreen GUI before proposing a user-executed bench procedure.
+11. Update environment, safety, structure, and device documentation where affected.
 
 ## Minimum validation
 

@@ -74,6 +74,7 @@ class DriverRegistration:
     close_widget: LifecycleAction | None = None
     is_busy: StateProbe | None = None
     is_connected: StateProbe | None = None
+    runtime_mutation_allowed: bool = False
 
     @property
     def driver_id(self) -> str:
@@ -93,6 +94,11 @@ class DriverRegistration:
                     f"driver '{self.driver_id}' has invalid runtime service "
                     f"'{service_name}'"
                 )
+        if self.runtime_mutation_allowed and self.is_busy is None:
+            raise ValueError(
+                f"runtime-mutable driver '{self.driver_id}' must provide an "
+                "explicit reviewed is_busy probe"
+            )
 
 
 class DriverAdapter:
@@ -397,6 +403,7 @@ def mock_device_registration() -> DriverRegistration:
         terminate=_mock_terminate,
         is_busy=_mock_is_busy,
         is_connected=_mock_is_connected,
+        runtime_mutation_allowed=True,
     )
 
 

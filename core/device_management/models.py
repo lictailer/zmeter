@@ -70,6 +70,31 @@ class ChannelFilters:
     setters: tuple[str, ...] | None
     getters: tuple[str, ...] | None
 
+    def __post_init__(self) -> None:
+        for field_name in ("setters", "getters"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if isinstance(value, (str, bytes)):
+                raise TypeError(
+                    f"channel filter '{field_name}' must be an iterable of names"
+                )
+            try:
+                items = tuple(value)
+            except TypeError as exc:
+                raise TypeError(
+                    f"channel filter '{field_name}' must be an iterable of names"
+                ) from exc
+            normalized = []
+            for item in items:
+                if not isinstance(item, str) or not item.strip():
+                    raise ValueError(
+                        f"channel filter '{field_name}' entries must be "
+                        "non-empty strings"
+                    )
+                normalized.append(item.strip())
+            object.__setattr__(self, field_name, tuple(normalized))
+
 
 @dataclass(frozen=True, slots=True)
 class DeviceConfig:
@@ -81,6 +106,10 @@ class DeviceConfig:
     scan_channels: ChannelFilters
 
     def __post_init__(self) -> None:
+        if not isinstance(self.connection, Mapping):
+            raise TypeError("device connection must be a mapping")
+        if not isinstance(self.scan_channels, ChannelFilters):
+            raise TypeError("device scan_channels must be ChannelFilters")
         object.__setattr__(self, "connection", _immutable_mapping(self.connection))
 
 

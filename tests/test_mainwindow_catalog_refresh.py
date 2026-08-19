@@ -207,6 +207,9 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             getter_filters=getter_filters,
         )
 
+    def _apply_snapshot(self, snapshot):
+        return self.window._apply_device_snapshot_for_testing_or_legacy(snapshot)
+
     def _template_setter(self, channel):
         info = copy.deepcopy(self.window.scanlist.info)
         info["levels"]["level0"]["setters"]["setter0"]["channel"] = channel
@@ -221,7 +224,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             first.setter_callables["mock_device_1"]["extra"] = lambda _value: None
 
-        second = self.window.apply_device_snapshot(self.base_device_snapshot)
+        second = self._apply_snapshot(self.base_device_snapshot)
         self.assertIsNot(first, second)
         self.assertEqual(
             [id(button) for button in self.window.open_equipment_buttons],
@@ -246,7 +249,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         self.window.command_router.sig_catalog_changed.connect(
             lambda catalog: published.append(copy.deepcopy(catalog))
         )
-        result = self.window.apply_device_snapshot(added)
+        result = self._apply_snapshot(added)
 
         self.assertEqual(self.window.setter_equipment_info["lab_device"], ["alpha"])
         self.assertEqual(self.window.getter_equipment_info["lab_device"], ["shared"])
@@ -282,7 +285,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             (1, 1, 1, 1),
         )
 
-        self.window.apply_device_snapshot(self.base_device_snapshot)
+        self._apply_snapshot(self.base_device_snapshot)
         self.assertNotIn("lab_device", self.window.equips)
         self.assertNotIn("lab_device", self.window.get_device_channel_catalog())
         self.assertNotIn(
@@ -299,7 +302,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
     def test_filter_only_removal_and_unknown_device_reference_are_refused(self):
         device = self._track(_CatalogDevice())
         added = self._with_device("lab_device", device)
-        self.window.apply_device_snapshot(added)
+        self._apply_snapshot(added)
         old_snapshot = self.window.catalog_snapshot
 
         self._template_setter("lab_device_alpha")
@@ -310,36 +313,36 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             getters=None,
         )
         with self.assertRaises(DeviceCatalogReferenceError):
-            self.window.apply_device_snapshot(filtered)
+            self._apply_snapshot(filtered)
         self.assertIs(self.window.catalog_snapshot, old_snapshot)
 
         self._template_setter("lab_device_silently_filtered_unknown")
         with self.assertRaises(DeviceCatalogReferenceError) as caught:
-            self.window.apply_device_snapshot(self.base_device_snapshot)
+            self._apply_snapshot(self.base_device_snapshot)
         self.assertIn("lab_device", caught.exception.removed_labels)
         self.assertIs(self.window.catalog_snapshot, old_snapshot)
 
     def test_zero_channel_device_reference_blocks_removal(self):
         device = self._track(_CatalogDevice(_NoChannelLogic()))
         added = self._with_device("zero_device", device)
-        self.window.apply_device_snapshot(added)
+        self._apply_snapshot(added)
         self._template_setter("zero_device_unknown")
 
         with self.assertRaises(DeviceCatalogReferenceError):
-            self.window.apply_device_snapshot(self.base_device_snapshot)
+            self._apply_snapshot(self.base_device_snapshot)
 
     def test_device_owned_reference_provider_blocks_target_removal(self):
         target = self._track(_CatalogDevice())
         provider = self._track(_ReferenceProviderDevice("target_device"))
         equipment = dict(self.base_device_snapshot.equipment)
         equipment.update(target_device=target, provider_device=provider)
-        self.window.apply_device_snapshot(self._snapshot(equipment))
+        self._apply_snapshot(self._snapshot(equipment))
         old_snapshot = self.window.catalog_snapshot
         old_button_ids = [id(button) for button in self.window.open_equipment_buttons]
 
         equipment.pop("target_device")
         with self.assertRaises(DeviceCatalogReferenceError) as caught:
-            self.window.apply_device_snapshot(self._snapshot(equipment))
+            self._apply_snapshot(self._snapshot(equipment))
 
         self.assertIn("provider target: target_device", caught.exception.references)
         self.assertEqual(
@@ -366,10 +369,10 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             return_value=("queue UI completion",),
         ):
             with self.assertRaises(DeviceCatalogBusyError):
-                self.window.apply_device_snapshot(staged)
+                self._apply_snapshot(staged)
 
         with self.assertRaisesRegex(RuntimeError, "injected discovery failure"):
-            self.window.apply_device_snapshot(staged)
+            self._apply_snapshot(staged)
 
         self.assertIs(self.window.catalog_snapshot, old_snapshot)
         self.assertEqual(self.window.get_device_channel_catalog(), old_router)
@@ -387,8 +390,8 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         device = self._track(_CatalogDevice(logic))
         staged = self._with_device("descriptor_device", device)
 
-        first = self.window.apply_device_snapshot(staged)
-        second = self.window.apply_device_snapshot(staged)
+        first = self._apply_snapshot(staged)
+        second = self._apply_snapshot(staged)
 
         self.assertEqual(logic.property_reads, 0)
         self.assertEqual(first.setter_channels["descriptor_device"], ())
@@ -412,7 +415,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
 
         with mock.patch.object(self.window.scanlist, "refresh_catalog", side_effect=fail_once):
             with self.assertRaisesRegex(RuntimeError, "consumer failure"):
-                self.window.apply_device_snapshot(staged)
+                self._apply_snapshot(staged)
 
         self.assertIs(self.window.catalog_snapshot, old_snapshot)
         self.assertEqual(self.window.get_device_channel_catalog(), old_router)
@@ -441,7 +444,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             side_effect=commit_then_fail,
         ):
             with self.assertRaisesRegex(RuntimeError, "post-commit failure"):
-                self.window.apply_device_snapshot(staged)
+                self._apply_snapshot(staged)
 
         self.assertIs(self.window.catalog_snapshot, old_snapshot)
         self.assertEqual(
@@ -474,7 +477,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             side_effect=fail_once,
         ):
             with self.assertRaisesRegex(RuntimeError, "publication failure"):
-                self.window.apply_device_snapshot(staged)
+                self._apply_snapshot(staged)
 
         self.assertEqual(len(calls), 2)
         self.assertIs(self.window.catalog_snapshot, old_snapshot)
@@ -488,7 +491,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
     def test_removal_failure_reattaches_device_and_restores_its_button(self):
         device = self._track(_CatalogDevice())
         added = self._with_device("removal_target", device)
-        self.window.apply_device_snapshot(added)
+        self._apply_snapshot(added)
         old_snapshot = self.window.catalog_snapshot
         old_router = self.window.get_device_channel_catalog()
         button = self.window._equipment_buttons_by_label["removal_target"]
@@ -508,7 +511,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             side_effect=fail_once,
         ):
             with self.assertRaisesRegex(RuntimeError, "removal publication failure"):
-                self.window.apply_device_snapshot(self.base_device_snapshot)
+                self._apply_snapshot(self.base_device_snapshot)
 
         self.assertEqual(len(published), 2)
         self.assertNotIn("removal_target", published[0])
@@ -541,7 +544,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
 
     def test_router_round_trip_uses_added_catalog_then_rejects_removed_device(self):
         device = self._track(_CatalogDevice())
-        self.window.apply_device_snapshot(self._with_device("routed_device", device))
+        self._apply_snapshot(self._with_device("routed_device", device))
 
         write_response = self.window.command_router.route_command(
             {
@@ -570,7 +573,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         self.assertEqual(read_response["value"], 4.25)
         self.assertEqual(device.logic.alpha, 4.25)
 
-        self.window.apply_device_snapshot(self.base_device_snapshot)
+        self._apply_snapshot(self.base_device_snapshot)
         removed_response = self.window.command_router.route_command(
             {
                 "request_id": "read-removed",
@@ -614,7 +617,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
             side_effect=restore_buttons_then_raise,
         ):
             with self.assertRaises(DeviceCatalogRollbackError) as caught:
-                self.window.apply_device_snapshot(staged)
+                self._apply_snapshot(staged)
 
         self.assertIsInstance(caught.exception.apply_error, RuntimeError)
         self.assertEqual(caught.exception.failures[0][0], "restore device buttons")
@@ -737,7 +740,7 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         old_snapshot = self.window.catalog_snapshot
 
         with self.assertRaisesRegex(TypeError, "injected hook failure"):
-            self.window.apply_device_snapshot(staged)
+            self._apply_snapshot(staged)
         self.assertEqual(device.configure_calls, 1)
         self.assertGreaterEqual(device.detach_calls, 1)
         self.assertIs(self.window.catalog_snapshot, old_snapshot)
@@ -747,19 +750,19 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         del rekeyed_equipment["mock_device_1"]
         rekeyed_equipment["renamed_mock"] = existing
         with self.assertRaisesRegex(DeviceCatalogError, "labels are stable"):
-            self.window.apply_device_snapshot(self._snapshot(rekeyed_equipment))
+            self._apply_snapshot(self._snapshot(rekeyed_equipment))
 
     def test_reentrant_catalog_publication_is_refused_without_disturbing_outer_apply(self):
         reentrant_errors = []
 
         def reenter(_catalog):
             try:
-                self.window.apply_device_snapshot(self.base_device_snapshot)
+                self._apply_snapshot(self.base_device_snapshot)
             except Exception as exc:
                 reentrant_errors.append(exc)
 
         self.window.command_router.sig_catalog_changed.connect(reenter)
-        result = self.window.apply_device_snapshot(self.base_device_snapshot)
+        result = self._apply_snapshot(self.base_device_snapshot)
 
         self.assertIs(result, self.window.catalog_snapshot)
         self.assertEqual(len(reentrant_errors), 1)

@@ -117,6 +117,7 @@ class Scan(QtWidgets.QWidget):
         self._stop_intent_logged = False
         self._finalize_outputs_scheduled = False
         self._outputs_finalized = True
+        self._runtime_activity_reservation = None
         self.logStatus_textEdit.setReadOnly(True)
         self.logStatus_textEdit.document().setMaximumBlockCount(self.MAX_UI_LOG_LINES)
         self._replace_current_scan_log(self.info.get("scan_log", []))
@@ -275,6 +276,7 @@ class Scan(QtWidgets.QWidget):
         finally:
             self._finalize_outputs_scheduled = False
             self._outputs_finalized = True
+            self._release_runtime_activity_reservation()
 
         if restart_after_finalize:
             self._start_scan_now()
@@ -646,29 +648,45 @@ class Scan(QtWidgets.QWidget):
             self._start_new_scan_after_stop = False
             return
 
-        if hasattr(self, "unique_data_name"):
-            del self.unique_data_name
-
-        self._focus_plot_tab_1_for_scan_start(maximize=False)
-        self._start_new_scan_log_session()
-
-        self.main_window.stop_equipments_for_scanning()
-        self._stop_all_equipment_monitors()
-        self.logic.reset_flags()
-        self.logic.go_scan = True
-
-        self.update_alllevel_setting_array()
-        self.logic.initialize_scan_data(self.info)
-        self._log_info("Scan started.")
-        self._log_info(self._build_start_summary())
-
-        self.update_all_plots()
-        self._outputs_finalized = False
+        self._acquire_runtime_activity_reservation()
         try:
+            if hasattr(self, "unique_data_name"):
+                del self.unique_data_name
+
+            self._focus_plot_tab_1_for_scan_start(maximize=False)
+            self._start_new_scan_log_session()
+
+            self.main_window.stop_equipments_for_scanning()
+            self._stop_all_equipment_monitors()
+            self.logic.reset_flags()
+            self.logic.go_scan = True
+
+            self.update_alllevel_setting_array()
+            self.logic.initialize_scan_data(self.info)
+            self._log_info("Scan started.")
+            self._log_info(self._build_start_summary())
+
+            self.update_all_plots()
+            self._outputs_finalized = False
             self.logic.start()
         except Exception:
             self._outputs_finalized = True
+            self._release_runtime_activity_reservation()
             raise
+
+    def _acquire_runtime_activity_reservation(self):
+        if self._runtime_activity_reservation is not None:
+            raise RuntimeError("scan runtime activity is already reserved")
+        reserve = getattr(self.main_window, "reserve_runtime_activity", None)
+        if callable(reserve):
+            name = str(self.lineEdit.text() or self.info.get("name", "scan"))
+            self._runtime_activity_reservation = reserve("scan", name)
+
+    def _release_runtime_activity_reservation(self):
+        reservation = self._runtime_activity_reservation
+        self._runtime_activity_reservation = None
+        if reservation is not None:
+            reservation.release()
 
     def _request_logic_stop(self):
         """Request a clean stop from ScanLogic, including paused state."""
@@ -758,18 +776,20 @@ class Scan(QtWidgets.QWidget):
             self._start_new_scan_after_stop = False
             return
 
-        if hasattr(self, "unique_data_name"):
-            del self.unique_data_name
-        self.logic.reset_flags()
-        self.logic.go_scan = True
-        self.logic.initilize_data(self.info)
-        self.main_window.stop_equipments_for_scanning()
-        self._stop_all_equipment_monitors()
-        self._outputs_finalized = False
+        self._acquire_runtime_activity_reservation()
         try:
+            if hasattr(self, "unique_data_name"):
+                del self.unique_data_name
+            self.logic.reset_flags()
+            self.logic.go_scan = True
+            self.logic.initilize_data(self.info)
+            self.main_window.stop_equipments_for_scanning()
+            self._stop_all_equipment_monitors()
+            self._outputs_finalized = False
             self.logic.start()
         except Exception:
             self._outputs_finalized = True
+            self._release_runtime_activity_reservation()
             raise
         while self.logic.isRunning():
             time.sleep(0.1)

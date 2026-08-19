@@ -121,6 +121,17 @@ Session configuration is selected by a validated JSON profile. It includes:
 
 `start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in registry currently enables the hardware-safe `mock_device` path only; source packages listed below are not automatically profile-ready.
 
+Runtime device changes are session-only and do not rewrite the selected JSON
+profile. The manager can add, disconnect, or remove only a driver whose
+registration explicitly opts into runtime mutation and provides a reviewed
+busy-state probe; the checked-in registry currently grants that capability only
+to `mock_device`. A change is refused while a scan, queue, manual operation,
+router request, device call, or device-owned job is active, or while a stored
+scan/manual/artificial configuration still references a device proposed for
+removal. Successful changes rebuild device buttons and every channel/catalog
+consumer together. A removed device's older callable handles fail closed, and
+the next launch still uses the unchanged profile.
+
 Before enabling hardware:
 
 1. Copy `config/profiles/example_lab.json` to an ignored `*.local.json` profile without changing the checked-in mock default.

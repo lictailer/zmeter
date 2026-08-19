@@ -316,6 +316,16 @@ class ManualSetItem(QtWidgets.QFrame):
         return super().eventFilter(obj, event)
 
     def start_queue(self):
+        scan_list = getattr(self.main_window, "scanlist", None)
+        if bool(getattr(scan_list, "_shutdown_sealed", False)):
+            scan_list._log_warning(
+                "Manual operation ignored: scan list is shutting down."
+            )
+            return
+        if bool(getattr(scan_list, "runtime_mutation_sealed", False)):
+            raise RuntimeError(
+                "manual operation refused while a runtime device mutation is pending"
+            )
         QtCore.QMetaObject.invokeMethod(
             self,
             "_run_manual_set_from_queue",
@@ -324,8 +334,33 @@ class ManualSetItem(QtWidgets.QFrame):
 
     @QtCore.pyqtSlot()
     def _run_manual_set_from_queue(self):
-        value = self.parsed_value()
-        self.main_window.write_info(value, self.channel_name)
+        scan_list = getattr(self.main_window, "scanlist", None)
+        if bool(getattr(scan_list, "_shutdown_sealed", False)):
+            scan_list._log_warning(
+                "Manual operation ignored: scan list is shutting down."
+            )
+            return
+        if bool(getattr(scan_list, "runtime_mutation_sealed", False)):
+            scan_list._log_warning(
+                "Manual operation ignored: a runtime device mutation is pending."
+            )
+            return
+        reservation = None
+        reserve = getattr(self.main_window, "reserve_runtime_activity", None)
+        if callable(reserve):
+            reservation = reserve("manual", self.text())
+        manual_started = False
+        try:
+            if scan_list is not None:
+                scan_list._begin_manual_operation(self)
+                manual_started = True
+            value = self.parsed_value()
+            self.main_window.write_info(value, self.channel_name)
+        finally:
+            if manual_started:
+                scan_list._end_manual_operation(self)
+            if reservation is not None:
+                reservation.release()
 
 
 class ScanListWidget(QtWidgets.QWidget):
@@ -585,6 +620,11 @@ class ScanList(QtWidgets.QWidget):
         self._shutdown_sealed = False
         self._queue_run_started = False
         self._queue_completion_delivered = True
+        self._runtime_mutation_sealed = False
+        self._runtime_mutation_reason = ""
+        self._runtime_mutation_widget_states = ()
+        self._active_manual_operations = {}
+        self._queue_activity_reservation = None
 
         self.logStatus_textEdit.setReadOnly(True)
         self.logStatus_textEdit.document().setMaximumBlockCount(self.MAX_UI_LOG_LINES)
@@ -645,7 +685,13 @@ class ScanList(QtWidgets.QWidget):
         self._log_ready = True
 
     def start_scan(self, info):
-        if self._shutdown_sealed:
+        if bool(getattr(self, "_shutdown_sealed", False)) or bool(
+            getattr(self, "_runtime_mutation_sealed", False)
+        ):
+            if bool(getattr(self, "_runtime_mutation_sealed", False)):
+                self._log_warning(
+                    "Scan start ignored: a runtime device mutation is pending."
+                )
             return
         self.start.emit(info)
 
@@ -760,8 +806,13 @@ class ScanList(QtWidgets.QWidget):
         return tuple(failures)
 
     def start_queue(self):
-        if self._shutdown_sealed:
+        if bool(getattr(self, "_shutdown_sealed", False)):
             self._log_warning("Queue start ignored: scan list is shutting down.")
+            return
+        if bool(getattr(self, "_runtime_mutation_sealed", False)):
+            self._log_warning(
+                "Queue start ignored: a runtime device mutation is pending."
+            )
             return
         if self.logic.isRunning():
             self._log_warning("Queue start ignored: queue is already running.")
@@ -771,15 +822,23 @@ class ScanList(QtWidgets.QWidget):
             self._log_warning("Queue start ignored: queue is empty.")
             return
 
-        self.logic.reset_control_flags()
-        self.logic.workers = queues
-        self._queue_run_started = True
-        self._queue_completion_delivered = False
+        reservation = None
+        reserve = getattr(self.main_window, "reserve_runtime_activity", None)
+        if callable(reserve):
+            reservation = reserve("queue", f"{len(queues)} queued item(s)")
+        self._queue_activity_reservation = reservation
         try:
+            self.logic.reset_control_flags()
+            self.logic.workers = queues
+            self._queue_run_started = True
+            self._queue_completion_delivered = False
             self.logic.start()
         except Exception:
             self._queue_run_started = False
             self._queue_completion_delivered = True
+            self._queue_activity_reservation = None
+            if reservation is not None:
+                reservation.release()
             raise
         self._log_info(f"Queue started with {len(queues)} item(s).")
 
@@ -859,6 +918,10 @@ class ScanList(QtWidgets.QWidget):
         # This queued acknowledgement is emitted after the queue's earlier UI
         # signals, so shutdown can prove those mutations have been delivered.
         self._queue_completion_delivered = True
+        reservation = getattr(self, "_queue_activity_reservation", None)
+        self._queue_activity_reservation = None
+        if reservation is not None:
+            reservation.release()
 
     def handle_delete_request(self, widget):
         if isinstance(widget, ScanItem):
@@ -888,8 +951,15 @@ class ScanList(QtWidgets.QWidget):
         if layout_obj is not None:
             layout_obj.removeWidget(widget)
 
-    def on_item_cloned_between_lists(self, item, _target_list):
-        if self._shutdown_sealed:
+    def on_item_cloned_between_lists(self, item, target_list):
+        if bool(getattr(self, "_runtime_mutation_sealed", False)):
+            target_list.layout.removeWidget(item)
+            item.deleteLater()
+            self._log_warning(
+                "Scan clone ignored: a runtime device mutation is pending."
+            )
+            return
+        if bool(getattr(self, "_shutdown_sealed", False)):
             item.scan._shutdown_requested = True
             item.scan._start_new_scan_after_stop = False
 
@@ -899,7 +969,9 @@ class ScanList(QtWidgets.QWidget):
             w.deleteLater()
 
     def add_empty_scan_item(self):
-        if self._shutdown_sealed:
+        if bool(getattr(self, "_shutdown_sealed", False)) or bool(
+            getattr(self, "_runtime_mutation_sealed", False)
+        ):
             return
         si = ScanItem(
             name="New Scan",
@@ -912,13 +984,17 @@ class ScanList(QtWidgets.QWidget):
         # self.available_info.append(si.info)
 
     def add_empty_manual_set_item(self):
-        if self._shutdown_sealed:
+        if bool(getattr(self, "_shutdown_sealed", False)) or bool(
+            getattr(self, "_runtime_mutation_sealed", False)
+        ):
             return
         item = ManualSetItem("default_wait", 0.0, main_window=self.main_window)
         self.list_manual.add_item(item)
 
     def add_manual_set_item_from_ui(self):
-        if self._shutdown_sealed:
+        if bool(getattr(self, "_shutdown_sealed", False)) or bool(
+            getattr(self, "_runtime_mutation_sealed", False)
+        ):
             return
         channel_name = str(getattr(self.manual_set_menu, "name", "")).strip()
         if channel_name in {"", "none", "void"}:
@@ -1179,6 +1255,10 @@ class ScanList(QtWidgets.QWidget):
     def catalog_mutation_blockers(self):
         """Describe active queue/scan work that blocks catalog publication."""
         blockers = []
+        if bool(getattr(self, "_shutdown_sealed", False)) and not bool(
+            getattr(self, "_shutdown_complete", False)
+        ):
+            blockers.append("scan-list shutdown retry pending")
         if self.logic.isRunning():
             blockers.append("queue thread")
         if (
@@ -1186,6 +1266,12 @@ class ScanList(QtWidgets.QWidget):
             and not self._queue_completion_delivered
         ):
             blockers.append("queue UI completion")
+        blockers.extend(
+            f"manual operation '{description}'"
+            for description in getattr(
+                self, "_active_manual_operations", {}
+            ).values()
+        )
         for item in self.iter_scan_items():
             try:
                 name = str(
@@ -1201,6 +1287,102 @@ class ScanList(QtWidgets.QWidget):
                 if "wrapped C/C++ object" not in str(exc):
                     raise
         return tuple(blockers)
+
+    @property
+    def runtime_mutation_sealed(self):
+        return bool(getattr(self, "_runtime_mutation_sealed", False))
+
+    def _begin_manual_operation(self, item):
+        operations = getattr(self, "_active_manual_operations", None)
+        if operations is None:
+            operations = {}
+            self._active_manual_operations = operations
+        operations[id(item)] = self.worker_display_name(item)
+
+    def _end_manual_operation(self, item):
+        getattr(self, "_active_manual_operations", {}).pop(id(item), None)
+
+    def set_runtime_mutation_sealed(self, sealed, reason=""):
+        """Prevent new scan/manual work while the manager mutates its catalog.
+
+        Mutation is admitted only from an idle state, so disabling the current
+        editors cannot hide a running stop control.  Programmatic scan starts
+        are also sealed through each Scan's existing start guard.
+        """
+
+        sealed = bool(sealed)
+        if sealed == bool(getattr(self, "_runtime_mutation_sealed", False)):
+            if sealed and reason:
+                self._runtime_mutation_reason = str(reason)
+            return
+
+        self._runtime_mutation_sealed = sealed
+        self._runtime_mutation_reason = str(reason) if sealed else ""
+        if sealed:
+            states = []
+            self._runtime_mutation_widget_states = ()
+            try:
+                for item in self.iter_scan_items():
+                    scan = item.scan
+                    states.append(
+                        (
+                            scan,
+                            scan.isEnabled(),
+                            bool(getattr(scan, "_shutdown_requested", False)),
+                        )
+                    )
+                    scan._shutdown_requested = True
+                    scan.setEnabled(False)
+                states.append((self, self.isEnabled(), None))
+                self.setEnabled(False)
+            except Exception as seal_error:
+                rollback_failures = []
+                for widget, was_enabled, previous_shutdown_requested in reversed(states):
+                    try:
+                        if previous_shutdown_requested is not None:
+                            widget._shutdown_requested = previous_shutdown_requested
+                        widget.setEnabled(was_enabled)
+                    except Exception as restore_error:
+                        if "wrapped C/C++ object" not in str(restore_error):
+                            rollback_failures.append(restore_error)
+                self._runtime_mutation_sealed = False
+                self._runtime_mutation_reason = ""
+                if rollback_failures:
+                    details = "; ".join(
+                        f"{type(error).__name__}: {error}"
+                        for error in rollback_failures
+                    )
+                    raise RuntimeError(
+                        "runtime mutation scan-list seal failed and rollback "
+                        f"was incomplete: {details}"
+                    ) from seal_error
+                raise
+            self._runtime_mutation_widget_states = tuple(states)
+            return
+
+        states = getattr(self, "_runtime_mutation_widget_states", ())
+        self._runtime_mutation_widget_states = ()
+        restore_failures = []
+        shutdown_sealed = bool(getattr(self, "_shutdown_sealed", False))
+        for widget, was_enabled, previous_shutdown_requested in states:
+            try:
+                if previous_shutdown_requested is not None:
+                    widget._shutdown_requested = (
+                        True
+                        if shutdown_sealed
+                        else previous_shutdown_requested
+                    )
+                widget.setEnabled(False if shutdown_sealed else was_enabled)
+            except Exception as exc:
+                if "wrapped C/C++ object" not in str(exc):
+                    restore_failures.append(exc)
+        if restore_failures:
+            details = "; ".join(
+                f"{type(error).__name__}: {error}" for error in restore_failures
+            )
+            raise RuntimeError(
+                f"runtime mutation UI restoration failed: {details}"
+            )
 
     def is_idle_for_catalog_mutation(self):
         return not self.catalog_mutation_blockers()
@@ -1243,6 +1425,12 @@ class ScanList(QtWidgets.QWidget):
             and not getattr(self, "_queue_completion_delivered", True)
         ):
             pending.append("queue UI completion")
+        pending.extend(
+            f"manual operation '{description}'"
+            for description in getattr(
+                self, "_active_manual_operations", {}
+            ).values()
+        )
 
         for item in scan_items:
             try:

@@ -12,7 +12,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtWidgets
 
 import start_zmeter
 from core.mainWindow import MainWindow
@@ -66,6 +66,17 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         self.window.hide()
         self.window.deleteLater()
         self.app.processEvents()
+
+    def _wait_operation(self, operation, timeout_ms=5_000):
+        timer = QtCore.QElapsedTimer()
+        timer.start()
+        while not operation.done and timer.elapsed() < timeout_ms:
+            self.app.processEvents()
+            QtCore.QThread.msleep(1)
+        self.assertTrue(operation.done)
+        for _ in range(3):
+            self.app.processEvents()
+        return operation.result
 
     def test_manager_snapshot_preserves_exact_static_catalog_and_button_order(self):
         self.assertEqual(
@@ -219,8 +230,10 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         ):
             self.window.closeEvent(event)
 
-        self.assertTrue(event.accepted)
-        self.assertFalse(event.ignored)
+        self.assertFalse(event.accepted)
+        self.assertTrue(event.ignored)
+        result = self._wait_operation(self.window._shutdown_operation)
+        self.assertTrue(result.succeeded)
         self.assertTrue(self.window._session_shutdown_complete)
         self.assertTrue(self.manager.teardown_report.succeeded)
 
@@ -241,8 +254,8 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
             ),
             mock.patch.object(QtWidgets.QMessageBox, "critical") as critical,
             mock.patch.object(
-                self.window,
-                "shutdown_session",
+                self.window.scanlist,
+                "shutdown",
                 side_effect=timeout,
             ),
         ):

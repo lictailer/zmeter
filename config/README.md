@@ -44,6 +44,15 @@ that the constructed device does not expose are silently skipped. Strict
 unknown-channel rejection or warnings are deferred to a separately approved
 future update.
 
+Runtime add, disconnect, and remove operations are separate from profile
+configuration. They affect only the current process and never edit this JSON.
+Only a code-reviewed registration with runtime mutation enabled and an explicit
+busy probe is eligible; the checked-in registry currently permits only the mock
+driver. The manager admits a change only while scan, queue, manual, router,
+device-call, and device-owned activity is idle. Removal is also refused while a
+stored session definition references the target label or one of its channels.
+Restarting ZMeter reconstructs the selected profile exactly as written here.
+
 Keep laboratory profiles local. Files named `*.local.json` and the
 `profiles/local/` directory are ignored by Git. Do not commit instrument
 addresses, serial numbers, credentials, private endpoints, or laboratory data

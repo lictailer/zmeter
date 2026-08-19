@@ -5,7 +5,8 @@ import re
 import sys
 import time
 from copy import deepcopy
-from dataclasses import replace
+from contextlib import nullcontext
+from dataclasses import dataclass, replace
 
 import numpy as np
 from PyQt6 import QtWidgets, uic, QtCore, QtGui
@@ -17,7 +18,7 @@ from .device_catalog import (
     DeviceCatalogRollbackError,
     DeviceCatalogSnapshot,
 )
-from .device_management import DeviceLifecycleError, DeviceSnapshot
+from .device_management import DeviceLifecycleError, DeviceManagerError, DeviceSnapshot
 
 # from sr830.sr830_main import SR830
 # from sr860.sr860_main import SR860
@@ -36,6 +37,33 @@ from .artificial_channel_logic import ArtificialChannelLogic
 from .artificial_channel_2d_main import ArtificialChannel2D
 from .device_command_router import DeviceCommandRouter
 from .scan_range_main import ScanRangeWindow
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedDeviceCatalogUpdate:
+    """Side-effect-free UI plan tied to one exact manager generation."""
+
+    operation: str
+    device_id: str
+    operation_id: int | None
+    operation_nonce: object
+    base_generation: int
+    proposed_generation: int
+    base_catalog_snapshot: DeviceCatalogSnapshot
+    proposed_device_snapshot: DeviceSnapshot
+    staged_catalog_snapshot: DeviceCatalogSnapshot
+
+
+class _NullActivityReservation:
+    def release(self):
+        return None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _error_type, _error, _traceback):
+        self.release()
+        return False
 
 
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
@@ -124,7 +152,17 @@ class MainWindow(QtWidgets.QWidget):
         self._session_shutdown_in_progress = False
         self._session_shutdown_complete = False
         self._session_shutdown_report = None
+        self._shutdown_operation = None
+        self._shutdown_guard = None
+        self._shutdown_retry_required = False
+        self._submitting_manager_teardown = False
+        self._async_shutdown_result_handled = False
         self._catalog_mutation_in_progress = False
+        self._runtime_mutation_operation = None
+        self._prepared_runtime_catalog_token = None
+        self._runtime_mutation_widget_states = ()
+        self._scan_activity_reservations = []
+        self._operator_pending_mutation = None
         # ------------------------------------------------------------
 
         # {equipment name (e.g. lockin_0) : {variable name : set method},....}
@@ -187,6 +225,294 @@ class MainWindow(QtWidgets.QWidget):
         initial_button_plan = self._prepare_device_button_reconciliation(self.equips)
         self._commit_device_button_reconciliation(initial_button_plan)
         self._finalize_device_button_reconciliation(initial_button_plan)
+        self._configure_device_manager_runtime_hooks()
+
+    def _configure_device_manager_runtime_hooks(self):
+        manager = self.device_manager
+        if manager is None:
+            return
+
+        configure = getattr(manager, "set_runtime_hooks", None)
+        if callable(configure):
+            configure(
+                blockers=self.runtime_mutation_blockers,
+                prepare=self.prepare_device_snapshot,
+                commit=self.commit_prepared_device_snapshot,
+                seal=self.begin_runtime_mutation,
+                unseal=self.finish_runtime_mutation,
+            )
+
+        for signal_name, slot in (
+            ("sig_catalog_changed", self._on_manager_catalog_changed),
+            ("sig_operation_finished", self._on_runtime_mutation_finished),
+        ):
+            signal = getattr(manager, signal_name, None)
+            if signal is not None and hasattr(signal, "connect"):
+                signal.connect(slot)
+
+    @staticmethod
+    def _runtime_operation_description(operation):
+        action = str(getattr(operation, "operation", "device mutation"))
+        device_id = str(getattr(operation, "device_id", "")).strip()
+        return f"{action} '{device_id}'" if device_id else action
+
+    def begin_runtime_mutation(self, operation):
+        """Synchronously seal every direct UI/device entry point."""
+
+        if self._runtime_mutation_operation is not None:
+            raise DeviceCatalogBusyError(("runtime device mutation in progress",))
+        self._runtime_mutation_operation = operation
+        self._prepared_runtime_catalog_token = None
+        description = self._runtime_operation_description(operation)
+        try:
+            self._set_runtime_mutation_ui_sealed(True, description)
+        except Exception:
+            self._runtime_mutation_operation = None
+            raise
+
+    def finish_runtime_mutation(self, result):
+        """Synchronously restore only widgets backed by safe manager records."""
+
+        if str(getattr(result, "operation", "")) == "teardown_all":
+            self._runtime_mutation_operation = None
+            self._prepared_runtime_catalog_token = None
+            return
+        if bool(getattr(result, "committed", False)) and not bool(
+            getattr(result, "acknowledged", False)
+        ):
+            # The manager has advanced but the UI did not acknowledge the exact
+            # topology.  Keep every direct widget/editor entry point sealed;
+            # reconcile_catalog() reuses the seal and a successful retry is the
+            # only path that restores controls.
+            self._runtime_mutation_operation = None
+            self._prepared_runtime_catalog_token = None
+            return
+        try:
+            self._set_runtime_mutation_ui_sealed(False, result=result)
+        finally:
+            self._runtime_mutation_operation = None
+            self._prepared_runtime_catalog_token = None
+
+    @QtCore.pyqtSlot(object)
+    def _on_manager_catalog_changed(self, device_snapshot):
+        expected = int(getattr(self._applied_device_snapshot, "generation", 0))
+        received = int(getattr(device_snapshot, "generation", 0))
+        if received != expected:
+            print(
+                "Ignored stale manager catalog notification: "
+                f"expected generation {expected}, received {received}."
+            )
+            return
+        self.command_router.publish_catalog(self.device_channel_catalog)
+
+    @QtCore.pyqtSlot(object)
+    def _on_runtime_mutation_finished(self, result):
+        self._last_runtime_mutation_result = result
+        if str(getattr(result, "operation", "")) == "teardown_all":
+            self._finish_async_shutdown(result)
+            return
+        error = getattr(result, "error", None)
+        if error is not None:
+            description = self._runtime_operation_description(result)
+            print(
+                f"Runtime device mutation failed ({description}): "
+                f"{type(error).__name__}: {error}"
+            )
+            pending = self._operator_pending_mutation
+            if pending is not None and pending == (
+                str(getattr(result, "operation", "")),
+                str(getattr(result, "device_id", "")),
+            ):
+                self._show_runtime_mutation_refusal(
+                    self._runtime_operation_description(result),
+                    error,
+                )
+        self._operator_pending_mutation = None
+    def _set_runtime_mutation_ui_sealed(self, sealed, reason="", result=None):
+        sealed = bool(sealed)
+        scanlist = getattr(self, "scanlist", None)
+        if sealed:
+            if self._runtime_mutation_widget_states:
+                return
+            states = []
+            scanlist_sealed = False
+            try:
+                if scanlist is not None:
+                    scanlist.set_runtime_mutation_sealed(True, reason)
+                    scanlist_sealed = True
+                labels_by_widget_id = {
+                    id(widget): label for label, widget in self.equips.items()
+                }
+                labels_by_button_id = {
+                    id(button): label
+                    for label, button in self._equipment_buttons_by_label.items()
+                }
+                widgets = (
+                    *self.equips.values(),
+                    *self.open_equipment_buttons,
+                    getattr(self, "artificial_channel_2d", None),
+                    getattr(self, "scan_range_window", None),
+                    getattr(self, "artificialChanne2D_button", None),
+                    getattr(self, "scan_list_button", None),
+                    getattr(self, "scan_range_button", None),
+                )
+                seen = set()
+                for widget in widgets:
+                    if widget is None or id(widget) in seen:
+                        continue
+                    seen.add(id(widget))
+                    device_label = labels_by_widget_id.get(
+                        id(widget),
+                        labels_by_button_id.get(id(widget)),
+                    )
+                    states.append(
+                        (widget, widget.isEnabled(), device_label)
+                    )
+                    widget.setEnabled(False)
+            except Exception as seal_error:
+                rollback_failures = []
+                for widget, was_enabled, _device_label in reversed(states):
+                    try:
+                        widget.setEnabled(was_enabled)
+                    except Exception as restore_error:
+                        if "wrapped C/C++ object" not in str(restore_error):
+                            rollback_failures.append(restore_error)
+                if scanlist_sealed:
+                    try:
+                        scanlist.set_runtime_mutation_sealed(False)
+                    except Exception as restore_error:
+                        rollback_failures.append(restore_error)
+                if rollback_failures:
+                    details = "; ".join(
+                        f"{type(error).__name__}: {error}"
+                        for error in rollback_failures
+                    )
+                    raise RuntimeError(
+                        "runtime mutation UI seal failed and rollback was "
+                        f"incomplete: {details}"
+                    ) from seal_error
+                raise
+            self._runtime_mutation_widget_states = tuple(states)
+            return
+
+        states = self._runtime_mutation_widget_states
+        self._runtime_mutation_widget_states = ()
+        manager_snapshot = getattr(result, "snapshot", None)
+        if manager_snapshot is None and self.device_manager is not None:
+            manager_snapshot = self.device_manager.snapshot()
+        safe_device_labels = set()
+        for record in getattr(manager_snapshot, "records", ()):
+            state = str(getattr(getattr(record, "state", None), "value", getattr(record, "state", "")))
+            if state not in {"error", "removing", "removed", "quarantined"}:
+                safe_device_labels.add(str(record.device_id))
+        restore_failures = []
+        for widget, was_enabled, device_label in states:
+            if device_label is not None and device_label not in safe_device_labels:
+                continue
+            try:
+                widget.setEnabled(was_enabled)
+            except Exception as exc:
+                if "wrapped C/C++ object" not in str(exc):
+                    restore_failures.append(exc)
+        if scanlist is not None:
+            try:
+                scanlist.set_runtime_mutation_sealed(False)
+            except Exception as exc:
+                restore_failures.append(exc)
+        if restore_failures:
+            details = "; ".join(
+                f"{type(error).__name__}: {error}" for error in restore_failures
+            )
+            raise RuntimeError(
+                f"runtime mutation UI restoration failed: {details}"
+            )
+
+    def runtime_mutation_blockers(self):
+        blockers = []
+        scanlist = getattr(self, "scanlist", None)
+        scan_blockers = getattr(scanlist, "catalog_mutation_blockers", None)
+        if callable(scan_blockers):
+            blockers.extend(scan_blockers())
+        if self._catalog_mutation_in_progress:
+            blockers.append("catalog replacement in progress")
+        if self._session_shutdown_in_progress:
+            if not self._submitting_manager_teardown:
+                blockers.append("application shutdown in progress")
+        if self._shutdown_retry_required:
+            if not self._submitting_manager_teardown:
+                blockers.append("application shutdown retry required")
+        if self._session_shutdown_complete:
+            blockers.append("application shutdown complete")
+        return tuple(dict.fromkeys(str(blocker) for blocker in blockers))
+
+    def reserve_runtime_activity(self, kind, description=None):
+        manager = self.device_manager
+        reserve = getattr(manager, "reserve_activity", None)
+        if callable(reserve):
+            return reserve(kind, description)
+        return _NullActivityReservation()
+
+    def device_request_session(self, expected_generation=None):
+        manager = self.device_manager
+        session_call = getattr(manager, "session_call", None)
+        if callable(session_call):
+            return session_call(expected_generation=expected_generation)
+        return nullcontext(self._applied_device_snapshot)
+
+    def _show_runtime_mutation_refusal(self, action, error):
+        QtWidgets.QMessageBox.warning(
+            self,
+            "Device Change Refused",
+            f"Could not {action}: {error}",
+        )
+
+    def _request_runtime_mutation(self, method_name, action, device_id, *args):
+        manager = self.device_manager
+        method = getattr(manager, method_name, None)
+        if not callable(method):
+            error = RuntimeError("runtime device management is unavailable")
+            self._show_runtime_mutation_refusal(action, error)
+            return None
+        try:
+            operation = method(*args)
+        except Exception as exc:
+            self._show_runtime_mutation_refusal(action, exc)
+            return None
+        self._operator_pending_mutation = (
+            str(getattr(operation, "operation", action)),
+            str(getattr(operation, "device_id", device_id)),
+        )
+        if bool(getattr(operation, "done", False)):
+            result = getattr(operation, "result", None)
+            error = getattr(result, "error", None)
+            self._operator_pending_mutation = None
+            if error is not None:
+                self._show_runtime_mutation_refusal(action, error)
+        return operation
+
+    def request_add_device(self, config):
+        return self._request_runtime_mutation(
+            "add_device",
+            "add device",
+            getattr(config, "id", ""),
+            config,
+        )
+
+    def request_disconnect_device(self, device_id):
+        return self._request_runtime_mutation(
+            "disconnect_device",
+            "disconnect device",
+            device_id,
+            device_id,
+        )
+
+    def request_remove_device(self, device_id):
+        return self._request_runtime_mutation(
+            "remove_device",
+            "remove device",
+            device_id,
+            device_id,
+        )
 
     def _show_and_focus_window(self, window):
         if window is None:
@@ -593,8 +919,19 @@ class MainWindow(QtWidgets.QWidget):
         artificial_channel_y_name,
     ):
         del original_channel_x_name, original_channel_y_name
+        if (
+            self._session_shutdown_in_progress
+            or self._shutdown_retry_required
+            or self._session_shutdown_complete
+        ):
+            raise DeviceCatalogBusyError(("application shutdown in progress",))
         if self._catalog_mutation_in_progress:
             raise DeviceCatalogBusyError(("catalog replacement in progress",))
+        if (
+            self._runtime_mutation_operation is not None
+            or bool(getattr(self.device_manager, "mutation_in_progress", False))
+        ):
+            raise DeviceCatalogBusyError(("runtime device mutation in progress",))
         self._ensure_catalog_mutation_idle()
         staged_snapshot = self._build_catalog_snapshot(
             self._applied_device_snapshot,
@@ -642,6 +979,7 @@ class MainWindow(QtWidgets.QWidget):
         getter_filters = dict(device_snapshot.getter_filters)
         setter_callables = {}
         getter_callables = {}
+        record_generations = self._device_record_generations(device_snapshot)
 
         for equipment_label, equipment_window in equipment.items():
             setters, getters = self._discover_variables_dictionary(
@@ -649,6 +987,7 @@ class MainWindow(QtWidgets.QWidget):
                 equipment_label,
                 setter_filters.get(equipment_label),
                 getter_filters.get(equipment_label),
+                device_generation=record_generations.get(equipment_label),
             )
             setter_callables[equipment_label] = setters
             getter_callables[equipment_label] = getters
@@ -704,6 +1043,25 @@ class MainWindow(QtWidgets.QWidget):
             router_catalog=router_catalog,
             active_scan_range_limits=active_scan_range_limits,
         )
+
+    @staticmethod
+    def _device_record_generations(device_snapshot):
+        return {
+            str(record.device_id): int(getattr(record, "generation", 0))
+            for record in getattr(device_snapshot, "records", ())
+        }
+
+    def _bind_manager_device_call(
+        self,
+        equipment_label,
+        device_generation,
+        callback,
+    ):
+        manager = self.device_manager
+        bind_call = getattr(manager, "bind_call", None)
+        if device_generation is None or not callable(bind_call):
+            return callback
+        return bind_call(equipment_label, device_generation, callback)
 
     def _capture_current_catalog_snapshot(self, profile_name):
         return DeviceCatalogSnapshot(
@@ -1157,27 +1515,310 @@ class MainWindow(QtWidgets.QWidget):
         if blockers:
             raise DeviceCatalogBusyError(blockers)
 
+    def _assert_catalog_ui_thread(self):
+        if QtCore.QThread.currentThread() is not self.thread():
+            raise RuntimeError(
+                "device catalog snapshots must be prepared and applied on the UI thread"
+            )
+
+    @staticmethod
+    def _device_snapshot_catalog_matches(first, second):
+        if tuple(first.equipment) != tuple(second.equipment):
+            return False
+        if any(
+            first.equipment[label] is not second.equipment[label]
+            for label in first.equipment
+        ):
+            return False
+        first_records = tuple(
+            (
+                str(record.device_id),
+                int(getattr(record, "generation", 0)),
+                record.instance,
+            )
+            for record in getattr(first, "records", ())
+        )
+        second_records = tuple(
+            (
+                str(record.device_id),
+                int(getattr(record, "generation", 0)),
+                record.instance,
+            )
+            for record in getattr(second, "records", ())
+        )
+        if len(first_records) != len(second_records):
+            return False
+        if any(
+            first_id != second_id
+            or first_generation != second_generation
+            or first_instance is not second_instance
+            for (
+                first_id,
+                first_generation,
+                first_instance,
+            ), (
+                second_id,
+                second_generation,
+                second_instance,
+            ) in zip(first_records, second_records)
+        ):
+            return False
+        return (
+            dict(first.setter_filters) == dict(second.setter_filters)
+            and dict(first.getter_filters) == dict(second.getter_filters)
+        )
+
+    def _prepare_device_catalog_update(
+        self,
+        device_snapshot,
+        *,
+        operation,
+        device_id,
+        operation_id=None,
+        operation_nonce=None,
+        base_generation,
+        proposed_generation,
+    ):
+        self._assert_catalog_ui_thread()
+        current_generation = int(
+            getattr(self._applied_device_snapshot, "generation", 0)
+        )
+        if current_generation != int(base_generation):
+            raise DeviceCatalogError(
+                "stale catalog proposal: MainWindow is at generation "
+                f"{current_generation}, proposal expected {base_generation}"
+            )
+        snapshot_generation = int(getattr(device_snapshot, "generation", 0))
+        if snapshot_generation != int(proposed_generation):
+            raise DeviceCatalogError(
+                "catalog proposal generation mismatch: snapshot is generation "
+                f"{snapshot_generation}, proposal declared {proposed_generation}"
+            )
+
+        self._ensure_catalog_mutation_idle()
+        staged_snapshot = self._build_catalog_snapshot(device_snapshot)
+        self._preflight_catalog_references(staged_snapshot)
+        # Validate the reversible router contract without attaching metadata or
+        # changing any object, title, layout, menu, or published mapping.
+        self._capture_router_metadata_for_replacements(staged_snapshot.equipment)
+        for label, window in staged_snapshot.equipment.items():
+            if not callable(getattr(window, "setWindowTitle", None)):
+                raise DeviceCatalogError(
+                    f"device '{label}' does not expose the required QWidget title API"
+                )
+
+        return _PreparedDeviceCatalogUpdate(
+            operation=str(operation),
+            device_id=str(device_id),
+            operation_id=(
+                None if operation_id is None else int(operation_id)
+            ),
+            operation_nonce=operation_nonce,
+            base_generation=int(base_generation),
+            proposed_generation=int(proposed_generation),
+            base_catalog_snapshot=self._catalog_snapshot,
+            proposed_device_snapshot=device_snapshot,
+            staged_catalog_snapshot=staged_snapshot,
+        )
+
+    def prepare_device_snapshot(self, proposal):
+        """Return a side-effect-free, exact-generation manager commit token."""
+
+        validate_proposal = getattr(
+            self.device_manager,
+            "validate_active_proposal",
+            None,
+        )
+        if not callable(validate_proposal):
+            raise DeviceCatalogError(
+                "runtime catalog prepare requires manager proposal validation"
+            )
+        validate_proposal(proposal)
+
+        active = self._runtime_mutation_operation
+        if active is None or not bool(
+            getattr(self.device_manager, "mutation_in_progress", False)
+        ):
+            raise DeviceCatalogError(
+                "runtime catalog prepare requires an active sealed manager operation"
+            )
+        proposal_operation_id = getattr(proposal, "operation_id", None)
+        proposal_nonce = getattr(proposal, "operation_nonce", None)
+        if (
+            proposal_operation_id is None
+            or int(proposal_operation_id)
+            != int(getattr(active, "operation_id", -1))
+            or proposal_nonce is None
+            or proposal_nonce is not getattr(active, "operation_nonce", None)
+        ):
+            raise DeviceCatalogError(
+                "runtime catalog proposal does not belong to the active manager operation"
+            )
+
+        prepared = self._prepare_device_catalog_update(
+            proposal.proposed,
+            operation=proposal.operation,
+            device_id=proposal.device_id,
+            operation_id=proposal_operation_id,
+            operation_nonce=proposal_nonce,
+            base_generation=proposal.base_generation,
+            proposed_generation=proposal.proposed_generation,
+        )
+        # The manager deliberately prepares twice.  Only the latest exact token
+        # can acknowledge a commit; replaying the earlier preview fails closed.
+        self._prepared_runtime_catalog_token = prepared
+        return prepared
+
+    def commit_prepared_device_snapshot(self, prepared, committed):
+        """Synchronously acknowledge one manager-committed catalog generation."""
+
+        self._assert_catalog_ui_thread()
+        if not isinstance(prepared, _PreparedDeviceCatalogUpdate):
+            raise DeviceCatalogError("unknown prepared device catalog token")
+        if prepared is not self._prepared_runtime_catalog_token:
+            raise DeviceCatalogError("prepared device catalog token is stale or replayed")
+        active = self._runtime_mutation_operation
+        if (
+            active is None
+            or prepared.operation_id
+            != int(getattr(active, "operation_id", -1))
+            or prepared.operation_nonce
+            is not getattr(active, "operation_nonce", None)
+        ):
+            raise DeviceCatalogError(
+                "prepared device catalog token is not owned by the active operation"
+            )
+        # Consume before touching any consumer so exceptions cannot make a
+        # partially attempted token replayable.
+        self._prepared_runtime_catalog_token = None
+        if self._catalog_snapshot is not prepared.base_catalog_snapshot:
+            raise DeviceCatalogError(
+                "catalog changed after runtime mutation preflight; commit refused"
+            )
+        if int(getattr(committed, "generation", 0)) != prepared.proposed_generation:
+            raise DeviceCatalogError(
+                "manager commit generation does not match the prepared catalog"
+            )
+        if not self._device_snapshot_catalog_matches(
+            prepared.proposed_device_snapshot,
+            committed,
+        ):
+            raise DeviceCatalogError(
+                "manager commit contents do not match the prepared catalog"
+            )
+        authoritative = self.device_manager.snapshot()
+        if (
+            int(getattr(authoritative, "generation", 0))
+            != int(getattr(committed, "generation", 0))
+            or tuple(getattr(authoritative, "records", ()))
+            != tuple(getattr(committed, "records", ()))
+            or not self._device_snapshot_catalog_matches(authoritative, committed)
+        ):
+            raise DeviceCatalogError(
+                "manager commit acknowledgement does not match live manager state"
+            )
+        if self._catalog_mutation_in_progress:
+            raise DeviceCatalogBusyError(("catalog replacement in progress",))
+
+        self._catalog_mutation_in_progress = True
+        try:
+            return self._apply_device_snapshot_transaction(
+                committed,
+                prepared=prepared,
+                publish_catalog=False,
+            )
+        finally:
+            self._catalog_mutation_in_progress = False
+
     def apply_device_snapshot(
         self,
         device_snapshot,
     ) -> DeviceCatalogSnapshot:
         """Atomically rebuild and publish every catalog consumer from one input."""
 
-        if QtCore.QThread.currentThread() is not self.thread():
-            raise RuntimeError("device catalog snapshots must be applied on the UI thread")
+        if (
+            self._session_shutdown_in_progress
+            or self._shutdown_retry_required
+            or self._session_shutdown_complete
+        ):
+            raise DeviceCatalogBusyError(("application shutdown in progress",))
+        if self.device_manager is not None:
+            authoritative = self.device_manager.snapshot()
+            record_labels = tuple(
+                str(record.device_id)
+                for record in getattr(device_snapshot, "records", ())
+            )
+            if (
+                int(getattr(device_snapshot, "generation", 0))
+                != int(getattr(authoritative, "generation", 0))
+                or record_labels != tuple(device_snapshot.equipment)
+                or tuple(getattr(device_snapshot, "records", ()))
+                != tuple(getattr(authoritative, "records", ()))
+                or not self._device_snapshot_catalog_matches(
+                    device_snapshot,
+                    authoritative,
+                )
+            ):
+                raise DeviceCatalogError(
+                    "manager-backed MainWindow accepts only its manager's exact "
+                    "authoritative snapshot; runtime changes must use manager APIs"
+                )
+
+        return self._apply_device_snapshot_for_testing_or_legacy(device_snapshot)
+
+    def _apply_device_snapshot_for_testing_or_legacy(
+        self,
+        device_snapshot,
+    ) -> DeviceCatalogSnapshot:
+        """Isolated Phase-5/legacy harness; never a runtime mutation entry point."""
+
+        self._assert_catalog_ui_thread()
+        if (
+            self._session_shutdown_in_progress
+            or self._shutdown_retry_required
+            or self._session_shutdown_complete
+        ):
+            raise DeviceCatalogBusyError(("application shutdown in progress",))
+        if self.device_manager is not None and not tuple(
+            getattr(device_snapshot, "records", ())
+        ):
+            device_snapshot = replace(
+                device_snapshot,
+                generation=int(
+                    getattr(self._applied_device_snapshot, "generation", 0)
+                ),
+            )
 
         if self._catalog_mutation_in_progress:
             raise DeviceCatalogBusyError(("catalog replacement in progress",))
+        if bool(getattr(self.device_manager, "mutation_in_progress", False)):
+            raise DeviceCatalogBusyError(("runtime device mutation in progress",))
         self._catalog_mutation_in_progress = True
         try:
             return self._apply_device_snapshot_transaction(device_snapshot)
         finally:
             self._catalog_mutation_in_progress = False
 
-    def _apply_device_snapshot_transaction(self, device_snapshot):
-        self._ensure_catalog_mutation_idle()
-        staged_snapshot = self._build_catalog_snapshot(device_snapshot)
-        self._preflight_catalog_references(staged_snapshot)
+    def _apply_device_snapshot_transaction(
+        self,
+        device_snapshot,
+        *,
+        prepared=None,
+        publish_catalog=True,
+    ):
+        if prepared is None:
+            current_generation = int(
+                getattr(self._applied_device_snapshot, "generation", 0)
+            )
+            proposed_generation = int(getattr(device_snapshot, "generation", 0))
+            prepared = self._prepare_device_catalog_update(
+                device_snapshot,
+                operation="catalog refresh",
+                device_id="",
+                base_generation=current_generation,
+                proposed_generation=proposed_generation,
+            )
+        staged_snapshot = prepared.staged_catalog_snapshot
 
         metadata_capture = self._capture_router_metadata_for_replacements(
             staged_snapshot.equipment
@@ -1250,8 +1891,9 @@ class MainWindow(QtWidgets.QWidget):
             self._refresh_scanlist_catalog(staged_snapshot)
             button_commit_attempted = True
             self._commit_device_button_reconciliation(button_plan)
-            publication_attempted = True
-            self.command_router.publish_catalog(self.device_channel_catalog)
+            if publish_catalog:
+                publication_attempted = True
+                self.command_router.publish_catalog(self.device_channel_catalog)
         except Exception as apply_error:
             rollback_failures = []
 
@@ -1325,9 +1967,16 @@ class MainWindow(QtWidgets.QWidget):
         return staged_snapshot
 
     def make_equipment_info(self):
+        record_generations = self._device_record_generations(
+            self._applied_device_snapshot
+        )
         for key, equipment in self.equips.items():
 
-            set_variable, get_variable = self.make_variables_dictionary(equipment, key)
+            set_variable, get_variable = self.make_variables_dictionary(
+                equipment,
+                key,
+                device_generation=record_generations.get(key),
+            )
 
             self.setter_equipment_info_for_scanning[key] = set_variable
             self.getter_equipment_info_for_scanning[key] = get_variable
@@ -1335,12 +1984,19 @@ class MainWindow(QtWidgets.QWidget):
             self.setter_equipment_info[key] = list(set_variable.keys())
             self.getter_equipment_info[key] = list(get_variable.keys())
 
-    def make_variables_dictionary(self, equipment, equipment_label):
+    def make_variables_dictionary(
+        self,
+        equipment,
+        equipment_label,
+        *,
+        device_generation=None,
+    ):
         return self._discover_variables_dictionary(
             equipment,
             equipment_label,
             self.equips_set_channels.get(equipment_label),
             self.equips_get_channels.get(equipment_label),
+            device_generation=device_generation,
         )
 
     def _discover_variables_dictionary(
@@ -1349,6 +2005,8 @@ class MainWindow(QtWidgets.QWidget):
         equipment_label,
         requested_set_channels,
         requested_get_channels,
+        *,
+        device_generation=None,
     ):
         get_variables = {}
         set_variables = {}
@@ -1373,9 +2031,17 @@ class MainWindow(QtWidgets.QWidget):
             if not callable(method):
                 continue
             if method_name.startswith("get_") and self._is_valid_getter(method):
-                get_variables[method_name[4:]] = method
+                get_variables[method_name[4:]] = self._bind_manager_device_call(
+                    equipment_label,
+                    device_generation,
+                    method,
+                )
             elif method_name.startswith("set_") and self._is_valid_setter(method):
-                set_variables[method_name[4:]] = method
+                set_variables[method_name[4:]] = self._bind_manager_device_call(
+                    equipment_label,
+                    device_generation,
+                    method,
+                )
         
         set_variables = self.filter_scan_channels(set_variables, requested_set_channels)
         get_variables = self.filter_scan_channels(get_variables, requested_get_channels)
@@ -1751,9 +2417,40 @@ class MainWindow(QtWidgets.QWidget):
             return self._session_shutdown_report
         if self._session_shutdown_in_progress:
             raise RuntimeError("application shutdown is already in progress")
+        manager = self.device_manager
+        shutdown_guard = self._shutdown_guard
+        guard_acquired_here = False
+        if shutdown_guard is not None and bool(
+            getattr(shutdown_guard, "released", False)
+        ):
+            shutdown_guard = None
+        if manager is not None:
+            begin_shutdown = getattr(manager, "begin_shutdown", None)
+            if shutdown_guard is None and callable(begin_shutdown):
+                # Admission closes before ScanList or either auxiliary window is
+                # touched.  A refusal therefore leaves every UI surface intact.
+                shutdown_guard = begin_shutdown()
+                guard_acquired_here = True
+            elif bool(getattr(manager, "mutation_in_progress", False)):
+                raise DeviceCatalogBusyError(
+                    ("runtime device mutation in progress",)
+                )
 
-        self._session_shutdown_in_progress = True
+        ui_presealed = bool(self._runtime_mutation_widget_states)
+        shutdown_side_effects_started = self._shutdown_retry_required
         try:
+            self._set_runtime_mutation_ui_sealed(
+                True,
+                "application shutdown",
+            )
+            ui_presealed = True
+            self._shutdown_guard = shutdown_guard
+            self._session_shutdown_in_progress = True
+            # From this boundary onward ScanList may have permanently stopped
+            # threads and disabled editors.  Keep manager admission closed until
+            # the exact teardown is retried successfully.
+            self._shutdown_retry_required = True
+            shutdown_side_effects_started = True
             self.scanlist.shutdown(timeout_ms=timeout_ms)
 
             if hasattr(self, "artificial_channel_2d"):
@@ -1761,8 +2458,12 @@ class MainWindow(QtWidgets.QWidget):
             if hasattr(self, "scan_range_window"):
                 self.scan_range_window.close()
 
-            if self.device_manager is not None:
-                report = self.device_manager.teardown_all()
+            if manager is not None:
+                self._submitting_manager_teardown = True
+                try:
+                    report = manager.teardown_all()
+                finally:
+                    self._submitting_manager_teardown = False
                 self._report_lifecycle_failures(report)
                 self._session_shutdown_report = report
                 if report.failures:
@@ -1778,13 +2479,171 @@ class MainWindow(QtWidgets.QWidget):
 
             self._session_shutdown_report = report
             self._session_shutdown_complete = True
+            self._shutdown_retry_required = False
+            self._shutdown_guard = None
             print("Main Window terminated.")
             return report
+        except Exception:
+            if not shutdown_side_effects_started:
+                if ui_presealed and self._runtime_mutation_operation is None:
+                    try:
+                        self._set_runtime_mutation_ui_sealed(False)
+                    except Exception as restore_error:
+                        print(
+                            "Shutdown UI restoration warning: "
+                            f"{type(restore_error).__name__}: {restore_error}"
+                        )
+                if guard_acquired_here and shutdown_guard is not None:
+                    shutdown_guard.release()
+                self._shutdown_guard = None
+                self._shutdown_retry_required = False
+            else:
+                self._shutdown_guard = shutdown_guard
+                self._shutdown_retry_required = True
+            raise
         finally:
+            self._submitting_manager_teardown = False
             self._session_shutdown_in_progress = False
+
+    def _start_async_shutdown(self, *, timeout_ms=10000):
+        manager = self.device_manager
+        begin_teardown = getattr(manager, "teardown_all_async", None)
+        if not callable(begin_teardown):
+            return None
+        if self._session_shutdown_complete:
+            return self._shutdown_operation
+        if self._session_shutdown_in_progress:
+            raise DeviceCatalogBusyError(("application shutdown in progress",))
+        if bool(getattr(manager, "mutation_in_progress", False)):
+            raise DeviceCatalogBusyError(("runtime device mutation in progress",))
+
+        shutdown_guard = self._shutdown_guard
+        guard_acquired_here = False
+        if shutdown_guard is not None and bool(
+            getattr(shutdown_guard, "released", False)
+        ):
+            shutdown_guard = None
+        if shutdown_guard is None:
+            begin_shutdown_guard = getattr(manager, "begin_shutdown", None)
+            shutdown_guard = (
+                begin_shutdown_guard()
+                if callable(begin_shutdown_guard)
+                else None
+            )
+            guard_acquired_here = shutdown_guard is not None
+
+        ui_presealed = bool(self._runtime_mutation_widget_states)
+        shutdown_side_effects_started = self._shutdown_retry_required
+        try:
+            # The manager's later teardown seal must be infallible with respect
+            # to widget traversal: validate and apply the exact same UI seal
+            # before ScanList.shutdown closes anything.  begin_runtime_mutation
+            # subsequently binds the real operation to this existing seal.
+            self._set_runtime_mutation_ui_sealed(
+                True,
+                "application shutdown",
+            )
+            ui_presealed = True
+            self._shutdown_guard = shutdown_guard
+            self._session_shutdown_in_progress = True
+            self._async_shutdown_result_handled = False
+            self._shutdown_operation = None
+            # Calling ScanList.shutdown is the irreversible boundary.  A timeout,
+            # auxiliary-window failure, or uncommitted manager operation after
+            # this point must leave this same reservation active for retry.
+            self._shutdown_retry_required = True
+            shutdown_side_effects_started = True
+            self.scanlist.shutdown(timeout_ms=timeout_ms)
+            if hasattr(self, "artificial_channel_2d"):
+                self.artificial_channel_2d.close()
+            if hasattr(self, "scan_range_window"):
+                self.scan_range_window.close()
+
+            self._submitting_manager_teardown = True
+            try:
+                operation = (
+                    begin_teardown(shutdown_guard)
+                    if shutdown_guard is not None
+                    else begin_teardown()
+                )
+            finally:
+                self._submitting_manager_teardown = False
+            self._shutdown_operation = operation
+            if bool(getattr(operation, "done", False)):
+                if not self._async_shutdown_result_handled:
+                    QtCore.QTimer.singleShot(
+                        0,
+                        lambda operation=operation: self._finish_async_shutdown(
+                            operation.result
+                        ),
+                    )
+                elif not bool(
+                    getattr(operation.result, "succeeded", False)
+                ):
+                    # A dispatch failure can complete synchronously inside the
+                    # manager call and its signal handles the result before the
+                    # operation is assigned here.  Do not retain that stale op.
+                    self._shutdown_operation = None
+            return operation
+        except Exception:
+            if not shutdown_side_effects_started:
+                if ui_presealed and self._runtime_mutation_operation is None:
+                    try:
+                        self._set_runtime_mutation_ui_sealed(False)
+                    except Exception as restore_error:
+                        print(
+                            "Shutdown UI restoration warning: "
+                            f"{type(restore_error).__name__}: {restore_error}"
+                        )
+                if guard_acquired_here and shutdown_guard is not None:
+                    shutdown_guard.release()
+                self._shutdown_guard = None
+                self._shutdown_retry_required = False
+            else:
+                self._shutdown_guard = shutdown_guard
+                self._shutdown_retry_required = True
+            self._session_shutdown_in_progress = False
+            raise
+
+    def _finish_async_shutdown(self, result):
+        if self._async_shutdown_result_handled:
+            return
+        self._async_shutdown_result_handled = True
+        self._session_shutdown_report = result
+        for failure in getattr(result, "failures", ()):
+            print(f"Device shutdown warning: {failure.describe()}")
+        error = getattr(result, "error", None)
+        succeeded = bool(getattr(result, "succeeded", error is None))
+        self._session_shutdown_in_progress = False
+        if not succeeded:
+            # An uncommitted teardown is retryable with the exact same manager
+            # reservation.  Releasing it here would reopen calls against a UI
+            # whose ScanList and auxiliary windows are already shut down.
+            self._shutdown_retry_required = True
+            self._shutdown_operation = None
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Shutdown Delayed",
+                "Equipment shutdown did not complete safely: "
+                f"{error or 'device lifecycle failure'}",
+            )
+            return
+
+        self._session_shutdown_complete = True
+        self._shutdown_retry_required = False
+        self._shutdown_guard = None
+        print("Main Window terminated.")
+        QtCore.QTimer.singleShot(0, self.close)
 
 
     def closeEvent(self, event: QtGui.QCloseEvent):          # <- keep the type
+        if self._session_shutdown_complete:
+            event.accept()
+            return
+        if self._session_shutdown_in_progress:
+            event.ignore()
+            return
+
         reply = QtWidgets.QMessageBox.question(
             self,
             "Confirm Exit",
@@ -1796,17 +2655,25 @@ class MainWindow(QtWidgets.QWidget):
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             try:
+                if callable(
+                    getattr(self.device_manager, "teardown_all_async", None)
+                ):
+                    self._start_async_shutdown()
+                    event.ignore()
+                    return
                 self.shutdown_session()
             except (
                 DeviceLifecycleError,
+                DeviceManagerError,
+                DeviceCatalogError,
                 ScanListShutdownTimeoutError,
                 ScanListShutdownStopError,
             ) as exc:
                 QtWidgets.QMessageBox.critical(
                     self,
                     "Shutdown Delayed",
-                    "Equipment was not disconnected because safe scan "
-                    f"shutdown did not complete: {exc}",
+                    "Equipment shutdown did not begin because safe quiescence "
+                    f"could not be proven: {exc}",
                 )
                 event.ignore()
                 return

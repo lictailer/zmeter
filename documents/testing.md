@@ -51,13 +51,29 @@ python -B -m unittest discover -s tests -p "test_*.py" -v
 - Hardware: none after confirming the suite continues to use core stubs/mocks only.
 - Typical runtime: seconds.
 - Writes: no intentional lab data; Qt/platform caches may depend on environment.
-- Proves: covered artificial-channel range/skip/ramp, scan-abort, and force-stop flag behavior.
+- Proves: covered artificial-channel range/skip/ramp, scan-abort,
+  force-stop, startup/profile, catalog, and manager/runtime-session behavior.
 
 The core suite also includes offscreen catalog transaction tests. They exercise
 repeated refresh, synthetic add/remove, reference refusal, consumer rollback,
 device-button reconciliation, router publication, range-limit visibility, and
 the available/queue/manual/past/template scan consumers without loading a real
 driver.
+
+Phase 6 manager/UI coverage is available independently with:
+
+```powershell
+python -B -m unittest tests.test_device_manager_runtime_mutation -v
+python -B -m unittest tests.test_runtime_device_ui -v
+```
+
+These suites use fakes and the in-process mock only. They cover generation-bound
+call rejection, whole-router-request and scan/queue/manual activity leases,
+idle/busy refusal, session-only add/disconnect/remove, slow lifecycle worker UI
+responsiveness and thread affinity, exact reference refusal, two-phase catalog
+acknowledgement/reconciliation, cleanup quarantine and delete retry, injected
+worker-dispatch failures, and asynchronous application teardown. They do not
+load a vendor runtime or validate physical equipment.
 
 ### Mock-device tests
 

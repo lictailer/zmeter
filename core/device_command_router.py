@@ -87,6 +87,51 @@ class DeviceCommandRouter(QtCore.QObject):
                 error_message=f"Unsupported action '{action}'.",
             )
 
+        try:
+            # The manager lease starts before catalog lookup and remains held
+            # through validation, execution, and response construction.  This
+            # makes list/read/write one linearizable request boundary.
+            with self.main_window.device_request_session() as device_snapshot:
+                return self._route_with_device_session(
+                    request_id=request_id,
+                    source_device=source_device,
+                    action=action,
+                    target_device=target_device,
+                    channel=channel,
+                    value=value,
+                    device_snapshot=device_snapshot,
+                )
+        except Exception as exc:
+            return self._make_error_response(
+                request_id=request_id,
+                source_device=source_device,
+                action=action,
+                target_device=target_device,
+                channel=channel,
+                error_code=self._execution_error_code(exc),
+                error_message=str(exc),
+            )
+
+    def _route_with_device_session(
+        self,
+        *,
+        request_id,
+        source_device,
+        action,
+        target_device,
+        channel,
+        value,
+        device_snapshot,
+    ):
+        session_generation = int(getattr(device_snapshot, "generation", 0))
+        applied_snapshot = getattr(self.main_window, "_applied_device_snapshot", None)
+        applied_generation = int(getattr(applied_snapshot, "generation", 0))
+        if session_generation != applied_generation:
+            raise RuntimeError(
+                "device catalog is not synchronized with the active manager "
+                f"generation ({applied_generation} != {session_generation})"
+            )
+
         catalog = self.main_window.get_device_channel_catalog()
 
         if action == "list_catalog":
@@ -176,7 +221,7 @@ class DeviceCommandRouter(QtCore.QObject):
                 action=action,
                 target_device=target_device,
                 channel=channel,
-                error_code="execution_error",
+                error_code=self._execution_error_code(exc),
                 error_message=str(exc),
             )
 
@@ -189,6 +234,29 @@ class DeviceCommandRouter(QtCore.QObject):
             value=result_value,
             catalog=None,
         )
+
+    @staticmethod
+    def _execution_error_code(error):
+        if type(error).__name__ in {
+            "DeviceCallRejectedError",
+            "StaleDeviceGenerationError",
+            "DeviceUnavailableError",
+            "DeviceManagerBusyError",
+            "DeviceActivityRejectedError",
+        }:
+            return "device_unavailable"
+        message = str(error).lower()
+        if any(
+            marker in message
+            for marker in (
+                "runtime device mutation",
+                "device is removing",
+                "device was removed",
+                "stale device generation",
+            )
+        ):
+            return "device_unavailable"
+        return "execution_error"
 
     def publish_catalog(self, catalog: dict) -> None:
         self.sig_catalog_changed.emit(deepcopy(catalog))
