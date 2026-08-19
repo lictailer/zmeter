@@ -1,5 +1,5 @@
 import time
-import opticool.opticool_dll_solve_olefail as opticool_dll_solve_olefail # to solve the ole initialize error.
+from . import opticool_dll_solve_olefail  # to solve the ole initialize error.
 import clr  # pythonnet required
 
 

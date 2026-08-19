@@ -1,4 +1,6 @@
 # from distutils.command.build_scripts import first_line_re
+from pathlib import Path
+
 from PyQt6 import QtWidgets, uic
 import sys
 from datetime import datetime
@@ -8,7 +10,7 @@ from .opticool_logic import OptiCool_Logic
 class OptiCool(QtWidgets.QWidget):
     def __init__(self):
         super(OptiCool, self).__init__()
-        uic.loadUi("opticool/opticool.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("opticool.ui")), self)
         self.logic = OptiCool_Logic()
         self.connect_sig_slot()
         self.connectionStatus_label.setText("Connecting Status: False")

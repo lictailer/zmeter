@@ -1,4 +1,4 @@
-import opticool.opticool_dll as opticool_dll
+from . import opticool_dll
 import QuantumDesign
 import System
 
@@ -90,4 +90,3 @@ if __name__ == "__main__":
     if o.connect_hardware():
         print(o.get_field())
         print(o.get_temperature())
-    
