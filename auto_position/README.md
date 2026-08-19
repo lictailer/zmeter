@@ -4,7 +4,7 @@
 
 `auto_position` is a standalone, experimental galvo/photodiode positioning prototype. It is not a current ZMeter device integration: the widget has no `.logic` object, uses PyQt5 while ZMeter uses PyQt6, imports `nidaq_hardware` as a top-level module, and loads its UI from the process working directory.
 
-Do not register it in `create_equipment()` in its present form.
+Do not add it to the reviewed driver registry or select it in a profile in its present form.
 
 ## Current behavior
 

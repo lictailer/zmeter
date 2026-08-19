@@ -43,8 +43,8 @@ configuration and verify it before connecting.
         "delay_stage": ["pos_mm", "pos_um", "delay_ps"],
     }
 
-The checked-in start_zmeter.py remains mock-only. Do not add lab serials or
-enable this device in the shared startup profile.
+The checked-in default profile remains mock-only. Do not add lab serials or
+enable this device in a shared profile.
 
 ## Connection and motion parameters
 

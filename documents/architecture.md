@@ -12,7 +12,8 @@ The checked-in startup path is:
 start_zmeter.py
   -> QApplication
   -> RuntimeServices (lazy VisaRuntime + KinesisRuntime)
-  -> create_equipment()
+  -> validated profile + reviewed lazy DriverRegistry
+  -> DeviceManager
   -> MainWindow
        -> device discovery and command router
        -> ScanList
@@ -20,7 +21,8 @@ start_zmeter.py
                  -> ScanLogic
 ```
 
-- `start_zmeter.py` is the active profile/entry point. It selects device widgets, labels, optional channel filters, save paths, and backup configuration. The checked-in profile instantiates only mock devices.
+- `start_zmeter.py` is a thin entry point. It selects a profile path, validates it against the reviewed registry, creates one manager, and supplies profile paths plus the manager snapshot to `MainWindow`. It contains no device imports, addresses, serials, or channel lists. The checked-in default profile instantiates only disconnected mock devices.
+- `DeviceManager` is the single owner of enabled device instances and ordered lifecycle records. Profile loading and final QWidget teardown run on its UI-owner thread; normal scan start/stop/force calls retain their existing worker ownership. Startup load is transactional, and final shutdown aggregates failures without releasing shared runtimes under a device that failed to terminate.
 - The startup/profile boundary owns one `RuntimeServices` provider. Enabled
   VISA devices receive `provider.visa`; K10CR1 and BBD30X receive
   `provider.kinesis`. Devices terminate before provider shutdown.
@@ -28,7 +30,7 @@ start_zmeter.py
   schedule worker-thread discovery for the next Qt event-loop turn; this may
   create the shared manager but does not open a device session. Kinesis
   validation, `clr`, DLL loading, and device connections remain explicit.
-- `MainWindow` owns the registered equipment map, discovered scan channels, global range configuration, artificial channels, the shared `DeviceCommandRouter`, and application shutdown.
+- `MainWindow` consumes the manager's initial ordered snapshot and currently owns discovered scan catalogs, global range configuration, artificial channels, the shared `DeviceCommandRouter`, and scan-quiescence coordination. Runtime catalog rebuilding is introduced in a later focused phase.
 - `ScanList` owns available, queued, manual, and completed items. Its worker runs queue items sequentially and exposes stop-now and stop-after-current behavior.
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.
 - `ScanLogic` owns scan traversal, per-level data arrays, grouped scan I/O, timing, pause/stop checkpoints, progress, and autosave triggers.
@@ -50,7 +52,7 @@ other.
 
 ## Thread boundaries
 
-The Qt GUI thread owns widgets, screen capture, plot presentation, dialogs, and GUI-driven save/export finalization. `ScanLogic` is a `QThread`; it performs scan traversal and delegates per-device reads/writes to `ThreadPoolExecutor` workers. The queue also has a worker thread. Individual devices may provide their own worker threads for long operations.
+The Qt GUI thread owns widgets, screen capture, plot presentation, dialogs, GUI-driven save/export finalization, device construction, and final device-widget teardown. `ScanLogic` is a `QThread`; it performs scan traversal and delegates per-device reads/writes to `ThreadPoolExecutor` workers. The queue also has a worker thread. Individual devices may provide their own worker threads for long operations. Application shutdown seals new scan starts and waits for direct/queued workers plus deferred GUI output finalizers before device teardown; its deadline is cooperative for a GUI callback already executing.
 
 Do not block the GUI thread with device I/O, polling loops, ramps, or long waits. Cross-thread UI updates must use signals/slots. Device code must document thread ownership and serialize access if the transport is not safe for concurrent calls.
 
@@ -86,7 +88,8 @@ The scan editor constructs ordered level dictionaries and setting arrays. At sta
 
 | Change | Primary area | Required review |
 | --- | --- | --- |
-| Startup equipment/profile or paths | `start_zmeter.py` | README, environment, safety |
+| Startup devices, labels, filters, or paths | selected file under `config/profiles/` plus a reviewed registry entry when needed | README, environment, safety |
+| Launcher/profile-selection behavior | `start_zmeter.py` | profile validation and shutdown tests |
 | App ownership, discovery, routing, shutdown | `core/mainWindow.py`, `core/device_command_router.py` | device contract, safety |
 | Queue behavior | `core/scanlist.py` | scan lifecycle and shutdown |
 | Scan UI, plots, save/load | `core/scan.py`, plot/level widgets | scan engine, data format |

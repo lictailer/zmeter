@@ -39,7 +39,7 @@ Install only the components required by the selected lab profile. Device-local R
 
 ## Mock-only setup
 
-No instrument driver is required for the checked-in mock profile. Verify `start_zmeter.py` imports/instantiates only `MockDevice`, leave real-device connection code disabled, then run:
+No instrument driver is required for the checked-in mock profile. Verify `config/profiles/mock.json` enables only the two `mock_device` entries with startup connection disabled, then run:
 
 ```powershell
 python start_zmeter.py
@@ -49,7 +49,9 @@ The mock device is an in-process simulator and does not use PyVISA or discover p
 
 ## Configuration and paths
 
-The current startup profile is `start_zmeter.py`. It controls registered device labels, constructors, optional channel filters, local save path, and backup root. Real addresses, serial numbers, NI names, credentials, and lab paths must remain in profile/configuration boundaries and must not be generalized into core code or canonical docs.
+The default startup profile is `config/profiles/mock.json`. Select an ignored reviewed local profile with `python start_zmeter.py --profile config/profiles/name.local.json`. Relative profile filenames and configured output paths resolve from the repository root. An invalid selected profile fails without falling back to the mock profile.
+
+Profiles control registered device labels, declared connection values, startup-connection policy, optional channel filters, local save path, and backup root. A code-reviewed registry entry controls actual construction, runtime injection, and lifecycle adaptation; disabled entries are never constructed. Real addresses, serial numbers, NI names, credentials, and lab paths must remain in ignored local profiles and must not be generalized into core code or canonical docs.
 
 `scan_range_limits.json` is loaded from the repository root by default. UI files are loaded relative to the current working directory. The environment YAML contains a machine-specific exported `prefix`; Conda normally creates the named environment from `name`, and maintainers should review/remove hardcoded export prefixes when regenerating the file.
 

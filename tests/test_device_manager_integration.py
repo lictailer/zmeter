@@ -3,6 +3,10 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from dataclasses import replace
+from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -13,15 +17,26 @@ from PyQt6 import QtWidgets
 import start_zmeter
 from core.mainWindow import MainWindow
 from core.device_management import (
+    ChannelFilters,
     DeviceLifecycleError,
+    DeviceManager,
     DeviceStartupError,
     LifecycleFailure,
     LifecycleReport,
+    build_default_registry,
 )
 from core.scan import Scan
 from core.scan_info import ScanInfo
 from core.scanlist import ScanListShutdownTimeoutError
 from core.shared_runtime import RuntimeServices
+
+
+class _ArgumentApplication:
+    def __init__(self, argv):
+        self._argv = list(argv)
+
+    def arguments(self):
+        return list(self._argv)
 
 
 class DeviceManagerMainWindowTests(unittest.TestCase):
@@ -34,7 +49,9 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         self.addCleanup(self.temp_directory.cleanup)
         self.services = RuntimeServices()
         self.addCleanup(self.services.shutdown)
-        self.manager = start_zmeter.create_device_manager(self.services)
+        self.profile, self.manager = start_zmeter.create_profile_session(
+            self.services
+        )
         self.window = MainWindow(
             info=ScanInfo,
             save_path=self.temp_directory.name,
@@ -106,6 +123,72 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         )
         self.assertFalse(self.services.visa.diagnostics["manager_created"])
         self.assertFalse(self.services.kinesis.diagnostics["validated"])
+
+    def test_profile_filter_silently_skips_unknown_channels_end_to_end(self):
+        filtered_config = replace(
+            self.profile.devices[0],
+            id="filtered_mock",
+            scan_channels=ChannelFilters(
+                setters=("missing_setter", "channel_A"),
+                getters=("channel_B", "missing_getter"),
+            ),
+        )
+        filtered_profile = replace(
+            self.profile,
+            profile="filtered",
+            devices=(filtered_config,),
+        )
+        manager = DeviceManager(build_default_registry(), self.services)
+        manager.load_profile(filtered_profile)
+        window = MainWindow(
+            info=ScanInfo,
+            save_path=self.temp_directory.name,
+            backup_main_path=None,
+            device_manager=manager,
+        )
+
+        try:
+            self.assertEqual(
+                manager.snapshot().setter_filters["filtered_mock"],
+                ("missing_setter", "channel_A"),
+            )
+            self.assertEqual(
+                window.setter_equipment_info["filtered_mock"],
+                ["channel_A"],
+            )
+            self.assertEqual(
+                window.getter_equipment_info["filtered_mock"],
+                ["channel_B"],
+            )
+            self.assertEqual(
+                window.get_device_channel_catalog()["filtered_mock"],
+                {"readable": ["channel_B"], "writable": ["channel_A"]},
+            )
+        finally:
+            window.shutdown_session()
+            window.hide()
+            window.deleteLater()
+            self.app.processEvents()
+
+    def test_unknown_launcher_option_is_rejected_before_runtime_creation(self):
+        stderr = StringIO()
+        with (
+            mock.patch.object(
+                start_zmeter.QtWidgets,
+                "QApplication",
+                _ArgumentApplication,
+            ),
+            mock.patch.object(start_zmeter, "RuntimeServices") as runtime_type,
+            redirect_stderr(stderr),
+        ):
+            with self.assertRaises(SystemExit) as caught:
+                start_zmeter.main(
+                    ["--profle", "config/profiles/session.local.json"]
+                )
+
+        self.assertEqual(caught.exception.code, 2)
+        runtime_type.assert_not_called()
+        self.assertIn("unrecognized arguments", stderr.getvalue())
 
     def test_close_confirmation_no_preserves_session_and_yes_tears_down(self):
         event = SimpleNamespace(
@@ -268,11 +351,91 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
 
 
 class LauncherTeardownTests(unittest.TestCase):
+    @staticmethod
+    def _profile(*, save="profile-save", backup=None):
+        return SimpleNamespace(
+            paths=SimpleNamespace(save=Path(save), backup=backup)
+        )
+
+    def test_launch_options_select_default_or_explicit_repository_relative_profile(self):
+        options = start_zmeter._parse_launch_options([])
+        self.assertEqual(options.profile, start_zmeter.DEFAULT_PROFILE_PATH)
+
+        options = start_zmeter._parse_launch_options(
+            [
+                "--profile",
+                "config/profiles/session.local.json",
+            ]
+        )
+        self.assertEqual(
+            options.profile,
+            Path("config/profiles/session.local.json"),
+        )
+
+        with redirect_stderr(StringIO()):
+            with self.assertRaises(SystemExit):
+                start_zmeter._parse_launch_options(
+                    ["--profle", "config/profiles/session.local.json"]
+                )
+
+    def test_invalid_selected_profile_is_visible_and_never_falls_back(self):
+        events = []
+
+        class FakeApplication(_ArgumentApplication):
+            def __init__(self, _argv):
+                super().__init__(_argv)
+                events.append("app")
+
+        class FakeRuntimeServices:
+            def shutdown(self):
+                events.append("runtime_shutdown")
+                return {}
+
+        with tempfile.TemporaryDirectory() as directory:
+            selected_path = Path(directory) / "missing.local.json"
+            stderr = StringIO()
+            with (
+                mock.patch.object(
+                    start_zmeter.QtWidgets,
+                    "QApplication",
+                    FakeApplication,
+                ),
+                mock.patch.object(
+                    start_zmeter,
+                    "RuntimeServices",
+                    FakeRuntimeServices,
+                ),
+                mock.patch.object(start_zmeter, "DeviceManager") as manager_type,
+                mock.patch.object(start_zmeter, "MainWindow") as main_window,
+                mock.patch.object(
+                    start_zmeter.QtWidgets.QMessageBox,
+                    "critical",
+                ) as critical,
+                redirect_stderr(stderr),
+            ):
+                result = start_zmeter.main(
+                    ["--profile", str(selected_path)]
+                )
+
+        self.assertEqual(result, 2)
+        self.assertEqual(events, ["app", "runtime_shutdown"])
+        manager_type.assert_not_called()
+        main_window.assert_not_called()
+        message = stderr.getvalue()
+        self.assertIn("Invalid ZMeter profile", message)
+        self.assertIn(str(selected_path), message)
+        critical.assert_called_once_with(
+            None,
+            "Invalid ZMeter Profile",
+            message.strip(),
+        )
+
     def _run_launcher_failure(self, *, window_construction_fails):
         events = []
 
-        class FakeApplication:
+        class FakeApplication(_ArgumentApplication):
             def __init__(self, _argv):
+                super().__init__(_argv)
                 events.append("app")
 
             def exec(self):
@@ -291,11 +454,19 @@ class LauncherTeardownTests(unittest.TestCase):
         manager.force_stop_all.side_effect = lambda: events.append(
             "manager_force_stop"
         ) or SimpleNamespace(failures=())
+        profile = self._profile()
 
         class FakeWindow:
-            def __init__(self, **_kwargs):
+            def __init__(self, **kwargs):
                 if window_construction_fails:
                     raise RuntimeError("window construction failed")
+                events.append(
+                    (
+                        "window_paths",
+                        kwargs["save_path"],
+                        kwargs["backup_main_path"],
+                    )
+                )
 
             def show(self):
                 events.append("show")
@@ -311,19 +482,21 @@ class LauncherTeardownTests(unittest.TestCase):
             mock.patch.object(start_zmeter, "RuntimeServices", FakeRuntimeServices),
             mock.patch.object(
                 start_zmeter,
-                "create_device_manager",
-                return_value=manager,
+                "create_profile_session",
+                return_value=(profile, manager),
             ),
             mock.patch.object(start_zmeter, "MainWindow", FakeWindow),
         ):
             with self.assertRaises(RuntimeError):
-                start_zmeter.main()
+                start_zmeter.main([])
 
         return events
 
     def test_event_loop_failure_quiesces_window_before_manager_and_runtime(self):
         events = self._run_launcher_failure(window_construction_fails=False)
 
+        self.assertIn(("window_paths", "profile-save", None), events)
+        self.assertIn(("title", "Main Window"), events)
         self.assertLess(events.index("window_shutdown"), events.index("manager_teardown"))
         self.assertLess(events.index("manager_teardown"), events.index("runtime_shutdown"))
 
@@ -336,9 +509,9 @@ class LauncherTeardownTests(unittest.TestCase):
     def test_unquiesced_event_loop_exit_skips_manager_and_runtime_teardown(self):
         events = []
 
-        class FakeApplication:
+        class FakeApplication(_ArgumentApplication):
             def __init__(self, _argv):
-                pass
+                super().__init__(_argv)
 
             def exec(self):
                 return 0
@@ -375,13 +548,13 @@ class LauncherTeardownTests(unittest.TestCase):
             mock.patch.object(start_zmeter, "RuntimeServices", FakeRuntimeServices),
             mock.patch.object(
                 start_zmeter,
-                "create_device_manager",
-                return_value=manager,
+                "create_profile_session",
+                return_value=(self._profile(), manager),
             ),
             mock.patch.object(start_zmeter, "MainWindow", FakeWindow),
         ):
             with self.assertRaises(ScanListShutdownTimeoutError):
-                start_zmeter.main()
+                start_zmeter.main([])
 
         self.assertEqual(
             events,
@@ -395,27 +568,27 @@ class LauncherTeardownTests(unittest.TestCase):
     def test_manager_load_failure_still_releases_shared_runtimes(self):
         events = []
 
-        class FakeApplication:
+        class FakeApplication(_ArgumentApplication):
             def __init__(self, _argv):
-                pass
+                super().__init__(_argv)
 
         class FakeRuntimeServices:
             def shutdown(self):
                 events.append("runtime_shutdown")
                 return {}
 
-        def fail_load(_services):
+        def fail_load(_services, _profile_path):
             events.append("manager_load_failed")
             raise RuntimeError("profile load failed")
 
         with (
             mock.patch.object(start_zmeter.QtWidgets, "QApplication", FakeApplication),
             mock.patch.object(start_zmeter, "RuntimeServices", FakeRuntimeServices),
-            mock.patch.object(start_zmeter, "create_device_manager", fail_load),
+            mock.patch.object(start_zmeter, "create_profile_session", fail_load),
             mock.patch.object(start_zmeter, "MainWindow") as main_window,
         ):
             with self.assertRaisesRegex(RuntimeError, "profile load failed"):
-                start_zmeter.main()
+                start_zmeter.main([])
 
         main_window.assert_not_called()
         self.assertEqual(events, ["manager_load_failed", "runtime_shutdown"])
@@ -423,9 +596,9 @@ class LauncherTeardownTests(unittest.TestCase):
     def test_window_construction_teardown_failure_keeps_runtime_alive(self):
         events = []
 
-        class FakeApplication:
+        class FakeApplication(_ArgumentApplication):
             def __init__(self, _argv):
-                pass
+                super().__init__(_argv)
 
         class FakeRuntimeServices:
             def shutdown(self):
@@ -452,22 +625,22 @@ class LauncherTeardownTests(unittest.TestCase):
             mock.patch.object(start_zmeter, "RuntimeServices", FakeRuntimeServices),
             mock.patch.object(
                 start_zmeter,
-                "create_device_manager",
-                return_value=manager,
+                "create_profile_session",
+                return_value=(self._profile(), manager),
             ),
             mock.patch.object(start_zmeter, "MainWindow", FailingWindow),
         ):
             with self.assertRaisesRegex(RuntimeError, "window construction failed"):
-                start_zmeter.main()
+                start_zmeter.main([])
 
         self.assertEqual(events, ["manager_teardown"])
 
     def test_startup_rollback_failure_keeps_runtime_alive(self):
         events = []
 
-        class FakeApplication:
+        class FakeApplication(_ArgumentApplication):
             def __init__(self, _argv):
-                pass
+                super().__init__(_argv)
 
         class FakeRuntimeServices:
             def shutdown(self):
@@ -496,13 +669,13 @@ class LauncherTeardownTests(unittest.TestCase):
             mock.patch.object(start_zmeter, "RuntimeServices", FakeRuntimeServices),
             mock.patch.object(
                 start_zmeter,
-                "create_device_manager",
+                "create_profile_session",
                 side_effect=startup_error,
             ),
             mock.patch.object(start_zmeter, "MainWindow") as main_window,
         ):
             with self.assertRaises(DeviceStartupError):
-                start_zmeter.main()
+                start_zmeter.main([])
 
         main_window.assert_not_called()
         self.assertEqual(events, [])
@@ -510,9 +683,9 @@ class LauncherTeardownTests(unittest.TestCase):
     def test_unexpected_window_shutdown_error_is_not_swallowed(self):
         events = []
 
-        class FakeApplication:
+        class FakeApplication(_ArgumentApplication):
             def __init__(self, _argv):
-                pass
+                super().__init__(_argv)
 
             def exec(self):
                 return 0
@@ -549,13 +722,13 @@ class LauncherTeardownTests(unittest.TestCase):
             mock.patch.object(start_zmeter, "RuntimeServices", FakeRuntimeServices),
             mock.patch.object(
                 start_zmeter,
-                "create_device_manager",
-                return_value=manager,
+                "create_profile_session",
+                return_value=(self._profile(), manager),
             ),
             mock.patch.object(start_zmeter, "MainWindow", FakeWindow),
         ):
             with self.assertRaisesRegex(ValueError, "auxiliary close failed"):
-                start_zmeter.main()
+                start_zmeter.main([])
 
         self.assertEqual(events, ["unexpected_shutdown_error"])
 

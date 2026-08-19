@@ -4,7 +4,7 @@
 
 This directory contains a single vendored pyLabLib-derived ANC300 controller source file. It is not currently a ZMeter device package: there is no package initializer, widget, scan-facing logic layer, UI, or startup registration, and `ANC300_pyLabLib` has no `.py` extension. Its relative imports expect the surrounding pyLabLib package and do not resolve from this directory alone.
 
-Treat it as implementation reference only. Do not add it to `create_equipment()` without first building a normal three-layer integration and validating the dependency and licensing decisions.
+Treat it as implementation reference only. Do not add a registry entry or select it in a profile without first building a normal three-layer integration and validating the dependency and licensing decisions.
 
 ## Represented hardware
 

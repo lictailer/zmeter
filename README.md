@@ -84,9 +84,9 @@ The expected Python series is 3.12; the current environment file pins Python 3.1
 
 ## Safe first launch with mock devices
 
-The following procedure exercises only the simulated devices in the current startup configuration.
+The following procedure exercises only the simulated devices in the checked-in default profile.
 
-1. Review `start_zmeter.py` and confirm that only `MockDevice` imports and instances are active. Real instrument imports and connection calls must remain commented for this first launch.
+1. Review `config/profiles/mock.json` and confirm that it enables only the two `mock_device` entries with `connect_on_start` set to `false`.
 2. Activate `zmeter_May2026`.
 3. From the repository root, launch:
 
@@ -101,21 +101,29 @@ The following procedure exercises only the simulated devices in the current star
 
 The mock device offers direct and ramped A/B setters, A/B and random getters, deterministic fault injection, optional range rejection, and a bounded command log. It does not use PyVISA or communicate with physical equipment.
 
+To select a different reviewed local profile, pass its repository-relative or absolute path explicitly:
+
+```powershell
+python start_zmeter.py --profile config/profiles/my-lab.local.json
+```
+
+An invalid selected profile fails visibly and is never replaced silently with the mock profile.
+
 ## Configuring a laboratory setup
 
-Laboratory equipment is currently selected in `start_zmeter.py`. Configuration includes:
+Session configuration is selected by a validated JSON profile. It includes:
 
-- imports for the device widgets used in that setup;
 - stable labels for each device instance;
-- connection calls and addresses or serial numbers;
+- reviewed registry driver IDs and declared connection fields;
+- whether an enabled device may connect during startup;
 - optional setter/getter channel filters;
 - local measurement and backup paths.
-- one `RuntimeServices` provider whose `.visa` or `.kinesis` service is passed
-  to every enabled device in that family.
+
+`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in registry currently enables the hardware-safe `mock_device` path only; source packages listed below are not automatically profile-ready.
 
 Before enabling hardware:
 
-1. Create or update a laboratory-specific startup/profile change without deleting the mock setup.
+1. Copy `config/profiles/example_lab.json` to an ignored `*.local.json` profile without changing the checked-in mock default.
 2. Confirm the exact instrument model, interface, address, units, limits, and required vendor runtime.
 3. Verify that each enabled device implements coherent connect, scan start/stop, force-stop, disconnect, termination, and close behavior.
 4. Review `scan_range_limits.json` and ensure its device labels match the configured equipment labels.
@@ -191,8 +199,10 @@ These checks provide static, unit, mock/simulation, or offscreen-GUI evidence on
 ## Project layout
 
 ```text
-start_zmeter.py                 Startup configuration and application entry point
+start_zmeter.py                 Thin profile-selecting application entry point
+config/profiles/                Checked mock profile and ignored local-profile boundary
 core/                           Scan UI, queue, execution, plotting, routing, and persistence
+core/device_management/         Profile loading, reviewed registry, manager ownership
 core/shared_runtime/            Shared VISA/Kinesis ownership and local vendor manifests
 mockDevice/                     Hardware-independent simulated instrument and its tests
 <device>/                       Device-specific widget, logic, hardware, and UI files

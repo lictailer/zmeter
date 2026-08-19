@@ -10,21 +10,24 @@ This file is the maintained source for current project structure, module relatio
 start_zmeter.py
   -> PyQt6 QApplication
   -> core.shared_runtime.RuntimeServices
-  -> create_equipment()
+  -> core.device_management.load_profile()
+  -> reviewed DriverRegistry -> DeviceManager
   -> core.mainWindow.MainWindow
        -> core.scanlist.ScanList
             -> core.scan.Scan
                  -> core.scan_logic.ScanLogic
 ```
 
-The checked-in startup profile instantiates two `mockDevice.MockDevice` widgets. Real-device imports and connection examples are disabled. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; `core/scan_logic_old.py` is retained source but is not on the active path.
+The checked-in `config/profiles/mock.json` profile instantiates two disconnected `mockDevice.MockDevice` widgets through the lazy reviewed registry. `start_zmeter.py` contains no device-specific imports or connection values. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; `core/scan_logic_old.py` is retained source but is not on the active path.
 
 ## Maintained layout
 
 | Path | Current responsibility |
 | --- | --- |
-| `start_zmeter.py` | Startup/profile selection, device instances/labels, filters, save and backup paths |
-| `core/mainWindow.py` | App ownership, discovery, routing, range checks, global lifecycle and shutdown |
+| `start_zmeter.py` | Thin command-line profile selection and application/session orchestration |
+| `config/` | Validated checked-in mock profile, examples, and ignored local-profile boundary |
+| `core/device_management/` | Immutable profile models, validation, reviewed lazy registry, device ownership and lifecycle reports |
+| `core/mainWindow.py` | App UI, catalog discovery, routing, range checks, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queued/manual/past items and sequential queue execution |
 | `core/scan.py` | Scan editor/window, plot updates, run logging, save/load/PPT/autosave UI integration |
 | `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
