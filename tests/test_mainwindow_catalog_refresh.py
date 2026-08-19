@@ -12,7 +12,7 @@ import numpy as np
 from PyQt6 import QtWidgets
 
 import start_zmeter
-from autofocus_xuguo.autofocusXZ_hardware import AutoPositionXZHardware
+from devices.autofocus_xuguo.autofocusXZ_hardware import AutoPositionXZHardware
 from core.device_catalog import (
     DeviceCatalogBusyError,
     DeviceCatalogError,
