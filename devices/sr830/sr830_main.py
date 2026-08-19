@@ -1,7 +1,8 @@
 import time
+from pathlib import Path
 from PyQt6 import QtWidgets, uic, QtCore
 import sys
-from sr830.sr830_logic import SR830_Logic
+from .sr830_logic import SR830_Logic
 import numpy as np
 import pyqtgraph as pg
 import pyvisa
@@ -12,7 +13,7 @@ class SR830(QtWidgets.QWidget):
     start_signal = QtCore.pyqtSignal()
     def __init__(self):
         super(SR830, self).__init__()
-        uic.loadUi("sr830/sr830.ui", self)
+        uic.loadUi(str(Path(__file__).with_name("sr830.ui")), self)
         w = pg.GraphicsLayoutWidget(show=True)
         w.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
         resource_manager = pyvisa.ResourceManager()
