@@ -607,3 +607,69 @@ Copy and complete:
 - Remaining risks: runtime mutation is approved only for the mock driver. A real registration remains ineligible until its busy probe, lifecycle worker safety, router detach/reference-provider contract, optional dependencies, and user-executed bench plan are reviewed. Router source-device authentication is future hardening and does not change the current trusted in-process command path. The cooperative deadline limitation for an already-running GUI callback remains unchanged.
 - Next authorized phase: Phase 7 — move packages under `devices/` mechanically, repairing imports and file-relative resources without enabling additional drivers.
 - User input required: None.
+
+## 2026-08-19 — Phase 7: device packages consolidated under `devices/`
+
+### Intended outcome
+
+- Acceptance criteria: every root-level device/source directory moves exactly once into an import-free `devices/` namespace; registry, tests, package imports, UI/resource paths, commands, and links resolve from the new location; no duplicate runnable package or compatibility shim remains; binary/source artifacts preserve identity; mock startup and scalar behavior remain unchanged.
+- Explicit non-goals: enabling an additional registry driver, changing device protocols or safety limits, normalizing legacy device behavior, loading optional vendor dependencies, persisting session mutations, array-valued getters, or physical-device validation.
+- Base commit: `20546d8`.
+- Related maintenance commits integrated: None.
+
+### Changes
+
+- Files added: import-free `devices/__init__.py`.
+- Files moved: 152 tracked files across 21 directories — `ANC300`, `auto_focus`, `auto_position`, `autofocus_xuguo`, `BBD30X`, `demoDevice`, `four9`, `hp34401a`, `k10cr1`, `keithley24xx`, `mockDevice`, `montana2`, `ni6423`, `nidaq`, `opticool`, `pem100`, `sp150`, `sr830`, `sr830_v2`, `sr860`, and `tlpm` — from the repository root to flat `devices/<package>/` subpackages.
+- Files modified: reviewed registry lazy import; affected package-relative imports and test imports; 13 CWD-sensitive UI paths; TLPM DLL resolution; fallback repository-root calculations; Montana nested import/path depth; focused tests; central/current documentation and 20 device READMEs.
+- Files removed: no source content was deleted; the former root package locations disappeared as part of detected renames.
+- API/config impact: import paths are now `devices.<package>...`. The default registry remains exactly `('mock_device',)` and imports `devices.mockDevice` only inside its lazy factory. Configuration/profile schema and checked profile bytes are unchanged.
+- Existing behavior impact: package moves are mechanical except for path/import resolution required to preserve construction from any working directory. Deferred automatic VISA discovery still schedules on the next Qt event-loop turn, and unknown configured channel names are still silently absent from exported allowlists. No compatibility shim or duplicate package was introduced.
+- Scan/data/schema impact: none. Scalar traversal, storage, plotting, output, autosave, JSON/PPT behavior, and scan definitions are unchanged.
+- Hardware/lifecycle impact: none. No device was discovered, connected, opened, configured, moved, read, written, stopped, or disconnected. Optional vendor imports and DLL loads remained dormant.
+- Documentation updated: root/agent commands, maintained structure and architecture, device contract/testing/tutorial/index, all affected device links/commands/import examples, corrected `auto_position` move-era status, and the previously omitted Four9 inventory.
+
+### Move and preservation details
+
+- All package moves were committed as reviewable namespace, mock, VISA, Four9, Kinesis, autofocus, NI, and high-risk legacy checkpoints. No root-level device directory remains.
+- UI resources are file-relative after the move. Direct-script local-import fallbacks were preserved where they remain part of a legacy package's standalone behavior; active package imports use relative or `devices.*` paths.
+- The extensionless ANC300 source remains 15,564 bytes, SHA-256 `20F39EB43BEEAC2FB445B02E59FDBFD3C78385EE51A0EEB9005A40C7F38DDF19`, Git blob `467dfa2084a56ad68a4dc4e4bee28f49c99dab83`.
+- `devices/tlpm/TLPM_64.dll` remains 712,632 bytes, SHA-256 `948920D2EDEA4B4ABADEBF4FA644740C880228A46E01629146F50E0A3951AA0C`, Git blob `2b9fadee64b8ccb0ee738070c800ff49f75be9ab`. It was hashed only and never loaded.
+- Dated investigation/implementation-plan documents, ADR historical context, archived material, earlier progress entries, and the preserved SR830 traceback were not retroactively rewritten.
+
+### Validation
+
+| Exact command/check | Environment | Evidence level | Result | Duration/output |
+| --- | --- | --- | --- | --- |
+| `python -X pycache_prefix=<external Phase 7 cache> -B -m py_compile <all devices/**/*.py>` | `zmeter_May2026` Python 3.12.12 | Static | 107 Python files compiled; one pre-existing Montana invalid-escape `SyntaxWarning`; redirected cache verified and removed | Exit 0 |
+| PowerShell XML parse of every `devices/**/*.ui` | Repository root | Static/resource | 20 UI files parsed | Passed |
+| `python -B -m unittest discover -s tests -p 'test_*.py' -q` | `zmeter_May2026`, offscreen where requested by tests | Hardware-independent unit/mock/offscreen GUI | Complete core suite passed 194 tests | 26.342 s |
+| `python -B -m unittest discover -s devices/mockDevice/tests -p 'test_*.py' -q` | `zmeter_May2026`, offscreen | Mock/simulation/offscreen GUI | 18 tests passed | 0.298 s |
+| Moved package suites for `four9`, `pem100`, `sp150`, `BBD30X`, and K10CR1 | `zmeter_May2026`, injected fakes/offscreen/local fake loopback only | Hardware-independent package integration | 20 + 10 + 12 + 20 + 10 = 72 tests passed | Passed |
+| `tests.test_nidaq_two_ao` and `tests.test_mainwindow_catalog_refresh` | `zmeter_May2026`, stubbed PyDAQmx/offscreen | Safe legacy-path and catalog regression | 22 tests passed | Passed |
+| Explicit deferred-VISA and silent-unknown-filter selectors | `zmeter_May2026`, fake VISA/offscreen | User-approved compatibility decisions | 4 tests passed | 0.995 s on the completed rerun |
+| Fresh-process default-registry import sentinel | `zmeter_May2026` | Import safety | Driver IDs exactly `('mock_device',)`; no `devices`, PyVISA, CLR, NI, or PyDAQmx module imported before factory use | Passed |
+| Directory/tracked-file/profile/binary inspection | Repository root | Structure/integrity | 21 exact child directories, 153 tracked `devices/` files including namespace, zero root duplicates; checked profile names, lengths, and SHA-256 unchanged; ANC/TLPM identities unchanged | Passed |
+| Markdown relative-link and current-path/import checks | Non-archive/current documentation | Documentation | Zero broken links and zero active stale root-package paths; Four9 present in all central inventories | Passed |
+| `git diff --check`, rename summaries, status, and staged-file review | Repository root | Static/inspection | Passed; only expected LF/CRLF conversion notices | None |
+
+- Validation incidents: the first verbose four-test compatibility selector stalled after starting the VISA-widget construction test and left one maintained-environment test process. That process was explicitly stopped; an immediate identical quiet selector completed 4/4 in 0.995 seconds, and the same test also passed inside the 194-test full suite. No hardware call occurred. This is consistent with the previously documented intermittent Qt test-timing race rather than a package-path failure.
+- Tests not run and reason: no physical-device test, real VISA enumeration, vendor SDK/DLL load, serial-port enumeration, NI device/task access, Kinesis/CLR load, cryostat/network action, or PowerPoint/COM hardware workflow was run. High-risk legacy packages received static/XML inspection only unless an existing injected-fake test was known safe.
+- User-executed hardware test status: Pending for any future real-driver eligibility review; no real driver is newly registered or enabled by this phase.
+
+### Inspection
+
+- `git diff --check`: Passed before each move/documentation commit, with line-ending notices only.
+- `git status --short --branch`: clean after the Phase 7 move and documentation commits; this progress entry is the only subsequent change.
+- Unexpected/unrelated changes: None.
+- Generated artifacts: the explicitly redirected Phase 7 compile cache was removed. Ignored pre-existing May-2026 `__pycache__` content moved with `ni6423` and `montana2`; it is not tracked or staged and was left intact rather than deleting user-local files.
+- Security/configuration review: checked profile files are byte-identical. No new address, serial, credential, private endpoint, measurement output, persistence schema, or array-getter work entered the phase. Existing device-local defaults and the tracked TLPM DLL were preserved, not executed.
+
+### Decision
+
+- Gate passed: Yes.
+- Commit(s): `42bcdd0` (namespace), `123c9e4` (VISA family), `3abe733` (mock), `0a3253c` (Four9), `4a0d569` (Kinesis family), `86f0ce0` (autofocus XZ), `0130d1b` (legacy NI/autofocus), `dea8ae7` (NI6423), `9a82785` (ANC300), `262ea14` (Montana), `14d707b` (legacy SR830), `f2bb6ad` (OptiCool), `91082c3` (TLPM), and `c797acc` (documentation).
+- Rollback method: revert the Phase 7 documentation and family move commits in reverse order, then the namespace commit; recovery tag remains `pre-structure-v2`.
+- Remaining risks: package presence still does not imply registry eligibility or hardware validation. Legacy direct-execution fallbacks and optional dependency behavior remain as documented. Six definitively dead root-device import comments and one redundant root-specific ignore rule remain for Phase 8 consolidation. The intermittent Qt VISA construction-test timing race is unchanged and passed on rerun/full-suite execution.
+- Next authorized phase: Phase 8 — remove only definitively dead restructure remnants, complete final documentation/inspection, run the full hardware-independent validation matrix, and prepare the user-executed hardware plan.
+- User input required: None.
