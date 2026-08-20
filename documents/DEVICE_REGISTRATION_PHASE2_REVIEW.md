@@ -159,9 +159,9 @@ The detailed Four9 sequence follows.
 8. Disconnect, reconnect once if approved, close the full application, and
    independently confirm the client socket is released and the cryostat/service
    remain in the intended final state.
-9. Return the Startup Log, device log, service log, observed pass/fail, cleanup
+9. Return the System Log, device log, service log, observed pass/fail, cleanup
    result, final state, and limitations for that exact installation.
 
 Only after the disconnected/manual-connect run passes should a separate local
 run set `connect_on_start=true`. That request is asynchronous; `Pending` in the
-Startup Log means the Four9 panel must be checked for the final result.
+System Log means the Four9 panel must be checked for the final result.

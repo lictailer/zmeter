@@ -6,7 +6,6 @@ from enum import Enum
 from functools import wraps
 import re
 from threading import Event, RLock, get_ident
-import traceback
 from types import MappingProxyType
 from typing import Callable, Iterable, Mapping
 import weakref
@@ -755,17 +754,7 @@ class DeviceManager(QtCore.QObject):
                     continue
                 try:
                     adapter = self._registry.create(config, self._runtime_services)
-                except (DriverConstructionError, DriverUnavailableError) as exc:
-                    failure = LifecycleFailure.from_exception(
-                        config.id,
-                        "construction",
-                        exc,
-                    )
-                    print(
-                        f"Startup device warning: {failure.describe()}; "
-                        "device skipped"
-                    )
-                    traceback.print_exception(exc)
+                except (DriverConstructionError, DriverUnavailableError):
                     startup_results.append(
                         StartupDeviceResult(
                             config.id,
@@ -849,14 +838,7 @@ class DeviceManager(QtCore.QObject):
                         "startup connection callback must return True, False, or None; "
                         f"received {result!r}"
                     )
-            except Exception as exc:
-                failure = LifecycleFailure.from_exception(
-                    record.config.id,
-                    "startup connection",
-                    exc,
-                )
-                print(f"Startup device warning: {failure.describe()}")
-                traceback.print_exception(exc)
+            except Exception:
                 self._replace_startup_result(
                     record.config.id,
                     StartupDeviceStatus.CONNECTION_FAILED,

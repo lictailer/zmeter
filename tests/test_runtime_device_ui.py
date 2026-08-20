@@ -4,7 +4,9 @@ import os
 import tempfile
 import threading
 import unittest
+from contextlib import redirect_stdout
 from dataclasses import replace
+from io import StringIO
 from types import SimpleNamespace
 from unittest import mock
 
@@ -204,6 +206,15 @@ class RuntimeDeviceUiTests(unittest.TestCase):
             self.assertTrue(operation_visible)
             self.assertTrue(ui_sealed)
             self.assertIsNotNone(rejection)
+        system_log = self.window.system_log.toPlainText()
+        self.assertEqual(
+            system_log.count("Runtime device mutation requested:"),
+            3,
+        )
+        self.assertEqual(
+            system_log.count("Runtime device mutation completed:"),
+            3,
+        )
 
     def test_scan_range_log_reports_load_summary_and_denied_write(self):
         initial_log = self.window.scan_range_window.log_plainTextEdit.toPlainText()
@@ -215,6 +226,7 @@ class RuntimeDeviceUiTests(unittest.TestCase):
             "guard": {"voltage": writes.append}
         }
         self.window.active_scan_range_limits = {("guard", "voltage"): (-1.0, 1.0)}
+        system_log_before = self.window.system_log.toPlainText()
         self.window.write_info(2.0, "guard_voltage")
 
         self.assertEqual(writes, [])
@@ -222,6 +234,24 @@ class RuntimeDeviceUiTests(unittest.TestCase):
         self.assertIn("[WARNING]", log_text)
         self.assertIn("Denied write 'guard_voltage'=2.0", log_text)
         self.assertIn("outside [-1.0, 1.0]", log_text)
+        self.assertEqual(
+            self.window.system_log.toPlainText(),
+            system_log_before,
+        )
+
+    def test_stale_catalog_notification_is_logged_without_terminal_output(self):
+        stale_snapshot = replace(
+            self.manager.snapshot(),
+            generation=self.manager.snapshot().generation + 1,
+        )
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            self.window._on_manager_catalog_changed(stale_snapshot)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn(
+            "Ignored stale manager catalog notification",
+            self.window.system_log.toPlainText(),
+        )
 
     def test_router_lease_spans_catalog_lookup_and_response_construction(self):
         observations = []
@@ -431,6 +461,15 @@ class RuntimeDeviceUiTests(unittest.TestCase):
         self.assertIsNone(self.window._operator_pending_mutation)
         terminate.assert_not_called()
         self.assertFalse(self.window.scanlist.runtime_mutation_sealed)
+        system_log = self.window.system_log.toPlainText()
+        self.assertEqual(
+            system_log.count("Runtime device mutation requested:"),
+            1,
+        )
+        self.assertEqual(
+            system_log.count("Runtime device mutation failed"),
+            1,
+        )
 
     def test_remove_pretermination_failure_reconciles_error_state_and_inert_target(self):
         target_widget = self.window.equips["mock_device_1"]
@@ -549,6 +588,9 @@ class RuntimeDeviceUiTests(unittest.TestCase):
             self.manager.snapshot().generation,
             self.window._applied_device_snapshot.generation,
         )
+        system_log = self.window.system_log.toPlainText()
+        self.assertIn("catalog acknowledgement failure", system_log)
+        self.assertIn("Runtime device mutation completed: reconcile", system_log)
 
     def test_scan_reservation_precedes_device_stop_and_releases_on_start_failure(self):
         scan = self.window.scanlist.list_available.get_widgets()[0].scan

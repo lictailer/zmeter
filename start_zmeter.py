@@ -64,6 +64,20 @@ def _close_startup_window(app, startup_window) -> None:
         process_events()
 
 
+def _report_system_or_stderr(window, level: str, message: str) -> None:
+    """Use the Main Window log while it exists, otherwise retain stderr."""
+
+    log_system_message = getattr(window, "log_system_message", None)
+    if callable(log_system_message):
+        try:
+            if log_system_message(level, message):
+                return
+        except RuntimeError:
+            # The QWidget may already have been deleted after the event loop.
+            pass
+    print(message, file=sys.stderr)
+
+
 def _parse_launch_options(argv):
     parser = argparse.ArgumentParser(description="Launch ZMeter")
     parser.add_argument(
@@ -173,18 +187,22 @@ def main(argv=None):
             try:
                 window.shutdown_session()
             except (ScanListShutdownTimeoutError, ScanListShutdownStopError) as first_exc:
-                print(
+                _report_system_or_stderr(
+                    window,
+                    "WARNING",
                     "Application shutdown warning: initial scan quiescence "
                     f"failed ({type(first_exc).__name__}: {first_exc}); "
-                    "requesting one final force-stop and retry."
+                    "requesting one final force-stop and retry.",
                 )
                 try:
                     if device_manager is not None:
                         force_report = device_manager.force_stop_all()
                         for failure in force_report.failures:
-                            print(
+                            _report_system_or_stderr(
+                                window,
+                                "ERROR",
                                 "Device force-stop warning: "
-                                f"{failure.describe()}"
+                                f"{failure.describe()}",
                             )
                     window.shutdown_session(timeout_ms=30_000)
                 except (
@@ -193,11 +211,13 @@ def main(argv=None):
                 ) as retry_exc:
                     safe_to_release_runtimes = False
                     pending_shutdown_error = retry_exc
-                    print(
+                    _report_system_or_stderr(
+                        window,
+                        "ERROR",
                         "Application shutdown warning: scan activity was not "
                         "safely quiesced after retry "
                         f"({type(retry_exc).__name__}: {retry_exc}). "
-                        "Device and shared-runtime teardown were skipped."
+                        "Device and shared-runtime teardown were skipped.",
                     )
 
         if (
@@ -206,12 +226,20 @@ def main(argv=None):
         ):
             safe_to_release_runtimes = False
             for failure in startup_error.cleanup_report.failures:
-                print(f"Startup rollback warning: {failure.describe()}")
+                _report_system_or_stderr(
+                    window,
+                    "ERROR",
+                    f"Startup rollback warning: {failure.describe()}",
+                )
 
         if device_manager is not None and safe_to_release_runtimes:
             report = device_manager.teardown_all()
             for failure in report.failures:
-                print(f"Device shutdown warning: {failure.describe()}")
+                _report_system_or_stderr(
+                    window,
+                    "ERROR",
+                    f"Device shutdown warning: {failure.describe()}",
+                )
             if report.failures:
                 safe_to_release_runtimes = False
 
@@ -220,7 +248,11 @@ def main(argv=None):
             for family in ("visa", "kinesis"):
                 error = diagnostics.get(f"{family}_error")
                 if error:
-                    print(f"Shared {family} shutdown warning: {error}")
+                    _report_system_or_stderr(
+                        window,
+                        "WARNING",
+                        f"Shared {family} shutdown warning: {error}",
+                    )
 
         # A normal event-loop return must not report success when its final
         # quiescence barrier failed. If another exception is already unwinding,

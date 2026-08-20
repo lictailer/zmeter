@@ -35,6 +35,7 @@ from .scanlist import (
 from .artificial_channel_logic import ArtificialChannelLogic
 from .artificial_channel_2d_main import ArtificialChannel2D
 from .device_command_router import DeviceCommandRouter
+from .device_log import append_device_log, configure_device_log
 from .scan_range_main import ScanRangeWindow
 
 
@@ -67,8 +68,9 @@ class _NullActivityReservation:
 
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):
-    print("Initiating the Program")
+    sig_system_message = QtCore.pyqtSignal(str, str)
     SCAN_RANGE_CONFIG_FILENAME = "scan_range_limits.json"
+    SYSTEM_LOG_LEVELS = frozenset({"INFO", "WARNING", "ERROR"})
 
     def __init__(
         self,
@@ -82,8 +84,9 @@ class MainWindow(QtWidgets.QWidget):
         startup_report=None,
     ):
         super().__init__()
-        print("Loading the Main Window")
         uic.loadUi(r"core/ui/mainwindow.ui", self)
+        configure_device_log(self.system_log)
+        self.sig_system_message.connect(self._append_system_message)
         self.info = info
         self.startup_report = startup_report
         self._render_startup_report(startup_report)
@@ -229,53 +232,88 @@ class MainWindow(QtWidgets.QWidget):
         self._finalize_device_button_reconciliation(initial_button_plan)
         self._configure_device_manager_runtime_hooks()
 
+    def log_system_message(self, level, message) -> bool:
+        """Queue one concise application-level message for the System Log."""
+
+        normalized_level = str(level).strip().upper()
+        if normalized_level not in self.SYSTEM_LOG_LEVELS:
+            raise ValueError(
+                "system log level must be INFO, WARNING, or ERROR"
+            )
+        normalized_message = re.sub(r"\s+", " ", str(message)).strip()
+        if not normalized_message:
+            return False
+        self.sig_system_message.emit(normalized_level, normalized_message)
+        return True
+
+    @QtCore.pyqtSlot(str, str)
+    def _append_system_message(self, level: str, message: str) -> None:
+        append_device_log(self.system_log, level, message)
+
     def _render_startup_report(self, report) -> None:
         if report is None:
-            self.startup_log.setPlainText("No startup device report was supplied.")
+            self.log_system_message(
+                "INFO",
+                "Application started without a profile startup report.",
+            )
             return
         if not isinstance(report, StartupReport):
             raise TypeError("startup_report must be StartupReport or None")
 
         labels = {
             StartupDeviceStatus.READY: (
+                "INFO",
                 "READY",
                 "ready for manual connection",
             ),
-            StartupDeviceStatus.CONNECTED: ("CONNECTED", "connected"),
+            StartupDeviceStatus.CONNECTED: (
+                "INFO",
+                "CONNECTED",
+                "connected",
+            ),
             StartupDeviceStatus.PENDING: (
+                "INFO",
                 "PENDING",
                 "connection request issued; check the device panel",
             ),
             StartupDeviceStatus.CONNECTION_FAILED: (
+                "WARNING",
                 "FAILED",
                 "connection failed; manual retry is available",
             ),
             StartupDeviceStatus.CONSTRUCTION_SKIPPED: (
+                "ERROR",
                 "SKIPPED",
                 "device construction failed; no panel was created",
             ),
-            StartupDeviceStatus.DISABLED: ("DISABLED", "disabled in profile"),
         }
-        lines = []
+        self.log_system_message(
+            "INFO",
+            f"Profile '{report.profile_name}' loaded.",
+        )
         for result in report.results:
-            label, detail = labels[result.status]
-            lines.append(
-                f"[{label}] {result.device_id} ({result.driver_id}): {detail}"
+            if result.status is StartupDeviceStatus.DISABLED:
+                continue
+            level, label, detail = labels[result.status]
+            self.log_system_message(
+                level,
+                f"Startup [{label}] {result.device_id} "
+                f"({result.driver_id}): {detail}.",
             )
 
-        summary_order = (
-            StartupDeviceStatus.CONNECTED,
-            StartupDeviceStatus.PENDING,
-            StartupDeviceStatus.CONNECTION_FAILED,
-            StartupDeviceStatus.READY,
-            StartupDeviceStatus.CONSTRUCTION_SKIPPED,
-            StartupDeviceStatus.DISABLED,
+        disabled = report.count(StartupDeviceStatus.DISABLED)
+        enabled = len(report.results) - disabled
+        self.log_system_message(
+            "INFO",
+            "Startup summary: "
+            f"configured={len(report.results)}, enabled={enabled}, "
+            f"disabled={disabled}, "
+            f"connected={report.count(StartupDeviceStatus.CONNECTED)}, "
+            f"pending={report.count(StartupDeviceStatus.PENDING)}, "
+            f"failed={report.count(StartupDeviceStatus.CONNECTION_FAILED)}, "
+            f"skipped={report.count(StartupDeviceStatus.CONSTRUCTION_SKIPPED)}, "
+            f"manual={report.count(StartupDeviceStatus.READY)}.",
         )
-        totals = ", ".join(
-            f"{status.value}={report.count(status)}" for status in summary_order
-        )
-        lines.append(f"Total configured={len(report.results)}; {totals}")
-        self.startup_log.setPlainText("\n".join(lines))
 
     def _configure_device_manager_runtime_hooks(self):
         manager = self.device_manager
@@ -348,9 +386,10 @@ class MainWindow(QtWidgets.QWidget):
         expected = int(getattr(self._applied_device_snapshot, "generation", 0))
         received = int(getattr(device_snapshot, "generation", 0))
         if received != expected:
-            print(
+            self.log_system_message(
+                "WARNING",
                 "Ignored stale manager catalog notification: "
-                f"expected generation {expected}, received {received}."
+                f"expected generation {expected}, received {received}.",
             )
             return
         self.command_router.publish_catalog(self.device_channel_catalog)
@@ -362,11 +401,12 @@ class MainWindow(QtWidgets.QWidget):
             self._finish_async_shutdown(result)
             return
         error = getattr(result, "error", None)
+        description = self._runtime_operation_description(result)
         if error is not None:
-            description = self._runtime_operation_description(result)
-            print(
-                f"Runtime device mutation failed ({description}): "
-                f"{type(error).__name__}: {error}"
+            self.log_system_message(
+                "ERROR",
+                f"Runtime device mutation failed for {description}: "
+                f"{type(error).__name__}: {error}.",
             )
             pending = self._operator_pending_mutation
             if pending is not None and pending == (
@@ -376,7 +416,13 @@ class MainWindow(QtWidgets.QWidget):
                 self._show_runtime_mutation_refusal(
                     self._runtime_operation_description(result),
                     error,
+                    log_event=False,
                 )
+        else:
+            self.log_system_message(
+                "INFO",
+                f"Runtime device mutation completed: {description}.",
+            )
         self._operator_pending_mutation = None
     def _set_runtime_mutation_ui_sealed(self, sealed, reason="", result=None):
         sealed = bool(sealed)
@@ -509,7 +555,13 @@ class MainWindow(QtWidgets.QWidget):
             return session_call(expected_generation=expected_generation)
         return nullcontext(self._applied_device_snapshot)
 
-    def _show_runtime_mutation_refusal(self, action, error):
+    def _show_runtime_mutation_refusal(self, action, error, *, log_event=True):
+        if log_event:
+            self.log_system_message(
+                "WARNING",
+                f"Runtime device mutation refused: {action}: "
+                f"{type(error).__name__}: {error}.",
+            )
         QtWidgets.QMessageBox.warning(
             self,
             "Device Change Refused",
@@ -523,6 +575,12 @@ class MainWindow(QtWidgets.QWidget):
             error = RuntimeError("runtime device management is unavailable")
             self._show_runtime_mutation_refusal(action, error)
             return None
+        target = str(device_id).strip()
+        target_detail = f" '{target}'" if target else ""
+        self.log_system_message(
+            "INFO",
+            f"Runtime device mutation requested: {action}{target_detail}.",
+        )
         try:
             operation = method(*args)
         except Exception as exc:
@@ -537,7 +595,11 @@ class MainWindow(QtWidgets.QWidget):
             error = getattr(result, "error", None)
             self._operator_pending_mutation = None
             if error is not None:
-                self._show_runtime_mutation_refusal(action, error)
+                self._show_runtime_mutation_refusal(
+                    action,
+                    error,
+                    log_event=False,
+                )
         return operation
 
     def request_add_device(self, config):
@@ -925,18 +987,18 @@ class MainWindow(QtWidgets.QWidget):
                 f"[ScanRange] Config file not found at '{file_path}'. "
                 "Keeping previous limits."
             )
-            print(message)
             self._set_scan_range_status(message)
             self._log_scan_range("ERROR", message)
+            self.log_system_message("ERROR", message)
             return False
         except (json.JSONDecodeError, OSError) as exc:
             message = (
                 f"[ScanRange] Failed to read '{file_path}': {exc}. "
                 "Keeping previous limits."
             )
-            print(message)
             self._set_scan_range_status(message)
             self._log_scan_range("ERROR", message)
+            self.log_system_message("ERROR", message)
             return False
 
         try:
@@ -946,14 +1008,19 @@ class MainWindow(QtWidgets.QWidget):
                 f"[ScanRange] Invalid config format in '{file_path}': {exc}. "
                 "Keeping previous limits."
             )
-            print(message)
             self._set_scan_range_status(message)
             self._log_scan_range("ERROR", message)
+            self.log_system_message("ERROR", message)
             return False
 
         for warning in warnings:
-            print(f"[ScanRange] {warning}")
             self._log_scan_range("WARNING", warning)
+        if warnings:
+            self.log_system_message(
+                "WARNING",
+                f"[ScanRange] Ignored {len(warnings)} invalid configuration "
+                "entry or entries; see the Scan Range log for details.",
+            )
 
         self.scan_range_limits = parsed_limits
         self._refresh_active_scan_range_limits()
@@ -962,9 +1029,9 @@ class MainWindow(QtWidgets.QWidget):
             f"'{file_path}'; {len(self.active_scan_range_limits)} active for the "
             f"current device catalog; {len(warnings)} warning(s)."
         )
-        print(message)
         self._set_scan_range_status(message)
         self._log_scan_range("INFO", message)
+        self.log_system_message("INFO", message)
         return True
 
     def on_artificial_channel_config_applied(self):
@@ -2325,7 +2392,6 @@ class MainWindow(QtWidgets.QWidget):
                             f"[ScanRange] Denied write '{master}'={numeric_val} "
                             f"outside [{low_limit}, {high_limit}]."
                         )
-                        print(message)
                         self._log_scan_range("WARNING", message)
                         self.mark_skip_next_scan_read_from_global_limit()
                         return
@@ -2499,7 +2565,10 @@ class MainWindow(QtWidgets.QWidget):
         if report is None:
             return
         for failure in getattr(report, "failures", ()):
-            print(f"Device lifecycle warning: {failure.describe()}")
+            self.log_system_message(
+                "ERROR",
+                f"Device lifecycle failure: {failure.describe()}.",
+            )
 
     def _raise_lifecycle_failures(self, report):
         self._report_lifecycle_failures(report)
@@ -2517,6 +2586,12 @@ class MainWindow(QtWidgets.QWidget):
             return self._session_shutdown_report
         if self._session_shutdown_in_progress:
             raise RuntimeError("application shutdown is already in progress")
+        self.log_system_message(
+            "INFO",
+            "Application shutdown retry initiated."
+            if self._shutdown_retry_required
+            else "Application shutdown initiated.",
+        )
         manager = self.device_manager
         shutdown_guard = self._shutdown_guard
         guard_acquired_here = False
@@ -2571,8 +2646,7 @@ class MainWindow(QtWidgets.QWidget):
             else:
                 self.force_stop_equipments()
                 self.stop_equipments_for_scanning()
-                for equipment_name, equipment in self.equips.items():
-                    print("Terminating", equipment_name)
+                for equipment in self.equips.values():
                     equipment.terminate_dev()
                     equipment.close()
                 report = None
@@ -2581,7 +2655,7 @@ class MainWindow(QtWidgets.QWidget):
             self._session_shutdown_complete = True
             self._shutdown_retry_required = False
             self._shutdown_guard = None
-            print("Main Window terminated.")
+            self.log_system_message("INFO", "Application shutdown completed.")
             return report
         except Exception:
             if not shutdown_side_effects_started:
@@ -2589,9 +2663,10 @@ class MainWindow(QtWidgets.QWidget):
                     try:
                         self._set_runtime_mutation_ui_sealed(False)
                     except Exception as restore_error:
-                        print(
-                            "Shutdown UI restoration warning: "
-                            f"{type(restore_error).__name__}: {restore_error}"
+                        self.log_system_message(
+                            "ERROR",
+                            "Shutdown UI restoration failed: "
+                            f"{type(restore_error).__name__}: {restore_error}.",
                         )
                 if guard_acquired_here and shutdown_guard is not None:
                     shutdown_guard.release()
@@ -2616,6 +2691,12 @@ class MainWindow(QtWidgets.QWidget):
             raise DeviceCatalogBusyError(("application shutdown in progress",))
         if bool(getattr(manager, "mutation_in_progress", False)):
             raise DeviceCatalogBusyError(("runtime device mutation in progress",))
+        self.log_system_message(
+            "INFO",
+            "Application shutdown retry initiated."
+            if self._shutdown_retry_required
+            else "Application shutdown initiated.",
+        )
 
         shutdown_guard = self._shutdown_guard
         guard_acquired_here = False
@@ -2691,9 +2772,10 @@ class MainWindow(QtWidgets.QWidget):
                     try:
                         self._set_runtime_mutation_ui_sealed(False)
                     except Exception as restore_error:
-                        print(
-                            "Shutdown UI restoration warning: "
-                            f"{type(restore_error).__name__}: {restore_error}"
+                        self.log_system_message(
+                            "ERROR",
+                            "Shutdown UI restoration failed: "
+                            f"{type(restore_error).__name__}: {restore_error}.",
                         )
                 if guard_acquired_here and shutdown_guard is not None:
                     shutdown_guard.release()
@@ -2711,7 +2793,10 @@ class MainWindow(QtWidgets.QWidget):
         self._async_shutdown_result_handled = True
         self._session_shutdown_report = result
         for failure in getattr(result, "failures", ()):
-            print(f"Device shutdown warning: {failure.describe()}")
+            self.log_system_message(
+                "ERROR",
+                f"Device shutdown failure: {failure.describe()}.",
+            )
         error = getattr(result, "error", None)
         succeeded = bool(getattr(result, "succeeded", error is None))
         self._session_shutdown_in_progress = False
@@ -2721,6 +2806,11 @@ class MainWindow(QtWidgets.QWidget):
             # whose ScanList and auxiliary windows are already shut down.
             self._shutdown_retry_required = True
             self._shutdown_operation = None
+            self.log_system_message(
+                "ERROR",
+                "Equipment shutdown did not complete safely: "
+                f"{error or 'device lifecycle failure'}.",
+            )
             QtWidgets.QMessageBox.critical(
                 self,
                 "Shutdown Delayed",
@@ -2732,7 +2822,7 @@ class MainWindow(QtWidgets.QWidget):
         self._session_shutdown_complete = True
         self._shutdown_retry_required = False
         self._shutdown_guard = None
-        print("Main Window terminated.")
+        self.log_system_message("INFO", "Application shutdown completed.")
         QtCore.QTimer.singleShot(0, self.close)
 
 
@@ -2769,6 +2859,11 @@ class MainWindow(QtWidgets.QWidget):
                 ScanListShutdownTimeoutError,
                 ScanListShutdownStopError,
             ) as exc:
+                self.log_system_message(
+                    "ERROR",
+                    "Equipment shutdown did not begin because safe quiescence "
+                    f"could not be proven: {exc}.",
+                )
                 QtWidgets.QMessageBox.critical(
                     self,
                     "Shutdown Delayed",

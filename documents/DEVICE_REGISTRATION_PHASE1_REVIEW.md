@@ -49,8 +49,9 @@ optional dependency, runtime service, or widget configuration skips only that
 device. Startup then requests every opted-in connection in profile order. A
 synchronous false result or exception is logged and does not roll back earlier
 devices; asynchronous requests are not awaited. The temporary startup window
-shows stages only. The Main Window Startup Log contains labels, driver IDs, and
-sanitized statuses without connection identifiers.
+shows stages only. The Main Window System Log contains enabled-device labels,
+driver IDs, sanitized statuses, and compact totals without connection
+identifiers.
 
 The `demo_device` registration deliberately does not receive the application's
 shared real VISA runtime. It keeps its private `DummyResourceManager`, so this
@@ -166,7 +167,7 @@ each driver:
 3. launch ZMeter and confirm unrelated NI/VISA/Kinesis stacks stay dormant;
 4. connect from the panel to the exact reviewed resource, or close the
    disconnected inspection run and explicitly change only `connect_on_start`
-   to `true` for a reviewed connection run; inspect the Startup Log and panel;
+   to `true` for a reviewed connection run; inspect the System Log and panel;
 5. perform one read-only status/readback check;
 6. perform only the smallest independently approved operation inside both the
    device and experiment limits;

@@ -905,3 +905,41 @@ Copy and complete:
   2 JSON parsed with four disabled devices and zero startup connections.
 - No real REST endpoint, .NET vendor runtime, TLPM DLL/resource, VISA manager,
   network instrument, or laboratory hardware was accessed.
+
+## 2026-08-20 — Main Window System Log
+
+### Outcome
+
+- Replaced the startup-only panel with a read-only, session-only System Log at
+  the bottom of the Main Window, after the PPT, data-save, and backup-path
+  controls.
+- System entries use local `YYYY-MM-DD HH:MM:SS` timestamps and `INFO`,
+  `WARNING`, or `ERROR`, auto-scroll, retain at most 500 in-memory entries, and
+  remain vertically expandable. No log file or persistence/schema path was
+  added.
+- Startup logging preserves profile order for enabled devices, omits individual
+  disabled-device lines, reports compact totals, and retains the existing
+  address/serial/connection/exception sanitization boundary.
+- Routed application-level profile/startup, catalog, runtime-device mutation,
+  scan-range configuration, lifecycle, and shutdown messages into the System
+  Log. Recoverable manager/MainWindow messages are no longer duplicated in the
+  terminal. Critical dialogs remain for invalid profiles, refused mutations,
+  and unsafe shutdown; stderr remains the fallback when no usable Main Window
+  exists.
+- Device connection/operation details, scan and queue activity, save/export,
+  polling, ordinary artificial-channel activity, input validation, and
+  per-sample output remain excluded and continue to use their owning UI logs.
+
+### Validation
+
+- Maintained interpreter:
+  `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe` with
+  `QT_QPA_PLATFORM=offscreen`; compile caches and captured output were redirected
+  outside the repository.
+- Changed Python compiled successfully; `core/ui/mainwindow.ui` parsed as XML.
+- Focused startup/system-log/runtime/catalog/launcher selection: 73/73 passed.
+- Complete hardware-independent core discovery: 265/265 passed.
+- Device-local simulations: mock 18/18 and Four9 loopback fake 20/20 passed.
+- No physical hardware, device discovery, vendor runtime/DLL, laboratory
+  network endpoint, PowerPoint/COM operation, measurement output, or lab data
+  path was accessed.

@@ -4,6 +4,8 @@ import os
 import tempfile
 import threading
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -302,12 +304,12 @@ class BestEffortManagerTests(unittest.TestCase):
             errors.append(exc)
 
 
-class StartupLogTests(unittest.TestCase):
+class SystemLogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
-    def test_mainwindow_log_is_ordered_read_only_and_sanitized(self):
+    def test_mainwindow_log_is_ordered_read_only_timestamped_and_sanitized(self):
         report = StartupReport(
             "lab",
             (
@@ -331,23 +333,40 @@ class StartupLogTests(unittest.TestCase):
                     "nidaq",
                     StartupDeviceStatus.CONSTRUCTION_SKIPPED,
                 ),
+                StartupDeviceResult(
+                    "disabled-secret-address",
+                    "sr860",
+                    StartupDeviceStatus.DISABLED,
+                ),
             ),
         )
         with tempfile.TemporaryDirectory() as directory:
-            window = MainWindow(
-                info=ScanInfo,
-                save_path=directory,
-                backup_main_path=None,
-                equips={},
-                startup_report=report,
-            )
+            with mock.patch("core.device_log.datetime") as timestamp:
+                timestamp.now.return_value.strftime.return_value = (
+                    "2026-08-20 12:34:56"
+                )
+                window = MainWindow(
+                    info=ScanInfo,
+                    save_path=directory,
+                    backup_main_path=None,
+                    equips={},
+                    startup_report=report,
+                )
             try:
-                text = window.startup_log.toPlainText()
-                self.assertTrue(window.startup_log.isReadOnly())
+                text = window.system_log.toPlainText()
+                self.assertTrue(window.system_log.isReadOnly())
+                self.assertTrue(
+                    all(
+                        line.startswith("[2026-08-20 12:34:56] [")
+                        for line in text.splitlines()
+                    )
+                )
+                self.assertIn("Profile 'lab' loaded", text)
                 self.assertLess(text.index("connected"), text.index("pending"))
                 self.assertIn("manual retry is available", text)
                 self.assertIn("device construction failed", text)
-                self.assertIn("Total configured=4", text)
+                self.assertIn("configured=5, enabled=4, disabled=1", text)
+                self.assertNotIn("disabled-secret-address", text)
                 self.assertFalse(hasattr(report.results[2], "message"))
                 self.assertFalse(hasattr(report.results[2], "connection"))
             finally:
@@ -355,8 +374,122 @@ class StartupLogTests(unittest.TestCase):
                 window.hide()
                 window.deleteLater()
 
+    def test_system_log_is_bottom_bounded_expandable_and_normalized(self):
+        with tempfile.TemporaryDirectory() as directory:
+            window = MainWindow(
+                info=ScanInfo,
+                save_path=directory,
+                backup_main_path=None,
+                equips={},
+            )
+            try:
+                path_index = next(
+                    index
+                    for index in range(window.verticalLayout.count())
+                    if window.verticalLayout.itemAt(index).layout()
+                    is window.gridLayout
+                )
+                system_index = window.verticalLayout.indexOf(
+                    window.system_log_groupBox
+                )
+                self.assertGreater(system_index, path_index)
+                self.assertEqual(
+                    window.system_log.document().maximumBlockCount(),
+                    500,
+                )
+                self.assertEqual(
+                    window.system_log.sizePolicy().verticalPolicy(),
+                    QtWidgets.QSizePolicy.Policy.Expanding,
+                )
+                self.assertGreater(window.system_log.maximumHeight(), 120)
+
+                self.assertFalse(window.log_system_message("INFO", "  \n  "))
+                self.assertTrue(
+                    window.log_system_message(
+                        "warning",
+                        "First line\n   second line",
+                    )
+                )
+                self.app.processEvents()
+                self.assertIn(
+                    "[WARNING] First line second line",
+                    window.system_log.toPlainText(),
+                )
+                with self.assertRaisesRegex(ValueError, "INFO, WARNING, or ERROR"):
+                    window.log_system_message("debug", "not supported")
+
+                for index in range(510):
+                    window.log_system_message("INFO", f"bounded entry {index}")
+                self.app.processEvents()
+                self.assertEqual(window.system_log.document().blockCount(), 500)
+                scrollbar = window.system_log.verticalScrollBar()
+                self.assertEqual(scrollbar.value(), scrollbar.maximum())
+            finally:
+                window.shutdown_session()
+                window.hide()
+                window.deleteLater()
+
+    def test_scan_range_system_summary_replaces_terminal_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "limits.json"
+            config_path.write_text(
+                '{"limits": [17, {"device_name": "default", '
+                '"channel": "wait", "low_limit": 0, "high_limit": 1}]}',
+                encoding="utf-8",
+            )
+            window = MainWindow(
+                info=ScanInfo,
+                save_path=directory,
+                backup_main_path=None,
+                equips={},
+            )
+            try:
+                window.scan_range_limits_path = str(config_path)
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    self.assertTrue(window.reload_scan_range_limits())
+                self.assertEqual(stdout.getvalue(), "")
+
+                system_log = window.system_log.toPlainText()
+                self.assertEqual(
+                    system_log.count("Ignored 1 invalid configuration"),
+                    1,
+                )
+                self.assertIn("Loaded 1 valid limit entries", system_log)
+                scan_range_log = (
+                    window.scan_range_window.log_plainTextEdit.toPlainText()
+                )
+                self.assertIn("entry[0] ignored: not an object", scan_range_log)
+            finally:
+                window.shutdown_session()
+                window.hide()
+                window.deleteLater()
+
 
 class LauncherStartupWindowTests(unittest.TestCase):
+    def test_system_reporting_uses_window_then_stderr_fallback(self):
+        window = SimpleNamespace(log_system_message=mock.Mock(return_value=True))
+        stderr = StringIO()
+        with redirect_stderr(stderr):
+            start_zmeter._report_system_or_stderr(
+                window,
+                "WARNING",
+                "runtime warning",
+            )
+        window.log_system_message.assert_called_once_with(
+            "WARNING",
+            "runtime warning",
+        )
+        self.assertEqual(stderr.getvalue(), "")
+
+        with redirect_stderr(stderr):
+            start_zmeter._report_system_or_stderr(
+                None,
+                "ERROR",
+                "pre-window failure",
+            )
+        self.assertIn("pre-window failure", stderr.getvalue())
+
     def test_startup_window_closes_before_mainwindow_and_report_is_passed(self):
         events = []
         report = StartupReport(

@@ -122,7 +122,14 @@ startup-only policy, exact best-effort startup argument mapping, NI
 channels. `tests.test_best_effort_startup` covers ordered construction skipping,
 all-failed empty sessions, startup-result states, one-shot/owner-thread rules,
 pending-request teardown, launcher stage order, and the sanitized read-only
-Main Window log. Run these before the family fake suites.
+Main Window System Log. Its focused coverage verifies timestamp/severity
+formatting, enabled-device order, disabled-device totals, identifier
+sanitization, bottom-of-window placement, read-only/auto-scroll/500-line
+presentation, message normalization, scan-range summary routing, and stderr
+fallback before a Main Window exists. `tests.test_runtime_device_ui` also
+checks one request/final result per runtime mutation and proves that a denied
+scan write remains local to the Scan Range log. Run these before the family
+fake suites.
 
 Phase 2 registry coverage is in `tests.test_phase2_device_registrations`. It
 verifies the four registered schemas/profile defaults, fresh-process laziness,

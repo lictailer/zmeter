@@ -124,7 +124,9 @@ Session configuration is selected by a validated JSON profile. It includes:
 Startup is best effort after profile validation. ZMeter shows broad loading
 stages, skips an enabled device that cannot be constructed, and continues after
 a requested connection fails. The Main Window opens with every successfully
-constructed device and includes a read-only sanitized Startup Log. Asynchronous
+constructed device and includes a read-only, timestamped System Log. Disabled
+devices appear only in its startup totals; enabled-device results remain
+sanitized. Asynchronous
 Keithley24xx, BBD30X, K10CR1, Four9, Montana2, OptiCool, and TLPM requests may still be completing when it opens;
 use the corresponding device panel for the final result and manual retry.
 

@@ -30,9 +30,11 @@ devices and issues requested startup connections. An enabled device whose
 package, dependency, runtime, configuration, or widget construction fails is
 reported and skipped; later devices still load, and the Main Window can open
 with an empty or partial catalog. A requested connection failure is also
-nonfatal. The permanent read-only Startup Log in the Main Window shows one
-sanitized status line per configured device. Full exception details are printed
-only to the console.
+nonfatal. The session-only read-only System Log in the Main Window shows one
+sanitized status line per enabled device and a compact total for disabled
+devices. Recoverable application-level warnings are recorded there instead of
+being duplicated in the console; device-specific details remain in the device
+panel.
 
 Relative profile filenames and `paths.save`/`paths.backup` values resolve from
 the repository root, not the process's current directory. Absolute paths remain

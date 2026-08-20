@@ -71,6 +71,14 @@ return codes, and repeated polling samples normally belong in dedicated UI
 fields or signals rather than the log. Device logs remain in memory unless a
 separate persistence requirement is explicitly approved.
 
+The Main Window System Log is a separate application-level surface. Device
+widgets must not forward routine connection chatter, commands, readbacks,
+polling, ramps, or repeated device status into it. Core may record only events
+that affect the application session as a whole, such as enabled-device startup
+outcomes, catalog or runtime-mutation failures, global configuration errors,
+and unsafe lifecycle/shutdown results. Device panels remain authoritative for
+manual connection results and device-specific diagnosis.
+
 ## Lifecycle contract
 
 An active device widget should provide the following where applicable:

@@ -39,6 +39,23 @@ start_zmeter.py
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.
 - `ScanLogic` owns scan traversal, per-level data arrays, grouped scan I/O, timing, pause/stop checkpoints, progress, and autosave triggers.
 
+## Application system log
+
+The bottom of the Main Window contains a session-only System Log for concise
+application-level startup, profile, catalog, runtime-device mutation,
+scan-range-configuration, lifecycle, and shutdown events. Entries use local
+timestamps plus `INFO`, `WARNING`, or `ERROR`, auto-scroll, and retain at most
+500 in-memory lines. Enabled-device startup results are shown in profile order;
+disabled devices appear only in the startup totals, and connection mappings or
+raw startup exceptions are not exposed.
+
+Device connection/operation details remain in device logs. Scan, queue,
+manual-set, save/export, and ordinary artificial-channel activity remain in
+their owning windows and are not duplicated into the System Log. Critical
+dialogs remain for invalid profiles, refused device mutations, and unsafe
+shutdown. Before a Main Window exists, or after it is unavailable, fatal
+application diagnostics continue to use stderr as the fallback.
+
 ## Layer responsibilities
 
 Device integrations are flat subpackages of `devices/`, imported as
