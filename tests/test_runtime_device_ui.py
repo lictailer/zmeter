@@ -40,7 +40,8 @@ class RuntimeDeviceUiTests(unittest.TestCase):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.services = RuntimeServices()
         self.profile, self.manager = start_zmeter.create_profile_session(
-            self.services
+            self.services,
+            start_zmeter.REPOSITORY_ROOT / "config" / "profiles" / "mock.json",
         )
         self.window = MainWindow(
             info=ScanInfo,

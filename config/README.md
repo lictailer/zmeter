@@ -97,3 +97,27 @@ inserting real identifiers or enabling reviewed connection requests.
 
 See `documents/DEVICE_REGISTRATION_PHASE1_REVIEW.md` and the target device
 README before enabling a driver.
+
+## Phase 2 registered driver fields
+
+Phase 2 admits four environment-specific startup-only drivers:
+
+| Driver | Connection object |
+| --- | --- |
+| `four9` | `{"host": "...", "port": 5050, "socket_timeout_s": 10.0}` |
+| `montana2` | `{"address": "..."}` |
+| `opticool` | `{}` |
+| `tlpm` | `{}` |
+
+All four use the same ordered best-effort startup behavior as Phase 1. Their
+connection requests schedule the existing panel workers and are reported as
+pending; inspect the device panel for final success, failure, and manual retry.
+Montana2 requires an explicit profile address even though its standalone panel
+retains the existing quick-connect default. OptiCool retains the fixed vendor
+DLL path and TLPM retains first-discovered-resource selection and reset. The
+tracked `profiles/phase2_lab.json` keeps all entries disabled and all startup
+flags false. Copy it to an ignored local profile for commissioning.
+
+`autofocus_xz`, `auto_focus`, `auto_position`, and `anc300` remain deliberately
+unregistered. See `documents/DEVICE_REGISTRATION_PHASE2_REVIEW.md` for the
+accepted limitations and future work; registration is not hardware approval.

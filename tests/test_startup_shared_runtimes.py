@@ -15,10 +15,11 @@ from PyQt6 import QtWidgets
 
 from core.shared_runtime import RuntimeServices
 from start_zmeter import (
-    DEFAULT_PROFILE_PATH,
     REPOSITORY_ROOT,
     create_profile_session,
 )
+
+MOCK_PROFILE_PATH = REPOSITORY_ROOT / "config" / "profiles" / "mock.json"
 
 
 class StartupSharedRuntimeTests(unittest.TestCase):
@@ -29,12 +30,12 @@ class StartupSharedRuntimeTests(unittest.TestCase):
     def test_checked_in_mock_profile_constructs_no_vendor_runtime(self):
         services = RuntimeServices()
         self.addCleanup(services.shutdown)
-        profile, manager = create_profile_session(services)
+        profile, manager = create_profile_session(services, MOCK_PROFILE_PATH)
         self.addCleanup(manager.teardown_all)
         snapshot = manager.snapshot()
 
         self.assertEqual(profile.profile, "mock")
-        self.assertEqual(profile.source_path, DEFAULT_PROFILE_PATH)
+        self.assertEqual(profile.source_path, MOCK_PROFILE_PATH)
         self.assertEqual(profile.paths.save, REPOSITORY_ROOT / "data")
         self.assertIsNone(profile.paths.backup)
         self.assertEqual(
@@ -129,7 +130,7 @@ print("Qt options and strict launcher options separated")
                 os.chdir(original_directory)
 
         self.addCleanup(manager.teardown_all)
-        self.assertEqual(profile.source_path, DEFAULT_PROFILE_PATH)
+        self.assertEqual(profile.source_path, MOCK_PROFILE_PATH)
         self.assertEqual(profile.paths.save, REPOSITORY_ROOT / "data")
 
     def test_disabled_profile_entry_never_calls_its_registered_factory(self):

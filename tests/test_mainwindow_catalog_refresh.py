@@ -143,7 +143,10 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
     def setUp(self):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.services = RuntimeServices()
-        _profile, self.manager = start_zmeter.create_profile_session(self.services)
+        _profile, self.manager = start_zmeter.create_profile_session(
+            self.services,
+            start_zmeter.REPOSITORY_ROOT / "config" / "profiles" / "mock.json",
+        )
         self.window = MainWindow(
             info=copy.deepcopy(ScanInfo),
             save_path=self.temp_directory.name,

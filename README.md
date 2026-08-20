@@ -119,13 +119,13 @@ Session configuration is selected by a validated JSON profile. It includes:
 - optional setter/getter channel filters;
 - local measurement and backup paths.
 
-`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in default profile still enables only the hardware-safe `mock_device` path. The registry also recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`; real devices require an ignored local profile and user-executed commissioning.
+`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in profiles keep real devices disabled. The registry recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`, plus the Phase 2 IDs `four9`, `montana2`, `opticool`, and `tlpm`; real devices require an ignored local profile and user-executed commissioning. The [Phase 2 review](documents/DEVICE_REGISTRATION_PHASE2_REVIEW.md) records the explicitly accepted limitations of those environment-specific integrations.
 
 Startup is best effort after profile validation. ZMeter shows broad loading
 stages, skips an enabled device that cannot be constructed, and continues after
 a requested connection fails. The Main Window opens with every successfully
 constructed device and includes a read-only sanitized Startup Log. Asynchronous
-Keithley24xx, BBD30X, and K10CR1 requests may still be completing when it opens;
+Keithley24xx, BBD30X, K10CR1, Four9, Montana2, OptiCool, and TLPM requests may still be completing when it opens;
 use the corresponding device panel for the final result and manual retry.
 
 Runtime device changes are session-only and do not rewrite the selected JSON

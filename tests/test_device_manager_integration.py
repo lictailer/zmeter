@@ -51,7 +51,8 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         self.services = RuntimeServices()
         self.addCleanup(self.services.shutdown)
         self.profile, self.manager = start_zmeter.create_profile_session(
-            self.services
+            self.services,
+            start_zmeter.REPOSITORY_ROOT / "config" / "profiles" / "mock.json",
         )
         self.window = MainWindow(
             info=ScanInfo,

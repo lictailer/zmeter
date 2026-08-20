@@ -50,17 +50,34 @@ The normal defaults are:
 - stable polling interval: 1 second;
 - client stable-wait timeout: 7200 seconds.
 
-## ZMeter integration example
+## ZMeter registration
 
-The package is self-contained; the application entry point is intentionally
-not changed. When integrating it later, import and register the widget in the
-same way as Montana2:
+Four9 is a reviewed startup-only registry driver with stable ID `four9`. Use an
+ignored local profile entry based on `config/profiles/phase2_lab.json`:
 
-```python
-from devices.four9.four9_main import Four9
-
-equips["four9"] = Four9()
+```json
+{
+  "id": "four9",
+  "driver": "four9",
+  "enabled": true,
+  "connect_on_start": false,
+  "connection": {
+    "host": "REPLACE_LOCALLY",
+    "port": 5050,
+    "socket_timeout_s": 10.0
+  },
+  "scan_channels": {
+    "set": null,
+    "get": null
+  }
+}
 ```
+
+The profile endpoint is copied into the existing panel without opening a
+socket. A startup connection uses the same asynchronous logic job as the
+Connect button, so the Startup Log reports pending and the panel owns the final
+result and manual retry. Runtime add, manager disconnect, and removal remain
+disabled pending a separate busy/lifecycle bench review.
 
 The UI performs network work on its `Four9Logic` thread. Scan calls already
 run on ZMeter's scan worker and call the same logic methods directly. The

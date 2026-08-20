@@ -467,8 +467,15 @@ def mock_device_registration() -> DriverRegistration:
 def build_default_registry() -> DriverRegistry:
     """Return reviewed registrations without importing any device package."""
 
-    from .registrations import phase1_device_registrations
+    from .registrations import (
+        phase1_device_registrations,
+        phase2_device_registrations,
+    )
 
     return DriverRegistry(
-        (mock_device_registration(), *phase1_device_registrations())
+        (
+            mock_device_registration(),
+            *phase1_device_registrations(),
+            *phase2_device_registrations(),
+        )
     )

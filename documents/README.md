@@ -47,6 +47,7 @@ These device-local documents record the current source contract and readiness of
 | [decisions/README.md](decisions/README.md) | Canonical decision-record policy and template |
 | [SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md](SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md) | Shared VISA/Kinesis implementation checklist and hardware-validation status |
 | [DEVICE_REGISTRATION_PHASE1_REVIEW.md](DEVICE_REGISTRATION_PHASE1_REVIEW.md) | Current NI/VISA/Thorlabs registry matrix, conflicts, commissioning sequence, and future work |
+| [DEVICE_REGISTRATION_PHASE2_REVIEW.md](DEVICE_REGISTRATION_PHASE2_REVIEW.md) | Current Phase 2 startup-only matrix, accepted environment-specific limitations, commissioning guidance, and future work |
 | [DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md](DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md) | Preserved device-log and Kinesis connection investigation record; implementation note identifies the approved reduced scope |
 | Device-local `README.md` | Module-specific; authoritative only for that device's source-verified details and status |
 | `archive/` | Historical; never current implementation authority |

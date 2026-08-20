@@ -1,56 +1,96 @@
 from . import opticool_dll
-import QuantumDesign
-import System
 
 
 class OptiCool_Hardware:
     def __init__(self):
-        self.name = QuantumDesign.QDInstrument.QDInstrumentBase.QDInstrumentType.OptiCool
         self.instrument = None
         self.connected = False
+        self._clear_runtime_state()
 
-        self.handle_field_mode = opticool_dll.dll.GetType(
-            "QuantumDesign.QDInstrument.QDInstrumentBase+FieldMode"
-        )
-        self.field_mode = System.Activator.CreateInstance(self.handle_field_mode)
+    def _clear_runtime_state(self):
+        self._vendor_dll = None
+        self._quantum_design = None
+        self._system = None
+        self.name = None
+        self.field_mode = None
+        self.field_status = None
+        self.field_approach = None
+        self.temperature_status = None
+        self.temperature_approach = None
 
-        self.handle_field_status = opticool_dll.dll.GetType(
-            "QuantumDesign.QDInstrument.QDInstrumentBase+FieldStatus"
+    @staticmethod
+    def _create_vendor_state(dll, quantum_design, system):
+        name = (
+            quantum_design.QDInstrument.QDInstrumentBase.QDInstrumentType.OptiCool
         )
-        self.field_status = System.Activator.CreateInstance(self.handle_field_status)
-
-        self.handle_field_approach = opticool_dll.dll.GetType(
-            "QuantumDesign.QDInstrument.QDInstrumentBase+FieldApproach"
+        field_mode = system.Activator.CreateInstance(
+            dll.GetType("QuantumDesign.QDInstrument.QDInstrumentBase+FieldMode")
         )
-        self.field_approach = System.Activator.CreateInstance(self.handle_field_approach)
-
-        self.handle_temperature_status = opticool_dll.dll.GetType(
-            "QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureStatus"
+        field_status = system.Activator.CreateInstance(
+            dll.GetType("QuantumDesign.QDInstrument.QDInstrumentBase+FieldStatus")
         )
-        self.temperature_status = System.Activator.CreateInstance(
-            self.handle_temperature_status
+        field_approach = system.Activator.CreateInstance(
+            dll.GetType("QuantumDesign.QDInstrument.QDInstrumentBase+FieldApproach")
         )
-
-        self.handle_temperature_approach = opticool_dll.dll.GetType(
-            "QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureApproach"
+        temperature_status = system.Activator.CreateInstance(
+            dll.GetType(
+                "QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureStatus"
+            )
         )
-        self.temperature_approach = System.Activator.CreateInstance(    
-            self.handle_temperature_approach
+        temperature_approach = system.Activator.CreateInstance(
+            dll.GetType(
+                "QuantumDesign.QDInstrument.QDInstrumentBase+TemperatureApproach"
+            )
+        )
+        return (
+            name,
+            field_mode,
+            field_status,
+            field_approach,
+            temperature_status,
+            temperature_approach,
         )
 
     def connect_hardware(self):
         if self.connected and self.instrument is not None:
             return True
 
-        self.instrument = QuantumDesign.QDInstrument.QDInstrumentFactory().GetQDInstrument(
-            self.name, False
-        )
-        self.connected = self.instrument is not None
-        return self.connected
+        try:
+            dll, quantum_design, system = opticool_dll.load_vendor_runtime()
+            vendor_state = self._create_vendor_state(
+                dll, quantum_design, system
+            )
+            instrument = (
+                quantum_design.QDInstrument.QDInstrumentFactory()
+                .GetQDInstrument(vendor_state[0], False)
+            )
+            if instrument is None:
+                raise RuntimeError("OptiCool vendor factory returned no instrument")
+        except Exception:
+            self.instrument = None
+            self.connected = False
+            self._clear_runtime_state()
+            raise
+
+        self._vendor_dll = dll
+        self._quantum_design = quantum_design
+        self._system = system
+        (
+            self.name,
+            self.field_mode,
+            self.field_status,
+            self.field_approach,
+            self.temperature_status,
+            self.temperature_approach,
+        ) = vendor_state
+        self.instrument = instrument
+        self.connected = True
+        return True
 
     def disconnect(self):
         self.instrument = None
         self.connected = False
+        self._clear_runtime_state()
         return True
 
     def _require_connected(self):

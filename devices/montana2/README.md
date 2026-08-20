@@ -4,7 +4,7 @@
 
 `montana2` controls a Montana Instruments cryostat through the bundled `montana_libs` REST client. The ZMeter layer focuses on platform temperature and stability, while the hardware wrapper also contains cooldown, warmup, vent, vacuum, bakeout, purge, stage, heater, pressure, and user-sensor operations.
 
-It is a networked real-hardware integration with no simulator or focused automated tests. Presence of an operation in the hardware wrapper does not make it an approved scan channel.
+It is a startup-only registered network integration with no simulator or device fake backend. The required profile field is `connection.address`; configuration replaces the displayed address before an optional asynchronous startup request. The panel intentionally retains `136.167.55.165` as its standalone Quick Connect default. Presence of an operation in the hardware wrapper does not make it an approved scan channel.
 
 ## Scan channels
 
@@ -23,11 +23,11 @@ Temperatures are in kelvin. The stable setter polls once per second, times out a
 - network: validated cryostat IP address and permitted lab network path;
 - configuration: temperature limits, stable criteria, wait timeout, buffer, and permission for any goal/vacuum/purge operations.
 
-Do not copy the example IP address in source into shared configuration. The widget's quick-connect values and all lab endpoints require local review.
+Use an ignored local profile for the reviewed endpoint. The widget's retained quick-connect values and all lab endpoints require local review.
 
 ## Lifecycle and safety
 
-The user can request interruption of the stability wait. `terminate_dev` sets that flag, waits up to two seconds, then disconnects if connected. There are no standard `start_scan`, `stop_scan`, or `force_stop` methods, and long-running state transitions remain active on the cryostat unless explicitly handled.
+The manager adapter can request interruption of the stability wait. `terminate_dev` sets that flag, waits up to two seconds, then disconnects if connected. It does not prove the worker exited before disconnecting. REST requests have no explicit timeout, scan-facing setters do not enforce the UI's 2–350 K range, and there are no device `start_scan` or `stop_scan` hooks. These are accepted registration limitations and remain future work.
 
 Agents must not probe the IP, connect, change temperature or system goals, vent, pump, purge, read state, abort goals, or disconnect. Review the complete cryostat state machine and recovery plan in a **User-executed hardware test** before enabling. See [hardware_safety.md](../../documents/hardware_safety.md).
 

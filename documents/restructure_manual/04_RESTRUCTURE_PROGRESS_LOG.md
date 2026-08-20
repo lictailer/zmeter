@@ -801,3 +801,107 @@ Copy and complete:
   20/20. Additional NI/VISA/Kinesis/shared-runtime fake selection: 47/47.
 - No physical device, NI task, VISA resource manager or enumeration, CLR/Kinesis
   DLL, network endpoint, PowerPoint, COM, or laboratory data path was accessed.
+
+## 2026-08-20 — Phase 2 device registration review
+
+### Outcome
+
+- Added the lazy startup-only `four9` registration with explicit `host`, `port`,
+  and optional `socket_timeout_s` fields. Configuration prefills the existing
+  panel/logic/hardware endpoint without opening a socket.
+- Four9 startup schedules the same QThread `connect` job as the device panel and
+  reports pending without waiting. Existing scan channels, TCP protocol,
+  0–300 K limit, stable-wait behavior, force-stop, and final client cleanup are
+  unchanged. Runtime mutation remains disabled.
+- Added the disabled placeholder `config/profiles/phase2_lab.json`; the checked
+  mock profile remains the default and no real endpoint or enablement is stored.
+- Explicitly deferred `montana2`, `opticool`, `autofocus_xz`, `auto_focus`,
+  `auto_position`, `anc300`, and `tlpm`. Their current blockers include
+  uncertain final worker cleanup, import-time fixed vendor loading, constructor
+  discovery/task creation, implicit first-resource selection, or an incomplete
+  ZMeter package/lifecycle.
+- Added `documents/DEVICE_REGISTRATION_PHASE2_REVIEW.md` with the admission
+  matrix, required future work, and the user-executed Four9 bench sequence.
+
+### Safety
+
+- No device implementation, command, timing, unit, range, scan method,
+  persistence behavior, or shared runtime was changed.
+- No physical hardware, external/laboratory network service, resource
+  discovery, vendor DLL, COM port, NI task, PowerPoint, COM automation, or lab
+  data path was accessed. Four9 transport checks used only a process-local
+  loopback fake server.
+- Hardware validation remains user-executed and pending. Commission only Four9
+  from Phase 2, one disabled-first ignored local profile at a time; deferred IDs
+  remain rejected by profile validation.
+
+### Validation
+
+- Maintained interpreter: `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe`
+  with `QT_QPA_PLATFORM=offscreen` and bytecode disabled for tests.
+- Phase 1/2 registry, manager, and best-effort-startup selection: 56/56 passed.
+- Four9 fake TCP, logic, and offscreen UI suite: 20/20 passed.
+- Complete hardware-independent core discovery: 246/246 passed.
+- Moved mock discovery: 18/18 passed.
+- Changed Python compiled with a redirected cache; the Phase 2 profile parsed
+  with one disabled device and zero startup connections; nonarchive Markdown
+  link validation found zero broken links; `git diff --check` passed with only
+  expected Windows line-ending notices.
+
+## 2026-08-20 — Montana2, OptiCool, and TLPM registration
+
+### Outcome
+
+- Registered `montana2`, `opticool`, and `tlpm` after `four9` in the Phase 2
+  registry order. All four integrations are startup-only and retain
+  `runtime_mutation_allowed=false`.
+- Montana2 now requires a nonempty profile `connection.address`. Configuration
+  copies that address into the existing panel and logic before scheduling the
+  same asynchronous Connect job. The standalone UI default and Quick Connect
+  endpoint remain `136.167.55.165`.
+- OptiCool vendor loading is deferred until its Connect worker. Each attempt
+  performs the complete `clr` import, fixed-DLL reference, namespace import,
+  enum setup, and instrument construction; partial state is discarded after a
+  failure so the panel can retry.
+- TLPM deliberately retains first-resource discovery and reset on connection.
+  Connection failures now clean temporary state and permit retry; device jobs
+  reject overlapping QThread starts; force-stop requests the indefinite read
+  loop to exit; and termination refuses to disconnect or close underneath a
+  worker that does not exit within ten seconds.
+- Expanded `config/profiles/phase2_lab.json` to contain disabled Four9,
+  Montana2, OptiCool, and TLPM placeholders. Every tracked Phase 2
+  `connect_on_start` flag remains false.
+- Updated the roadmap, Phase 2 review, configuration and testing guides,
+  hardware-safety guidance, central inventories, and device READMEs. These
+  registrations are documented as environment-specific rather than fully
+  hardened.
+
+### Accepted limitations and future work
+
+- Montana2 retains the hard-coded UI endpoint, REST calls without explicit
+  timeouts, undeclared stage-temperature signal, scan setters that bypass UI
+  limits, unproven two-second worker shutdown, and no fake REST backend.
+- OptiCool retains its fixed
+  `C:\QdOptiCool\LabVIEW\QDInstrument.dll` installation path, incomplete
+  limits, unbounded stability waits, uncertain worker shutdown, and no fake
+  .NET backend.
+- TLPM retains automatic first-device selection and reset. Native calls may
+  block, scan-channel support remains limited, and there is no production fake
+  backend. Real commissioning therefore remains one device at a time from an
+  ignored local profile.
+
+### Validation
+
+- Maintained interpreter:
+  `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe` with
+  `QT_QPA_PLATFORM=offscreen` and bytecode disabled for test runs.
+- Phase 1/2 registration, registry, manager, and best-effort-startup selection:
+  71/71 passed.
+- OptiCool/TLPM/Montana2 intercepted behavior and Phase 2 registration
+  selection: 22/22 passed.
+- Complete hardware-independent core discovery: 261/261 passed.
+- Device-local fake suites: mock 18/18 and Four9 20/20 passed.
+- Changed Python and tests compiled with a redirected cache. The tracked Phase
+  2 JSON parsed with four disabled devices and zero startup connections.
+- No real REST endpoint, .NET vendor runtime, TLPM DLL/resource, VISA manager,
+  network instrument, or laboratory hardware was accessed.

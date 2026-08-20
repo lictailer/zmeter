@@ -124,6 +124,15 @@ all-failed empty sessions, startup-result states, one-shot/owner-thread rules,
 pending-request teardown, launcher stage order, and the sanitized read-only
 Main Window log. Run these before the family fake suites.
 
+Phase 2 registry coverage is in `tests.test_phase2_device_registrations`. It
+verifies the four registered schemas/profile defaults, fresh-process laziness,
+Montana2 address mapping, asynchronous panel-worker connection paths,
+lifecycle hooks, startup-only policy, and visible rejection of the remaining
+deferred IDs. `tests.test_phase2_driver_behavior` intercepts every vendor/native
+boundary while checking OptiCool lazy-load retry and TLPM first-resource,
+failure, stop, join, and disconnect behavior. Run both with the existing Four9
+fake suite; none of these selectors opens a laboratory connection or DLL.
+
 ## User-executed hardware tests
 
 When hardware evidence is required, provide:

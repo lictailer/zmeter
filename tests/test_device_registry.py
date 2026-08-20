@@ -74,7 +74,7 @@ registry = build_default_registry()
 assert registry.driver_ids == (
     "mock_device", "ni6423", "nidaq", "pem100", "sp150",
     "hp34401a", "keithley24xx", "sr860", "sr830", "demo_device",
-    "bbd30x", "k10cr1",
+    "bbd30x", "k10cr1", "four9", "montana2", "opticool", "tlpm",
 )
 assert "mock_device" in registry.config_specs
 watched = (

@@ -48,6 +48,12 @@ def _nonnegative_number(value: object, field_name: str) -> float:
     return float(value)
 
 
+def _positive_number(value: object, field_name: str) -> float:
+    if type(value) not in (int, float) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive number")
+    return float(value)
+
+
 def _required_connection_text(connection: Mapping[str, object], field: str) -> str:
     value = str(connection[field]).strip()
     if not value:
@@ -450,4 +456,138 @@ def phase1_device_registrations() -> tuple[DriverRegistration, ...]:
         demo_device_registration(),
         bbd30x_registration(),
         k10cr1_registration(),
+    )
+
+
+def _configure_four9(instance, connection) -> None:
+    host = _required_connection_text(connection, "host")
+    port = _positive_integer(connection["port"], "port")
+    if port > 65_535:
+        raise ValueError("port must be between 1 and 65535")
+    socket_timeout_s = _positive_number(
+        connection.get("socket_timeout_s", instance.logic.socket_timeout_s),
+        "socket_timeout_s",
+    )
+
+    instance.host_lineEdit.setText(host)
+    instance.port_spinBox.setValue(port)
+    instance.logic.host = host
+    instance.logic.port = port
+    instance.logic.socket_timeout_s = socket_timeout_s
+    instance.logic.hardware.host = host
+    instance.logic.hardware.port = port
+    instance.logic.hardware.socket_timeout_s = socket_timeout_s
+
+
+def _four9_startup_connect(instance, _connection, _timeout_ms: int) -> None | bool:
+    if not instance._start_logic_job("connect"):
+        return False
+    return None
+
+
+def four9_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="four9",
+            connection_fields={
+                "host": _required_text(),
+                "port": ConnectionFieldSpec((int,), required=True),
+                "socket_timeout_s": ConnectionFieldSpec((int, float)),
+            },
+        ),
+        factory=_widget_factory("devices.four9.four9_main", "Four9"),
+        configure_instance=_configure_four9,
+        startup_connect=_four9_startup_connect,
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _call(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.is_connected),
+    )
+
+
+def _configure_montana2(instance, connection) -> None:
+    address = _required_connection_text(connection, "address")
+    if address != "136.167.55.165":
+        instance.quickConnect_comboBox.setCurrentText("Other")
+    instance.ipaddress_lineEdit.setText(address)
+    instance.logic.ipaddress = address
+
+
+def _montana2_startup_connect(instance, _connection, _timeout_ms: int):
+    if instance.logic.isRunning():
+        return False
+    instance._on_connect_clicked()
+    return None
+
+
+def montana2_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="montana2",
+            connection_fields={"address": _required_text()},
+        ),
+        factory=_widget_factory("devices.montana2.montana2_main", "Montana2"),
+        configure_instance=_configure_montana2,
+        startup_connect=_montana2_startup_connect,
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        force_stop=lambda instance: setattr(
+            instance.logic, "stable_wait_stop", True
+        ),
+        terminate=lambda instance: _call(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.is_connected),
+    )
+
+
+def _pending_widget_connect(instance, _connection, _timeout_ms: int):
+    if not instance._start_logic_job("connect"):
+        return False
+    return None
+
+
+def opticool_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="opticool",
+            connection_fields={},
+        ),
+        factory=_widget_factory("devices.opticool.opticool_main", "OptiCool"),
+        startup_connect=_pending_widget_connect,
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        force_stop=lambda instance: _call(instance, "abort_stable_wait"),
+        terminate=lambda instance: _call(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.is_connected),
+    )
+
+
+def _tlpm_startup_connect(instance, _connection, _timeout_ms: int):
+    if not instance.connect():
+        return False
+    return None
+
+
+def tlpm_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="tlpm",
+            connection_fields={},
+        ),
+        factory=_widget_factory("devices.tlpm.tlpm_main", "TLPM"),
+        startup_connect=_tlpm_startup_connect,
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(
+            instance, "terminate_dev"
+        ),
+        is_connected=lambda instance: bool(instance.logic.is_connected),
+    )
+
+
+def phase2_device_registrations() -> tuple[DriverRegistration, ...]:
+    """Return the reviewed Phase 2 startup-only registrations."""
+
+    return (
+        four9_registration(),
+        montana2_registration(),
+        opticool_registration(),
+        tlpm_registration(),
     )

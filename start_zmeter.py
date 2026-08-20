@@ -18,7 +18,7 @@ from core.device_management import (
 from core.shared_runtime import RuntimeServices
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent
-DEFAULT_PROFILE_PATH = REPOSITORY_ROOT / "config" / "profiles" / "mock.json"
+DEFAULT_PROFILE_PATH = REPOSITORY_ROOT / "config" / "profiles" / "phase2_lab.json"
 
 
 class StartupWindow(QtWidgets.QWidget):

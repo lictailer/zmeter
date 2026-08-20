@@ -11,8 +11,14 @@ from loading. Runtime mutation policy is unchanged.
 The maintained `sr830_v2` source is now the sole official `devices/sr830`
 package and registry ID `sr830`. See
 [DEVICE_REGISTRATION_PHASE1_REVIEW.md](DEVICE_REGISTRATION_PHASE1_REVIEW.md)
-for the exact registry matrix, admitted limitations, and bench sequence. Phase
-2 remains pending.
+for the exact registry matrix, admitted limitations, and bench sequence.
+Phase 2 review was completed on 2026-08-20. `four9`, `montana2`, `opticool`, and
+`tlpm` are registered startup-only with the same best-effort startup contract
+as Phase 1. The user explicitly accepted the remaining environment-specific
+limitations recorded in the review. The autofocus/positioning prototypes and
+`ANC300` remain unregistered. See
+[DEVICE_REGISTRATION_PHASE2_REVIEW.md](DEVICE_REGISTRATION_PHASE2_REVIEW.md)
+for the admission matrix, accepted risks, future work, and bench guidance.
 
 ## Purpose
 
@@ -150,20 +156,20 @@ Review these integrations independently because they can be validated only in sp
 - `montana2`
 - `opticool`
 
-Preserve current normal behavior, protocols, timing, UI, and environment assumptions. Keep endpoints and local installation details out of the shared repository. Each driver must fail clearly when its environment or vendor dependency is unavailable, without affecting mock-only or unrelated-device startup.
+Preserve current normal behavior, protocols, timing, UI, and environment assumptions. Keep profile endpoints and enabled-device selections local; Montana2's existing source Quick Connect default is a user-approved compatibility exception. Each driver must fail clearly when its environment or vendor dependency is unavailable, without affecting mock-only or unrelated-device startup.
 
 Initial policy:
 
-- register only after lazy import and final teardown can be demonstrated with a fake/stub boundary;
+- prefer a fake/stub boundary before registration; the Phase 2 review records the user-approved Montana2 and OptiCool exceptions;
 - keep `connect_on_start=false` and runtime mutation disabled;
 - commission one environment and one device at a time using an ignored local profile;
-- if import-time vendor loading, sleeps, fixed endpoints, or incomplete lifecycle behavior conflicts with the manager contract, document the conflict and leave that driver unregistered until a minimal safe boundary exists.
+- isolate import-time vendor loading from construction and document any user-approved fixed endpoint, installation, or lifecycle exception before startup-only registration.
 
 Required future improvement:
 
 - `four9`: standardize connect/disconnect and scan lifecycle hooks, network timeout/cancellation, and fake-socket fault coverage;
 - `montana2`: move remaining endpoint/install assumptions to configuration and standardize stop/termination behavior;
-- `opticool`: remove import-time vendor DLL loading and delays, make runtime acquisition explicit/lazy, and provide bounded async lifecycle handling;
+- `opticool`: runtime acquisition is now lazy; make the retained fixed installation configurable and provide bounded async lifecycle handling;
 - all three: add environment-specific dependency manifests and user bench records tied to exact installations.
 
 ### Step 5 — Autofocus, ANC300, and other ongoing integrations
@@ -174,10 +180,10 @@ Treat the following as ongoing work rather than production-ready registrations:
 - `auto_focus`
 - `auto_position`
 - `ANC300`
-- `tlpm`
+- `tlpm` (registered startup-only with explicit accepted limitations)
 - any remaining experimental or incomplete device package discovered during the review
 
-Keep current source behavior and preserve these packages for continued development. Do not advertise them as ready merely because a registry entry can be written. Register a package only when a minimal startup adapter can satisfy lazy import, explicit resource selection, channel discovery, and final cleanup without concealing its incomplete state. Otherwise document it and leave it unregistered.
+Keep current source behavior and preserve these packages for continued development. Do not advertise them as ready merely because a registry entry can be written. TLPM's implicit first-resource selection/reset is a documented user-approved exception; other packages remain unregistered until a minimal startup adapter can satisfy lazy import, resource selection, channel discovery, and final cleanup without concealing their incomplete state.
 
 Required future improvement:
 
@@ -185,8 +191,8 @@ Required future improvement:
 - replace constructor-time COM/resource discovery with a reviewed explicit or deferred workflow;
 - reconcile PyQt and optional scientific dependency requirements;
 - turn ANC300 into a coherent importable device package with a defined widget, connection schema, channels, and lifecycle;
-- make TLPM resource selection explicit instead of selecting the first device, and implement reliable force-stop, disconnect, and termination;
-- add deterministic fake backends before any user bench procedure.
+- make TLPM resource selection explicit instead of selecting the first device; its force-stop, bounded join, and final disconnect are now manager-visible;
+- add deterministic production fake backends as future hardening; current automated tests only intercept native/vendor boundaries.
 
 ### Phase 2 exit criteria
 

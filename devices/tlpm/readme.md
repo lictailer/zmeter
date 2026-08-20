@@ -4,7 +4,7 @@
 
 `tlpm` wraps the Thorlabs TLPM C driver for supported PM100/PM160/PM200/PM400-family devices. The ZMeter logic currently uses only resource discovery, first-resource connection, wavelength setting, power measurement, periodic reads, and disconnect, although the generated hardware wrapper exposes much more of the vendor API.
 
-The package has no focused automated tests or recorded hardware-validation matrix. Constructing the hardware wrapper loads `TLPM_64.dll`; connecting discovers devices and opens the first resource with identity query and reset enabled.
+The package is registered startup-only and has hardware-independent tests that intercept the native boundary, but no production fake backend or recorded hardware-validation matrix. Panel construction does not load `TLPM_64.dll`; connecting constructs the hardware wrapper, discovers devices, and opens the first resource with identity query and reset enabled.
 
 ## Scan channels
 
@@ -20,11 +20,11 @@ The UI wavelength value is in nanometers. Indefinite display reads default to 20
 - native library: `TLPM_64.dll` and all of its runtime dependencies;
 - configuration: approved device identity/resource, sensor model, wavelength range, power unit, averaging, and measurement range.
 
-Do not assume the first discovered resource is the intended instrument. Production use should select and verify an explicit resource and sensor identity.
+First-resource selection and reset are explicitly retained compatibility risks. Connect only the intended meter and verify its resource, model, serial, and sensor identity before proceeding.
 
 ## Lifecycle and safety gaps
 
-`force_stop()` is empty and `terminate_dev()` only prints a message. The indefinite-read stop flag is not the same as final device cleanup, and no `start_scan`/`stop_scan` hooks coordinate monitoring with scans. Implement deterministic stop, join, and disconnect before relying on shutdown.
+Connection errors close partial discovery/device sessions, report failure, reset worker flags, and permit retry. `force_stop()` requests the indefinite-read loop to exit. `terminate_dev()` waits up to 10 seconds and disconnects only after the worker exits; if it cannot prove exit, it returns failure so the manager does not close beneath the worker. No `start_scan`/`stop_scan` hooks coordinate monitoring with scans, and a native driver call can still occupy the worker beyond the join deadline.
 
 Agents must not load/run resource discovery, open/reset a meter, change wavelength, read power, or disconnect it. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md). Any bench procedure is a **User-executed hardware test**.
 

@@ -14,7 +14,7 @@ from core.device_management.models import ChannelFilters, DeviceConfig
 from core.device_management.registry import DriverAdapter, build_default_registry
 
 
-EXPECTED_DRIVER_IDS = (
+PHASE1_DRIVER_IDS = (
     "mock_device",
     "ni6423",
     "nidaq",
@@ -90,7 +90,7 @@ class Phase1RegistrationTests(unittest.TestCase):
 import sys
 from core.device_management.registry import build_default_registry
 
-expected = {EXPECTED_DRIVER_IDS!r}
+expected = (*{PHASE1_DRIVER_IDS!r}, "four9", "montana2", "opticool", "tlpm")
 registry = build_default_registry()
 assert registry.driver_ids == expected
 watched = (
@@ -222,7 +222,13 @@ print("phase1 registry remained lazy")
     def test_all_registered_drivers_support_profile_startup_requests(self):
         registry = build_default_registry()
         self.assertTrue(registry.registration("mock_device").runtime_mutation_allowed)
-        for driver_id in EXPECTED_DRIVER_IDS:
+        for driver_id in (
+            *PHASE1_DRIVER_IDS,
+            "four9",
+            "montana2",
+            "opticool",
+            "tlpm",
+        ):
             with self.subTest(driver_id=driver_id):
                 registration = registry.registration(driver_id)
                 self.assertTrue(

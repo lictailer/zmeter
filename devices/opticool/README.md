@@ -2,9 +2,9 @@
 
 ## Purpose and status
 
-This package controls a Quantum Design OptiCool through the vendor .NET `QDInstrument.dll`. It provides temperature and magnetic-field set/read operations plus optional waits for stable/holding status. It is a real-hardware integration with no simulator or focused automated tests in the repository.
+This package controls a Quantum Design OptiCool through the vendor .NET `QDInstrument.dll`. It provides temperature and magnetic-field set/read operations plus optional waits for stable/holding status. It is a startup-only registered real-hardware integration with no production simulator or fake .NET backend.
 
-Importing the package loads a DLL from the fixed path `C:\QdOptiCool\LabVIEW\QDInstrument.dll`. The Python environment must also supply pythonnet/.NET modules (`clr`, `System`, and `QuantumDesign`); these are not fully represented by the maintained Conda file.
+Importing or constructing the panel does not load the vendor runtime. Each Connect attempt loads the DLL from the retained fixed path `C:\QdOptiCool\LabVIEW\QDInstrument.dll`, waits the established one second, and then creates the vendor objects. A failed attempt clears partial state, remains disconnected, and can be retried from the panel. The Python environment must supply pythonnet/.NET modules (`clr`, `System`, and `QuantumDesign`); these are not fully represented by the maintained Conda file.
 
 ## Scan channels
 
@@ -23,7 +23,7 @@ The hardware prints a warning for temperatures outside 1.5–350 K but still sen
 
 Temperature wait exits on vendor `Stable`, a 50-sample standard-deviation threshold below 0.0001 K, or a user abort. Field wait exits on vendor `Holding` or abort. Neither loop has an overall timeout in current logic.
 
-The widget runs jobs in a `QThread` and exposes an abort button for stable waits, but has no `force_stop`, `start_scan`, or `stop_scan`. `terminate_dev` waits up to two seconds and then disconnects; it does not guarantee a long wait has stopped.
+The widget runs jobs in a `QThread` and exposes an abort button for stable waits; the manager maps that abort request to force-stop. There are no `start_scan` or `stop_scan` hooks. `terminate_dev` waits up to two seconds and then disconnects; it does not guarantee a long wait has stopped. These are accepted registration limitations.
 
 Agents must not load/use the vendor API to connect, set temperature/field, wait, read, abort, or disconnect. Before enabling, the user must review limits, units, approach modes, timeout/abort behavior, and shutdown. See [hardware_safety.md](../../documents/hardware_safety.md).
 

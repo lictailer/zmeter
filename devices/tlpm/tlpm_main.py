@@ -8,6 +8,8 @@ import pyqtgraph as pg
 
 
 class TLPM(QtWidgets.QWidget):
+    TERMINATION_TIMEOUT_MS = 10_000
+
     def __init__(self):
         super(TLPM, self).__init__()
         uic.loadUi(str(Path(__file__).with_name("tlpm.ui")), self)
@@ -57,39 +59,51 @@ class TLPM(QtWidgets.QWidget):
         self.info_label.setText(info)
 
     # actions
-    def connect(self):
-        self.logic.do_connect = True
+    def _start_logic_job(self, flag_name):
+        if self.logic.isRunning():
+            self.update_info("TLPM is busy. Try again after the current job finishes.")
+            return False
+        setattr(self.logic, flag_name, True)
         self.logic.start()
+        return True
+
+    def connect(self):
+        return self._start_logic_job("do_connect")
 
     def disconnect(self):
         if self.logic.is_connected is True:
-            self.logic.do_disconnect = True
-            self.logic.start()
+            return self._start_logic_job("do_disconnect")
+        return True
 
     def set_wavelength(self):
         pos = self.nm_to_go_doubleSpinBox.value()
         self.logic.set_wavelength_target(pos)
-        self.logic.do_change_wavelength = True
-        self.logic.start()
+        return self._start_logic_job("do_change_wavelength")
 
     def read_power(self):
-        self.logic.do_read_power = True
-        self.logic.start()
+        return self._start_logic_job("do_read_power")
 
     def read_indef(self):
         self.logic.freq = self.freq_doubleSpinBox.value()
-        self.logic.do_read_indefinitely = True
-        self.logic.start()
+        return self._start_logic_job("do_read_indefinitely")
 
     def stop_indef(self):
-        self.logic.receieved_stop = True
+        self.logic.request_stop()
 
     def force_stop(self):
-        # self.disconnect()
-        pass
+        self.logic.request_stop()
+        return True
 
     def terminate_dev(self):
         print("TLPM terminated.")
+        self.logic.request_stop()
+        if self.logic.isRunning() and not self.logic.wait(
+            self.TERMINATION_TIMEOUT_MS
+        ):
+            return False
+        if self.logic.is_connected:
+            self.logic.disconnect()
+        return not self.logic.isRunning() and not self.logic.is_connected
 
 
 if __name__ == "__main__":
