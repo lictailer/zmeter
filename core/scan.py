@@ -118,6 +118,7 @@ class Scan(QtWidgets.QWidget):
         self._finalize_outputs_scheduled = False
         self._outputs_finalized = True
         self._runtime_activity_reservation = None
+        self._participating_device_ids = ()
         self.logStatus_textEdit.setReadOnly(True)
         self.logStatus_textEdit.document().setMaximumBlockCount(self.MAX_UI_LOG_LINES)
         self._replace_current_scan_log(self.info.get("scan_log", []))
@@ -627,12 +628,57 @@ class Scan(QtWidgets.QWidget):
         self.main_window = mainwindow
         self.logic.main_window = mainwindow
 
-    def _stop_all_equipment_monitors(self):
+    def _resolve_participating_device_ids(self):
+        """Resolve the physical devices used by the current executable scan model."""
+        if self.main_window is None or not hasattr(self.main_window, "equips"):
+            return ()
+
+        physical_channels = []
+        for reference in self.channel_references():
+            if reference.kind.startswith("plot_"):
+                continue
+            channel = reference.channel
+            if channel.startswith("default_"):
+                continue
+            if channel.startswith("artificial_channel_"):
+                if reference.access != "set":
+                    continue
+                artificial_logic = getattr(
+                    self.main_window, "artificial_channel_logic", None
+                )
+                if artificial_logic is not None:
+                    physical_channels.extend(
+                        (
+                            artificial_logic.original_channel_x_name,
+                            artificial_logic.original_channel_y_name,
+                        )
+                    )
+                continue
+            physical_channels.append(channel)
+
+        resolve = getattr(
+            self.main_window, "resolve_device_label_for_channel", None
+        )
+        if not callable(resolve):
+            return ()
+        selected = {resolve(channel) for channel in physical_channels}
+        return tuple(label for label in self.main_window.equips if label in selected)
+
+    def _capture_participating_device_ids(self):
+        device_ids = self._resolve_participating_device_ids()
+        self._participating_device_ids = device_ids
+        self.logic.participating_device_ids = device_ids
+        return device_ids
+
+    def _stop_all_equipment_monitors(self, device_ids):
         """Best-effort monitor shutdown before scan to avoid read-contention."""
         if self.main_window is None or not hasattr(self.main_window, "equips"):
             return
 
+        selected_ids = frozenset(device_ids)
         for equipment_name, equipment in self.main_window.equips.items():
+            if equipment_name not in selected_ids:
+                continue
             if not hasattr(equipment, "stop_monitor"):
                 continue
             try:
@@ -656,8 +702,9 @@ class Scan(QtWidgets.QWidget):
             self._focus_plot_tab_1_for_scan_start(maximize=False)
             self._start_new_scan_log_session()
 
-            self.main_window.stop_equipments_for_scanning()
-            self._stop_all_equipment_monitors()
+            device_ids = self._capture_participating_device_ids()
+            self.main_window.stop_equipments_for_scanning(device_ids)
+            self._stop_all_equipment_monitors(device_ids)
             self.logic.reset_flags()
             self.logic.go_scan = True
 
@@ -692,7 +739,9 @@ class Scan(QtWidgets.QWidget):
         """Request a clean stop from ScanLogic, including paused state."""
         force_stop_error = None
         try:
-            self.main_window.force_stop_equipments()
+            self.main_window.force_stop_equipments(
+                self._participating_device_ids
+            )
         except Exception as exc:
             # Always tell ScanLogic to stop even when a device's best-effort
             # force-stop callback reports a failure.
@@ -783,8 +832,9 @@ class Scan(QtWidgets.QWidget):
             self.logic.reset_flags()
             self.logic.go_scan = True
             self.logic.initilize_data(self.info)
-            self.main_window.stop_equipments_for_scanning()
-            self._stop_all_equipment_monitors()
+            device_ids = self._capture_participating_device_ids()
+            self.main_window.stop_equipments_for_scanning(device_ids)
+            self._stop_all_equipment_monitors(device_ids)
             self._outputs_finalized = False
             self.logic.start()
         except Exception:

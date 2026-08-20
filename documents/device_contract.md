@@ -86,7 +86,11 @@ An active device widget should provide the following where applicable:
 | `close()` | Widget close may hide the window; application shutdown must still call final teardown |
 
 `MainWindow` delegates these actions through `DeviceManager`. Scan preparation
-and cleanup retain their existing calling threads. Runtime connect, disconnect,
+and cleanup retain their existing calling threads. Scan-specific stop, force-stop,
+and restart calls are filtered to the immutable physical-device set used by that
+scan; `None` retains the all-device compatibility behavior, and application
+shutdown continues to force-stop and tear down every device. Missing optional
+scan hooks are successful no-ops. Runtime connect, disconnect,
 force-stop, stop-scan, and termination callbacks run on manager lifecycle
 workers and must not mutate a `QWidget` directly; publish UI changes through
 signals. Final widget `close()` and `deleteLater()` remain on the manager's Qt

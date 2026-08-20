@@ -25,8 +25,9 @@ from core.device_management import (
     LifecycleReport,
     build_default_registry,
 )
-from core.scan import Scan
+from core.scan import Scan, ScanChannelReference
 from core.scan_info import ScanInfo
+from core.scan_logic import ScanLogic
 from core.scanlist import ScanListShutdownTimeoutError
 from core.shared_runtime import RuntimeServices
 
@@ -309,6 +310,169 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         manager.start_after_scan.assert_called_once_with()
         self.assertFalse(target._force_stop_requested)
 
+    def test_scan_lifecycle_methods_delegate_selected_devices(self):
+        manager = mock.Mock()
+        manager.stop_for_scan.return_value = SimpleNamespace(failures=())
+        manager.start_after_scan.return_value = SimpleNamespace(failures=())
+        manager.force_stop_for_scan.return_value = SimpleNamespace(failures=())
+        target = SimpleNamespace(
+            device_manager=manager,
+            equips={},
+            _force_stop_requested=False,
+            _raise_lifecycle_failures=lambda _report: None,
+        )
+        selected = ("mock_device_1",)
+
+        MainWindow.stop_equipments_for_scanning(target, selected)
+        MainWindow.force_stop_equipments(target, selected)
+        MainWindow.start_equipments(target, selected)
+
+        manager.stop_for_scan.assert_called_once_with(selected)
+        manager.force_stop_for_scan.assert_called_once_with(selected)
+        manager.force_stop_all.assert_not_called()
+        manager.start_after_scan.assert_called_once_with(selected)
+
+    def test_disconnected_unused_mock_does_not_block_selected_scan_lifecycle(self):
+        first = self.window.equips["mock_device_1"]
+        second = self.window.equips["mock_device_2"]
+        first.connect(address="MOCK::ONE::INSTR")
+        self.assertTrue(first.logic.hardware.connected)
+        self.assertFalse(second.logic.hardware.connected)
+
+        stop_report = self.window.stop_equipments_for_scanning(("mock_device_1",))
+        start_report = self.window.start_equipments(("mock_device_1",))
+
+        self.assertTrue(stop_report.succeeded)
+        self.assertTrue(start_report.succeeded)
+        self.assertFalse(second.logic.hardware.connected)
+
+        with self.assertRaises(DeviceLifecycleError):
+            self.window.stop_equipments_for_scanning(("mock_device_2",))
+
+    def test_scan_participants_cover_executable_physical_channels_only(self):
+        equipment = {
+            "device_b": object(),
+            "device_unused": object(),
+            "device_a": object(),
+            "device_c": object(),
+        }
+
+        def resolve(channel):
+            for label in equipment:
+                if channel.startswith(f"{label}_"):
+                    return label
+            return channel
+
+        main_window = SimpleNamespace(
+            equips=equipment,
+            resolve_device_label_for_channel=resolve,
+            artificial_channel_logic=SimpleNamespace(
+                original_channel_x_name="device_b_output",
+                original_channel_y_name="device_a_output",
+            ),
+        )
+
+        def reference(kind, access, channel):
+            return ScanChannelReference(kind, access, "level0", channel, "test")
+
+        references = (
+            reference("setter", "set", "device_a_output"),
+            reference("getter", "get", "device_b_input"),
+            reference("average_getter", "get", "device_c_input"),
+            reference("manual_set_before", "set", "artificial_channel_n"),
+            reference("getter", "get", "artificial_channel_E"),
+            reference("setter", "set", "default_wait"),
+            reference("plot_getter", "get", "device_unused_input"),
+        )
+        scan = SimpleNamespace(
+            main_window=main_window,
+            channel_references=lambda: references,
+        )
+
+        self.assertEqual(
+            Scan._resolve_participating_device_ids(scan),
+            ("device_b", "device_a", "device_c"),
+        )
+
+        getter_only = SimpleNamespace(
+            main_window=main_window,
+            channel_references=lambda: (
+                reference("getter", "get", "artificial_channel_n"),
+                reference("setter", "set", "default_count"),
+            ),
+        )
+        self.assertEqual(Scan._resolve_participating_device_ids(getter_only), ())
+
+    def test_monitor_stop_targets_only_scan_participants(self):
+        calls = []
+        scan = SimpleNamespace(
+            main_window=SimpleNamespace(
+                equips={
+                    "used": SimpleNamespace(
+                        stop_monitor=lambda: calls.append("used")
+                    ),
+                    "unused": SimpleNamespace(
+                        stop_monitor=lambda: calls.append("unused")
+                    ),
+                }
+            ),
+            _log_warning=lambda _message: None,
+        )
+
+        Scan._stop_all_equipment_monitors(scan, ("used",))
+
+        self.assertEqual(calls, ["used"])
+
+    def test_scan_stop_and_cleanup_reuse_captured_participants(self):
+        force_stop_calls = []
+        scan = SimpleNamespace(
+            main_window=SimpleNamespace(
+                force_stop_equipments=lambda device_ids: force_stop_calls.append(
+                    device_ids
+                )
+            ),
+            _participating_device_ids=("device_a",),
+            logic=SimpleNamespace(
+                request_stop=lambda: None,
+                stop_scan=False,
+            ),
+        )
+
+        Scan._request_logic_stop(scan)
+
+        self.assertEqual(force_stop_calls, [("device_a",)])
+        self.assertTrue(scan.logic.stop_scan)
+
+        restart_calls = []
+        errors = []
+        finishes = []
+        resets = []
+        artificial_logic = SimpleNamespace(
+            reset_skip_next_scan_read=lambda: resets.append("artificial")
+        )
+        main_window = SimpleNamespace(
+            artificial_channel_logic=artificial_logic,
+            reset_skip_next_scan_read_from_global_limit=lambda: resets.append(
+                "global"
+            ),
+            start_equipments=lambda device_ids: restart_calls.append(device_ids),
+        )
+        logic = SimpleNamespace(
+            main_window=main_window,
+            max_level=0,
+            participating_device_ids=("device_a",),
+            looping=lambda _level: (_ for _ in ()).throw(RuntimeError("scan failed")),
+            reset_flags=lambda: resets.append("flags"),
+            sig_scan_error=SimpleNamespace(emit=errors.append),
+            sig_scan_finished=SimpleNamespace(emit=lambda: finishes.append(True)),
+        )
+
+        ScanLogic.scan(logic)
+
+        self.assertEqual(restart_calls, [("device_a",)])
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(finishes, [True])
+
     def test_failed_stop_for_scan_is_surfaced_before_scan_logic_starts(self):
         failure = LifecycleFailure(
             "mock_device_1",
@@ -345,7 +509,7 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         try:
             scan.logic = probe_logic
             scan.main_window = SimpleNamespace(
-                stop_equipments_for_scanning=lambda: (_ for _ in ()).throw(
+                stop_equipments_for_scanning=lambda _device_ids: (_ for _ in ()).throw(
                     DeviceLifecycleError(report)
                 )
             )

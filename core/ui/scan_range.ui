@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>560</width>
-    <height>320</height>
+    <height>221</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -49,15 +49,15 @@
         <bool>true</bool>
        </property>
       </widget>
-    </item>
-    <item>
-     <widget class="QPlainTextEdit" name="log_plainTextEdit">
-      <property name="placeholderText">
-       <string>Scan-range load and rejection messages appear here.</string>
-      </property>
-     </widget>
-    </item>
-   </layout>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="log_plainTextEdit">
+     <property name="placeholderText">
+      <string>Scan-range load and rejection messages appear here.</string>
+     </property>
+    </widget>
    </item>
   </layout>
  </widget>

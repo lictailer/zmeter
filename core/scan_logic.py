@@ -149,6 +149,7 @@ class ScanLogic(QtCore.QThread):
     def __init__(self, main_window=None):
         QtCore.QThread.__init__(self)
         self.main_window = main_window
+        self.participating_device_ids = ()
 
         # --- NEW: pause primitives ---
         self._pause_mutex = QtCore.QMutex()
@@ -829,7 +830,7 @@ class ScanLogic(QtCore.QThread):
             
             # Surface restart failures without suppressing GUI finalization.
             try:
-                self.main_window.start_equipments()
+                self.main_window.start_equipments(self.participating_device_ids)
             except Exception as exc:
                 self.sig_scan_error.emit(
                     "Equipment restart failed: "

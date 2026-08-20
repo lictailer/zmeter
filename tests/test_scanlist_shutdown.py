@@ -198,11 +198,11 @@ class ScanOutputFinalizationStateTests(unittest.TestCase):
         self.scan.main_window = type(
             "_MainWindow",
             (),
-            {"stop_equipments_for_scanning": lambda _self: None},
+            {"stop_equipments_for_scanning": lambda _self, _device_ids: None},
         )()
         self.scan._focus_plot_tab_1_for_scan_start = lambda **_kwargs: None
         self.scan._start_new_scan_log_session = lambda: None
-        self.scan._stop_all_equipment_monitors = lambda: None
+        self.scan._stop_all_equipment_monitors = lambda _device_ids: None
         self.scan.update_alllevel_setting_array = lambda: None
         self.scan.update_all_plots = lambda: None
         self.scan._log_info = lambda _message: None

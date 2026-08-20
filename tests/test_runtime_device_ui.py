@@ -553,7 +553,7 @@ class RuntimeDeviceUiTests(unittest.TestCase):
         scan = self.window.scanlist.list_available.get_widgets()[0].scan
         observations = []
 
-        def fail_stop():
+        def fail_stop(_device_ids):
             observations.append(self.manager.runtime_mutation_blockers())
             raise RuntimeError("injected stop failure")
 

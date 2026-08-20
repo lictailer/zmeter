@@ -453,6 +453,57 @@ print("manager import and registry lookup remained lazy")
         )
         self.assertEqual(manager.snapshot().records[0].state, DeviceState.ERROR)
 
+    def test_scan_lifecycle_targets_only_selected_devices_in_profile_order(self):
+        events = []
+        instances = iter(
+            (
+                SimpleNamespace(label="first"),
+                SimpleNamespace(label="second"),
+                SimpleNamespace(label="third"),
+            )
+        )
+
+        def stop(instance):
+            events.append(f"stop:{instance.label}")
+            if instance.label == "second":
+                raise RuntimeError("disconnected unused device must not be called")
+
+        registration = make_registration(
+            factory=lambda: next(instances),
+            stop_scan=stop,
+            start_scan=lambda instance: events.append(f"start:{instance.label}"),
+            force_stop=lambda instance: events.append(f"force:{instance.label}"),
+        )
+        manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
+        manager.load_profile(
+            make_profile(
+                make_config("first"),
+                make_config("second"),
+                make_config("third"),
+            )
+        )
+
+        self.assertTrue(manager.stop_for_scan(("third", "first")).succeeded)
+        self.assertTrue(manager.start_after_scan(("third",)).succeeded)
+        self.assertTrue(manager.force_stop_for_scan(("first",)).succeeded)
+        self.assertTrue(manager.stop_for_scan(()).succeeded)
+
+        self.assertEqual(
+            events,
+            ["stop:first", "stop:third", "start:third", "force:first"],
+        )
+
+    def test_selected_device_without_scan_hooks_is_a_successful_noop(self):
+        manager = DeviceManager(
+            DriverRegistry((make_registration(),)),
+            SimpleNamespace(),
+        )
+        manager.load_profile(make_profile(make_config("device")))
+
+        self.assertTrue(manager.stop_for_scan(("device",)).succeeded)
+        self.assertTrue(manager.start_after_scan(("device",)).succeeded)
+        self.assertTrue(manager.force_stop_for_scan(("device",)).succeeded)
+
     def test_teardown_is_ordered_continuing_aggregated_and_idempotent(self):
         events = []
         instances = iter(

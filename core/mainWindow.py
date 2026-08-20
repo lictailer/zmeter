@@ -2374,17 +2374,24 @@ class MainWindow(QtWidgets.QWidget):
 
         self.scanlist.serial.setValue(max_found + 1 if max_found >= 0 else 0)
 
-    def stop_equipments_for_scanning(self):
+    def stop_equipments_for_scanning(self, device_ids=None):
         device_manager = getattr(self, "device_manager", None)
         if device_manager is not None:
-            report = device_manager.stop_for_scan()
+            report = (
+                device_manager.stop_for_scan()
+                if device_ids is None
+                else device_manager.stop_for_scan(device_ids)
+            )
             self._raise_lifecycle_failures(report)
             return report
+        selected_ids = None if device_ids is None else frozenset(device_ids)
         for name, equipment in self.equips.items():
+            if selected_ids is not None and name not in selected_ids:
+                continue
             if hasattr(equipment, "stop_scan"):
                 equipment.stop_scan()
 
-    def start_equipments(self):
+    def start_equipments(self, device_ids=None):
         device_manager = getattr(self, "device_manager", None)
         shutdown_started = bool(
             getattr(self, "_session_shutdown_in_progress", False)
@@ -2399,21 +2406,35 @@ class MainWindow(QtWidgets.QWidget):
             return None
         self._force_stop_requested = False
         if device_manager is not None:
-            report = device_manager.start_after_scan()
+            report = (
+                device_manager.start_after_scan()
+                if device_ids is None
+                else device_manager.start_after_scan(device_ids)
+            )
             self._raise_lifecycle_failures(report)
             return report
+        selected_ids = None if device_ids is None else frozenset(device_ids)
         for name, equipment in self.equips.items():
+            if selected_ids is not None and name not in selected_ids:
+                continue
             if hasattr(equipment, "start_scan"):
                 equipment.start_scan()
 
-    def force_stop_equipments(self):
+    def force_stop_equipments(self, device_ids=None):
         self._force_stop_requested = True
         device_manager = getattr(self, "device_manager", None)
         if device_manager is not None:
-            report = device_manager.force_stop_all()
+            report = (
+                device_manager.force_stop_all()
+                if device_ids is None
+                else device_manager.force_stop_for_scan(device_ids)
+            )
             self._raise_lifecycle_failures(report)
             return report
+        selected_ids = None if device_ids is None else frozenset(device_ids)
         for name, equipment in self.equips.items():
+            if selected_ids is not None and name not in selected_ids:
+                continue
             if hasattr(equipment, "force_stop"):
                 equipment.force_stop()
 

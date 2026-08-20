@@ -1041,10 +1041,21 @@ class DeviceManager(QtCore.QObject):
         self._complete_operation(operation, result)
         return operation
 
-    def stop_for_scan(self) -> LifecycleReport:
-        return self._run_bulk("stop_for_scan", "stop scan activity", "stop_scan")
+    def stop_for_scan(
+        self,
+        device_ids: Iterable[str] | None = None,
+    ) -> LifecycleReport:
+        return self._run_bulk(
+            "stop_for_scan",
+            "stop scan activity",
+            "stop_scan",
+            device_ids=device_ids,
+        )
 
-    def start_after_scan(self) -> LifecycleReport:
+    def start_after_scan(
+        self,
+        device_ids: Iterable[str] | None = None,
+    ) -> LifecycleReport:
         with self._lock:
             if self._shutdown_intent or self._teardown_in_progress:
                 return LifecycleReport("start_after_scan")
@@ -1052,10 +1063,19 @@ class DeviceManager(QtCore.QObject):
             "start_after_scan",
             "start scan activity",
             "start_scan",
+            device_ids=device_ids,
         )
 
     def force_stop_all(self) -> LifecycleReport:
         return self._run_bulk("force_stop_all", "force stop", "force_stop")
+
+    def force_stop_for_scan(self, device_ids: Iterable[str]) -> LifecycleReport:
+        return self._run_bulk(
+            "force_stop_for_scan",
+            "force stop",
+            "force_stop",
+            device_ids=device_ids,
+        )
 
     def begin_shutdown(self) -> DeviceShutdownReservation:
         """Atomically close admission before the UI quiesces an active scan."""
@@ -2534,13 +2554,18 @@ class DeviceManager(QtCore.QObject):
         operation: str,
         action_name: str,
         adapter_method_name: str,
+        *,
+        device_ids: Iterable[str] | None = None,
     ) -> LifecycleReport:
+        selected_ids = None if device_ids is None else frozenset(device_ids)
         with self._lock:
             self._require_loaded_locked(operation)
             if self._mutation_active:
                 raise DeviceMutationBusyError(("runtime device mutation in progress",))
             failures: list[LifecycleFailure] = []
             for record in self._records.values():
+                if selected_ids is not None and record.config.id not in selected_ids:
+                    continue
                 before = len(failures)
                 self._call_adapter(
                     record,
