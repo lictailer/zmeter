@@ -1,0 +1,37 @@
+# Stanford Research Systems SR860
+
+## Purpose and status
+
+This package controls an SRS SR860 lock-in amplifier through the shared `VisaRuntime`. It covers demodulated outputs, reference/source settings, input configuration, sensitivity/time constant, filters, display/status values, and auxiliary I/O. Shared-session lifecycle and offscreen construction have fake coverage; bench validation remains pending.
+
+It is registered under driver ID `sr860` with required connection field `address`. Keep `connect_on_start=false` for first commissioning and use explicit numeric scan filters. Runtime mutation remains disabled.
+
+After construction, the widget schedules one VISA enumeration on the next Qt event-loop turn. Discovery runs in a worker thread, populates a width-adjusted address dropdown, and never opens an instrument session. The operator can still click **Refresh VISA**. Disconnect closes only its session lease.
+
+## Current scan discovery
+
+The exact `.logic` signatures expose one setter, `set_amplitude(value)`, and many getters. Numeric acquisition candidates include `X`, `Y`, `R`, `Theta`, `frequency`, `amplitude`, `phase`, and the currently selected auxiliary input/output. Status getters expose overload/unlock state.
+
+Configuration getters include time constant, sensitivity, reference mode/input, trigger, harmonic, input modes/ranges, coupling, shield, notch filter, DC level/mode, and filter slope. `get_multiple_outputs`, `get_display`, and `get_all` return compound or non-measurement results. Use profile filters so only numeric scalar measurement channels are exposed.
+
+Most logic `set_*` methods use stored UI setpoints and therefore are not scan-visible. Do not infer scan writability from the widget controls.
+
+## Setup and units
+
+- Python: PyQt6, PyVISA, NumPy, and pyqtgraph;
+- system: compatible VISA backend/interface driver;
+- configuration: explicit VISA resource, input/reference mode, ranges, sensitivity, time constant, filters, auxiliary channel, and safe source amplitude.
+
+The hardware documents internal reference frequency as 1 mHz–500 kHz and sine output amplitude as 1 nV–2 V RMS. Phase/`Theta` are degrees; voltage-mode demodulated outputs and auxiliary I/O are volts. Confirm limits against the exact instrument/manual and experiment.
+
+## Lifecycle and safety
+
+Connection checks that identity contains `SR860`, and termination stops UI monitoring then disconnects. The widget does not implement standard `start_scan`, `stop_scan`, or `force_stop`, so automatic scan coordination is incomplete. A 50 ms monitor can otherwise compete with scan reads.
+
+Agents must not enumerate VISA resources, connect, configure, source, read, reset, or disconnect the SR860. The user must validate filters, units, timeouts, monitor coordination, auxiliary limits, and shutdown state. See [hardware_safety.md](../../documents/hardware_safety.md).
+
+## Validation
+
+Hardware-independent syntax check: `python -B -m py_compile devices/sr860/sr860_hardware.py devices/sr860/sr860_logic.py devices/sr860/sr860_main.py`.
+
+**User-executed hardware test:** use a disconnected/dummy signal path; connect to the explicit VISA address and confirm SR860 identity; record existing configuration; read X/Y/R/Theta and overload state; set the sine amplitude to a reviewed low value; verify the scan-visible amplitude setter/readback; write only 0 V to a reviewed auxiliary output; stop monitoring and simulate a timeout; terminate; and confirm the session closes without changing unrelated settings.

@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "profile": "phase1_lab",
+  "paths": {
+    "save": "./data",
+    "backup": null
+  },
+  "devices": [
+    {
+      "id": "sr860_0",
+      "driver": "sr860",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_SR860_1_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "sr860_1",
+      "driver": "sr860",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_SR860_2_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "sr860_2",
+      "driver": "sr860",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_SR860_3_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "sr830_0",
+      "driver": "sr830",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_SR830_1_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "sr830_1",
+      "driver": "sr830",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_SR830_2_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "sr830_2",
+      "driver": "sr830",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_SR830_3_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "keithley24xx_0",
+      "driver": "keithley24xx",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_KEITHLEY24XX_1_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "keithley24xx_1",
+      "driver": "keithley24xx",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_KEITHLEY24XX_2_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "nidaq",
+      "driver": "nidaq",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "device_name": "REPLACE_WITH_LEGACY_NIDAQ_DEVICE_NAME"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "ni6423",
+      "driver": "ni6423",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "device_name": "REPLACE_WITH_NI6423_DEVICE_NAME"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "k10cr1_0",
+      "driver": "k10cr1",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "serial": "REPLACE_WITH_K10CR1_1_SERIAL"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "k10cr1_1",
+      "driver": "k10cr1",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "serial": "REPLACE_WITH_K10CR1_2_SERIAL"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "pem100",
+      "driver": "pem100",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_PEM100_VISA_ADDRESS",
+        "timeout_ms": 20000
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "sp150",
+      "driver": "sp150",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_SP150_VISA_ADDRESS",
+        "timeout_ms": 10000,
+        "query_delay_s": 1.0
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "hp34401a",
+      "driver": "hp34401a",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_HP34401A_VISA_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "bbd30x",
+      "driver": "bbd30x",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "serial": "REPLACE_WITH_BBD30X_SERIAL"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    }
+  ]
+}

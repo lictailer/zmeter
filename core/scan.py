@@ -1,4 +1,6 @@
 import datetime as _dt
+from dataclasses import dataclass
+import re
 from .scan_info import *
 from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
@@ -10,6 +12,20 @@ from .all_plots import ImagePlot
 import os, shutil
 from .append_to_ppt import add_slide_with_qpixmap
 
+
+_AVERAGE_GETTER_REFERENCE = re.compile(r"^level(\d+)_average_(.+)$")
+_PLOT_CHANNEL_REFERENCE = re.compile(r"^L\d+([SG])\d+_(.+)$")
+
+
+@dataclass(frozen=True)
+class ScanChannelReference:
+    """One channel occurrence retained by a live scan definition."""
+
+    kind: str
+    access: str
+    level: str | None
+    channel: str
+    path: str
 
 
 class Scan(QtWidgets.QWidget):
@@ -37,6 +53,7 @@ class Scan(QtWidgets.QWidget):
         self.getter_equipment_info = getter_equipment_info
 
         self._start_new_scan_after_stop = False
+        self._shutdown_requested = False
 
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
@@ -99,6 +116,9 @@ class Scan(QtWidgets.QWidget):
         self._run_error_message = None
         self._stop_intent_logged = False
         self._finalize_outputs_scheduled = False
+        self._outputs_finalized = True
+        self._runtime_activity_reservation = None
+        self._participating_device_ids = ()
         self.logStatus_textEdit.setReadOnly(True)
         self.logStatus_textEdit.document().setMaximumBlockCount(self.MAX_UI_LOG_LINES)
         self._replace_current_scan_log(self.info.get("scan_log", []))
@@ -120,6 +140,11 @@ class Scan(QtWidgets.QWidget):
         if isinstance(plots_info, dict):
             self.all_plot_setting.update_ui(plots_info)
         self.logic.sig_scan_finished.connect(self.scan_finished)
+
+    @property
+    def outputs_finalized(self) -> bool:
+        """Return whether GUI-thread output work for the last run is complete."""
+        return bool(self._outputs_finalized and not self._finalize_outputs_scheduled)
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
         base = self._next_unique_data_name()
@@ -238,6 +263,7 @@ class Scan(QtWidgets.QWidget):
         Defer heavyweight save/export work by one event-loop turn so the
         last plot repaint can be processed before GUI-thread save operations.
         """
+        restart_after_finalize = False
         try:
             self.when_save_plots_clicked()
             self.when_save_clicked()
@@ -247,9 +273,14 @@ class Scan(QtWidgets.QWidget):
             # If user clicked "Scan" while paused, we queued a fresh scan start
             if getattr(self, "_start_new_scan_after_stop", False):
                 self._start_new_scan_after_stop = False
-                self._start_scan_now()
+                restart_after_finalize = True
         finally:
             self._finalize_outputs_scheduled = False
+            self._outputs_finalized = True
+            self._release_runtime_activity_reservation()
+
+        if restart_after_finalize:
+            self._start_scan_now()
 
     def handle_scan_error(self, error_message: str):
         self._run_error_message = error_message
@@ -262,6 +293,158 @@ class Scan(QtWidgets.QWidget):
     def set_getter_equipment_info(self, info):
         self.getter_equipment_info = info
         self.all_level_setting.set_getter_equipment_info(self.getter_equipment_info)
+
+    def refresh_catalog(self, setter_equipment_info, getter_equipment_info):
+        """Refresh both scan menus without rewriting the scan definition."""
+        self.setter_equipment_info = setter_equipment_info
+        self.getter_equipment_info = getter_equipment_info
+        self.all_level_setting.refresh_catalog_choices(
+            setter_equipment_info,
+            getter_equipment_info,
+        )
+
+    def channel_references(self):
+        """Return immutable references from the live level editor model.
+
+        The live ``AllLevelSetting`` model is authoritative while an editor is
+        open.  In particular, this avoids reporting the older ``ScanItem.info``
+        copy while an edit is still being reflected through Qt signals.
+        """
+        level_model = getattr(
+            getattr(self, "all_level_setting", None),
+            "all_level_info",
+            self.info.get("levels", {}),
+        )
+        plot_model = getattr(
+            getattr(self, "all_plot_setting", None),
+            "info",
+            self.info.get("plots", {}),
+        )
+        return self.channel_references_from_models(level_model, plot_model)
+
+    @classmethod
+    def channel_references_from_info(cls, info):
+        """Return references retained by a scan template/persisted dictionary."""
+        if not isinstance(info, dict):
+            return ()
+        return cls.channel_references_from_models(
+            info.get("levels", {}),
+            info.get("plots", {}),
+        )
+
+    @classmethod
+    def channel_references_from_models(cls, level_model, plot_model):
+        references = []
+
+        for level_key, level_info in (level_model or {}).items():
+            if not isinstance(level_info, dict):
+                continue
+
+            setters = level_info.get("setters", {})
+            if isinstance(setters, dict):
+                for setter_key, setter_info in setters.items():
+                    if not isinstance(setter_info, dict):
+                        continue
+                    channel = cls._reference_channel(setter_info.get("channel"))
+                    if channel is None:
+                        continue
+                    references.append(
+                        ScanChannelReference(
+                            kind="setter",
+                            access="set",
+                            level=str(level_key),
+                            channel=channel,
+                            path=(
+                                f"levels.{level_key}.setters.{setter_key}.channel"
+                            ),
+                        )
+                    )
+
+            getters = level_info.get("getters", ())
+            if isinstance(getters, (list, tuple)):
+                for getter_index, getter_token in enumerate(getters):
+                    channel = cls._reference_channel(getter_token)
+                    if channel is None:
+                        continue
+                    kind = "getter"
+                    average_match = _AVERAGE_GETTER_REFERENCE.match(channel)
+                    if average_match is not None:
+                        kind = "average_getter"
+                        channel = average_match.group(2)
+                    references.append(
+                        ScanChannelReference(
+                            kind=kind,
+                            access="get",
+                            level=str(level_key),
+                            channel=channel,
+                            path=f"levels.{level_key}.getters[{getter_index}]",
+                        )
+                    )
+
+            for manual_key in ("manual_set_before", "manual_set_after"):
+                manual_sets = level_info.get(manual_key, ())
+                if not isinstance(manual_sets, (list, tuple)):
+                    continue
+                for manual_index, mapping in enumerate(manual_sets):
+                    if not isinstance(mapping, dict):
+                        continue
+                    for channel_name in mapping:
+                        channel = cls._reference_channel(channel_name)
+                        if channel is None:
+                            continue
+                        references.append(
+                            ScanChannelReference(
+                                kind=manual_key,
+                                access="set",
+                                level=str(level_key),
+                                channel=channel,
+                                path=(
+                                    f"levels.{level_key}.{manual_key}"
+                                    f"[{manual_index}]"
+                                ),
+                            )
+                        )
+
+        for plot_kind, plots in (plot_model or {}).items():
+            if not isinstance(plots, dict):
+                continue
+            for plot_key, plot_info in plots.items():
+                if not isinstance(plot_info, dict):
+                    continue
+                for field, token in plot_info.items():
+                    token = cls._reference_channel(token)
+                    if token is None:
+                        continue
+                    plot_match = _PLOT_CHANNEL_REFERENCE.match(token)
+                    if plot_match is None:
+                        continue
+                    direction, channel = plot_match.groups()
+                    kind = "plot_setter" if direction == "S" else "plot_getter"
+                    access = "set" if direction == "S" else "get"
+                    average_match = _AVERAGE_GETTER_REFERENCE.match(channel)
+                    if average_match is not None:
+                        kind = "plot_average_getter"
+                        channel = average_match.group(2)
+                    references.append(
+                        ScanChannelReference(
+                            kind=kind,
+                            access=access,
+                            level=None,
+                            channel=channel,
+                            path=f"plots.{plot_kind}.{plot_key}.{field}",
+                        )
+                    )
+
+        return tuple(references)
+
+    @staticmethod
+    def _reference_channel(channel):
+        if not isinstance(channel, str):
+            return None
+        channel = channel.strip()
+        if channel == "" or channel.lower() in {"none", "void"}:
+            return None
+        return channel
 
     def populate(self):
         self.lineEdit.setText(self.info['name'])
@@ -445,12 +628,57 @@ class Scan(QtWidgets.QWidget):
         self.main_window = mainwindow
         self.logic.main_window = mainwindow
 
-    def _stop_all_equipment_monitors(self):
+    def _resolve_participating_device_ids(self):
+        """Resolve the physical devices used by the current executable scan model."""
+        if self.main_window is None or not hasattr(self.main_window, "equips"):
+            return ()
+
+        physical_channels = []
+        for reference in self.channel_references():
+            if reference.kind.startswith("plot_"):
+                continue
+            channel = reference.channel
+            if channel.startswith("default_"):
+                continue
+            if channel.startswith("artificial_channel_"):
+                if reference.access != "set":
+                    continue
+                artificial_logic = getattr(
+                    self.main_window, "artificial_channel_logic", None
+                )
+                if artificial_logic is not None:
+                    physical_channels.extend(
+                        (
+                            artificial_logic.original_channel_x_name,
+                            artificial_logic.original_channel_y_name,
+                        )
+                    )
+                continue
+            physical_channels.append(channel)
+
+        resolve = getattr(
+            self.main_window, "resolve_device_label_for_channel", None
+        )
+        if not callable(resolve):
+            return ()
+        selected = {resolve(channel) for channel in physical_channels}
+        return tuple(label for label in self.main_window.equips if label in selected)
+
+    def _capture_participating_device_ids(self):
+        device_ids = self._resolve_participating_device_ids()
+        self._participating_device_ids = device_ids
+        self.logic.participating_device_ids = device_ids
+        return device_ids
+
+    def _stop_all_equipment_monitors(self, device_ids):
         """Best-effort monitor shutdown before scan to avoid read-contention."""
         if self.main_window is None or not hasattr(self.main_window, "equips"):
             return
 
+        selected_ids = frozenset(device_ids)
         for equipment_name, equipment in self.main_window.equips.items():
+            if equipment_name not in selected_ids:
+                continue
             if not hasattr(equipment, "stop_monitor"):
                 continue
             try:
@@ -462,28 +690,62 @@ class Scan(QtWidgets.QWidget):
 
     def _start_scan_now(self):
         """Start a fresh scan using current self.info settings."""
-        if hasattr(self, "unique_data_name"):
-            del self.unique_data_name
+        if self._shutdown_requested:
+            self._start_new_scan_after_stop = False
+            return
 
-        self._focus_plot_tab_1_for_scan_start(maximize=False)
-        self._start_new_scan_log_session()
+        self._acquire_runtime_activity_reservation()
+        try:
+            if hasattr(self, "unique_data_name"):
+                del self.unique_data_name
 
-        self.main_window.stop_equipments_for_scanning()
-        self._stop_all_equipment_monitors()
-        self.logic.reset_flags()
-        self.logic.go_scan = True
+            self._focus_plot_tab_1_for_scan_start(maximize=False)
+            self._start_new_scan_log_session()
 
-        self.update_alllevel_setting_array()
-        self.logic.initialize_scan_data(self.info)
-        self._log_info("Scan started.")
-        self._log_info(self._build_start_summary())
+            device_ids = self._capture_participating_device_ids()
+            self.main_window.stop_equipments_for_scanning(device_ids)
+            self._stop_all_equipment_monitors(device_ids)
+            self.logic.reset_flags()
+            self.logic.go_scan = True
 
-        self.update_all_plots()
-        self.logic.start()
+            self.update_alllevel_setting_array()
+            self.logic.initialize_scan_data(self.info)
+            self._log_info("Scan started.")
+            self._log_info(self._build_start_summary())
+
+            self.update_all_plots()
+            self._outputs_finalized = False
+            self.logic.start()
+        except Exception:
+            self._outputs_finalized = True
+            self._release_runtime_activity_reservation()
+            raise
+
+    def _acquire_runtime_activity_reservation(self):
+        if self._runtime_activity_reservation is not None:
+            raise RuntimeError("scan runtime activity is already reserved")
+        reserve = getattr(self.main_window, "reserve_runtime_activity", None)
+        if callable(reserve):
+            name = str(self.lineEdit.text() or self.info.get("name", "scan"))
+            self._runtime_activity_reservation = reserve("scan", name)
+
+    def _release_runtime_activity_reservation(self):
+        reservation = self._runtime_activity_reservation
+        self._runtime_activity_reservation = None
+        if reservation is not None:
+            reservation.release()
 
     def _request_logic_stop(self):
         """Request a clean stop from ScanLogic, including paused state."""
-        self.main_window.force_stop_equipments()
+        force_stop_error = None
+        try:
+            self.main_window.force_stop_equipments(
+                self._participating_device_ids
+            )
+        except Exception as exc:
+            # Always tell ScanLogic to stop even when a device's best-effort
+            # force-stop callback reports a failure.
+            force_stop_error = exc
 
         if hasattr(self.logic, "request_stop"):
             self.logic.request_stop()
@@ -493,6 +755,8 @@ class Scan(QtWidgets.QWidget):
                 self.logic.received_pause = False
 
         self.logic.stop_scan = True
+        if force_stop_error is not None:
+            raise force_stop_error
 
     def when_stop_clicked(self):
         self._start_new_scan_after_stop = False
@@ -508,6 +772,10 @@ class Scan(QtWidgets.QWidget):
         self._request_logic_stop()
 
     def when_scan_clicked(self):
+        if self._shutdown_requested:
+            self._start_new_scan_after_stop = False
+            return
+
         # If a scan is already running (paused or not), stop it first.
         # scan_finished() will save current data, then we start a fresh scan.
         if self.logic.isRunning():
@@ -553,14 +821,26 @@ class Scan(QtWidgets.QWidget):
             # but without that infrastructure, this fallback only works if your loop polls the flag.
 
     def start_scan(self):
-        if hasattr(self, "unique_data_name"):
-            del self.unique_data_name
-        self.logic.reset_flags()
-        self.logic.go_scan = True
-        self.logic.initilize_data(self.info)
-        self.main_window.stop_equipments_for_scanning()
-        self._stop_all_equipment_monitors()
-        self.logic.start()
+        if self._shutdown_requested:
+            self._start_new_scan_after_stop = False
+            return
+
+        self._acquire_runtime_activity_reservation()
+        try:
+            if hasattr(self, "unique_data_name"):
+                del self.unique_data_name
+            self.logic.reset_flags()
+            self.logic.go_scan = True
+            self.logic.initilize_data(self.info)
+            device_ids = self._capture_participating_device_ids()
+            self.main_window.stop_equipments_for_scanning(device_ids)
+            self._stop_all_equipment_monitors(device_ids)
+            self._outputs_finalized = False
+            self.logic.start()
+        except Exception:
+            self._outputs_finalized = True
+            self._release_runtime_activity_reservation()
+            raise
         while self.logic.isRunning():
             time.sleep(0.1)
     
@@ -858,8 +1138,54 @@ class Scan(QtWidgets.QWidget):
 
         def write_json_snapshot(path):
             self._sync_scan_log_to_info()
-            with open(path, "w") as json_file:
+            with open(path, "w", encoding="utf-8") as json_file:
                 json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
+
+        def write_recovery_snapshot(original_name):
+            temporary_path = None
+            try:
+                data_root = QtCore.QStandardPaths.writableLocation(
+                    QtCore.QStandardPaths.StandardLocation.GenericDataLocation
+                )
+                if not data_root:
+                    raise OSError("platform-local application-data directory is unavailable")
+                recovery_dir = os.path.join(data_root, "ZMeter", "recovery")
+                os.makedirs(recovery_dir, exist_ok=True)
+
+                safe_name = re.sub(
+                    r"[^A-Za-z0-9._-]+",
+                    "_",
+                    str(original_name or self.info.get("name", "scan")),
+                ).strip("._") or "scan.json"
+                if not safe_name.lower().endswith(".json"):
+                    safe_name = f"{safe_name}.json"
+                timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                stem = f"recovery_{timestamp}_{safe_name}"
+                recovery_path = os.path.join(recovery_dir, stem)
+                count = 1
+                while os.path.exists(recovery_path):
+                    name_part, extension = os.path.splitext(stem)
+                    recovery_path = os.path.join(
+                        recovery_dir, f"{name_part}_{count}{extension}"
+                    )
+                    count += 1
+
+                temporary_path = f"{recovery_path}.{os.getpid()}.tmp"
+                write_json_snapshot(temporary_path)
+                os.replace(temporary_path, recovery_path)
+                self._log_warning(f"Recovery JSON saved: {recovery_path}")
+                return recovery_path
+            except Exception as recovery_error:
+                if temporary_path and os.path.exists(temporary_path):
+                    try:
+                        os.remove(temporary_path)
+                    except OSError:
+                        pass
+                self._log_error(
+                    "Recovery JSON save failed: "
+                    f"{type(recovery_error).__name__}: {recovery_error}"
+                )
+                return None
 
         self.update_alllevel_setting_array()
         self.info["comments"] = self.comments_textEdit.toPlainText()
@@ -867,26 +1193,39 @@ class Scan(QtWidgets.QWidget):
         self._sync_scan_log_to_info()
 
         text = self.main_window.save_info_path.toPlainText().strip()
-        base_name = self._next_unique_data_name() + ".json"
-        self.name = base_name
+        base_name = f"{self.info.get('name', 'scan')}.json"
+        try:
+            base_name = self._next_unique_data_name() + ".json"
+            self.name = base_name
 
-        if not text:
-            fileName, _ = QFileDialog.getSaveFileName(self, "Select File to Save", self.name)
-            if not fileName:
-                self._log_warning("Manual save canceled by user.", persist_current_run=False)
-                return
-            folder, file = os.path.split(fileName)
-            base_name = file
-        else:
-            folder = os.path.normpath(text.strip('"'))
-            os.makedirs(folder, exist_ok=True)
-            fileName = os.path.join(folder, base_name)
+            if not text:
+                fileName, _ = QFileDialog.getSaveFileName(
+                    self, "Select File to Save", self.name
+                )
+                if not fileName:
+                    self._log_warning(
+                        "Manual save canceled by user; writing recovery JSON."
+                    )
+                    write_recovery_snapshot(base_name)
+                    return
+                folder, file = os.path.split(fileName)
+                base_name = file
+            else:
+                folder = os.path.normpath(text.strip('"'))
+                os.makedirs(folder, exist_ok=True)
+                fileName = os.path.join(folder, base_name)
 
-        count = 1
-        while os.path.exists(fileName):
-            name_part, ext = os.path.splitext(base_name)
-            fileName = os.path.join(folder, f"{name_part}_{count}{ext}")
-            count += 1
+            count = 1
+            while os.path.exists(fileName):
+                name_part, ext = os.path.splitext(base_name)
+                fileName = os.path.join(folder, f"{name_part}_{count}{ext}")
+                count += 1
+        except Exception as error:
+            self._log_error(
+                f"Manual save preparation failed: {type(error).__name__}: {error}"
+            )
+            write_recovery_snapshot(base_name)
+            return
 
         try:
             write_json_snapshot(fileName)
@@ -911,6 +1250,7 @@ class Scan(QtWidgets.QWidget):
                 self._log_warning("JSON backup skipped: drive Z: not found.")
         except Exception as e:
             self._log_error(f"Manual save failed: {type(e).__name__}: {e}")
+            write_recovery_snapshot(base_name)
 
     def when_load_clicked(self):
         def handle_special_values(value):

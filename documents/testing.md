@@ -51,12 +51,34 @@ python -B -m unittest discover -s tests -p "test_*.py" -v
 - Hardware: none after confirming the suite continues to use core stubs/mocks only.
 - Typical runtime: seconds.
 - Writes: no intentional lab data; Qt/platform caches may depend on environment.
-- Proves: covered artificial-channel range/skip/ramp, scan-abort, and force-stop flag behavior.
+- Proves: covered artificial-channel range/skip/ramp, scan-abort,
+  force-stop, startup/profile, catalog, and manager/runtime-session behavior.
+
+The core suite also includes offscreen catalog transaction tests. They exercise
+repeated refresh, synthetic add/remove, reference refusal, consumer rollback,
+device-button reconciliation, router publication, range-limit visibility, and
+the available/queue/manual/past/template scan consumers without loading a real
+driver.
+
+Phase 6 manager/UI coverage is available independently with:
+
+```powershell
+python -B -m unittest tests.test_device_manager_runtime_mutation -v
+python -B -m unittest tests.test_runtime_device_ui -v
+```
+
+These suites use fakes and the in-process mock only. They cover generation-bound
+call rejection, whole-router-request and scan/queue/manual activity leases,
+idle/busy refusal, session-only add/disconnect/remove, slow lifecycle worker UI
+responsiveness and thread affinity, exact reference refusal, two-phase catalog
+acknowledgement/reconciliation, cleanup quarantine and delete retry, injected
+worker-dispatch failures, and asynchronous application teardown. They do not
+load a vendor runtime or validate physical equipment.
 
 ### Mock-device tests
 
 ```powershell
-python -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v
+python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
 - Hardware: none; `mockDevice` uses its in-process simulator and sets Qt offscreen.
@@ -68,6 +90,20 @@ The commands are canonical, but successful execution requires the maintained env
 
 ## Additional focused checks
 
+The scalar scan and persistence contracts have dedicated hardware-independent
+characterization suites:
+
+```powershell
+python -B -m unittest -v tests.test_scan_regression tests.test_scan_persistence
+```
+
+They cover nested scalar shape/dtype/order, grouped reads and writes, averaged
+getters, signal metadata, pause/resume/stop, queue order, the hourly autosave
+trigger, empty and populated JSON round trips, `NaN` encoding, fields and level
+ordering, comments/logs, collision naming, serial discovery, canonical
+`autosave.json` replacement, disabled backup behavior, and intercepted
+PowerPoint/COM/`Z:\` paths. All files are confined to an OS temporary directory.
+
 - Parse changed `.ui` files with a hardware-independent XML parser or load only the affected widget offscreen with simulated dependencies.
 - For persistence changes, save to a temporary directory, reload, compare schema/data including `NaN`, verify duplicate naming, and test partial-write/failure reporting.
 - For threading changes, use deterministic barriers/events and bounded waits; never rely on long sleeps or real transport timing.
@@ -76,7 +112,33 @@ The commands are canonical, but successful execution requires the maintained env
 - Shared-runtime tests must inject fake manager/load functions. They must not
   instantiate a real PyVISA manager, import `clr`, call `AddReference`, load a
   vendor DLL, or enumerate hardware. Run the shared-runtime, migrated VISA,
-  K10CR1, and BBD30X fake suites before broader core/mock regressions.
+  K10CR1, BBD30X, and Four9 fake suites before broader core/mock regressions.
+
+Phase 1 registry coverage is in `tests.test_phase1_device_registrations` and
+`tests.test_ni6423_registration`. It verifies exact IDs and schemas, fresh-
+process lazy imports, shared-runtime constructor mapping, official SR830 path,
+startup-only policy, exact best-effort startup argument mapping, NI
+`device_name` validation, forbidden NI task creation, and exact NI6423 dynamic
+channels. `tests.test_best_effort_startup` covers ordered construction skipping,
+all-failed empty sessions, startup-result states, one-shot/owner-thread rules,
+pending-request teardown, launcher stage order, and the sanitized read-only
+Main Window System Log. Its focused coverage verifies timestamp/severity
+formatting, enabled-device order, disabled-device totals, identifier
+sanitization, bottom-of-window placement, read-only/auto-scroll/500-line
+presentation, message normalization, scan-range summary routing, and stderr
+fallback before a Main Window exists. `tests.test_runtime_device_ui` also
+checks one request/final result per runtime mutation and proves that a denied
+scan write remains local to the Scan Range log. Run these before the family
+fake suites.
+
+Phase 2 registry coverage is in `tests.test_phase2_device_registrations`. It
+verifies the four registered schemas/profile defaults, fresh-process laziness,
+Montana2 address mapping, asynchronous panel-worker connection paths,
+lifecycle hooks, startup-only policy, and visible rejection of the remaining
+deferred IDs. `tests.test_phase2_driver_behavior` intercepts every vendor/native
+boundary while checking OptiCool lazy-load retry and TLPM first-resource,
+failure, stop, join, and disconnect behavior. Run both with the existing Four9
+fake suite; none of these selectors opens a laboratory connection or DLL.
 
 ## User-executed hardware tests
 

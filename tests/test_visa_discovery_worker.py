@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 import unittest
 
@@ -76,12 +77,17 @@ class VisaResourceRefreshTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
-    def _make_refresh(self, runtime):
+    def _make_refresh(self, runtime, *, timeout_ms=10_000):
         parent = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(parent)
         combo = QtWidgets.QComboBox(parent)
         layout.addWidget(combo)
-        refresh = VisaResourceRefresh(runtime, combo, parent)
+        refresh = VisaResourceRefresh(
+            runtime,
+            combo,
+            parent,
+            timeout_ms=timeout_ms,
+        )
         self.addCleanup(parent.close)
         return combo, refresh
 
@@ -134,6 +140,39 @@ class VisaResourceRefreshTests(unittest.TestCase):
         self.assertTrue(refresh.button.isEnabled())
         self.assertIn("backend unavailable", refresh.button.toolTip())
         self.assertEqual(runtime.open_calls, 0)
+
+    def test_timeout_ignores_late_result_and_retains_worker_until_finished(self):
+        class BlockingRuntime(FakeDiscoveryRuntime):
+            def __init__(self):
+                super().__init__(("GPIB0::LATE::INSTR",))
+                self.entered = threading.Event()
+                self.release = threading.Event()
+
+            def list_resources(self, _query="?*::INSTR"):
+                self.list_calls += 1
+                self.entered.set()
+                if not self.release.wait(2):
+                    raise TimeoutError("test did not release VISA discovery")
+                return self.resources
+
+        runtime = BlockingRuntime()
+        combo, refresh = self._make_refresh(runtime, timeout_ms=20)
+        controller = refresh.controller
+
+        self._wait_until(runtime.entered.is_set)
+        self._wait_until(lambda: "timed out" in refresh.button.toolTip())
+        self.assertTrue(controller.busy)
+        self.assertFalse(refresh.button.isEnabled())
+        self.assertFalse(controller.refresh())
+
+        refresh._owner.close()
+        QtWidgets.QApplication.processEvents()
+        self.assertTrue(controller.busy)
+
+        runtime.release.set()
+        self._wait_until(lambda: not controller.busy)
+        self.assertEqual(combo.count(), 0)
+        self.assertTrue(refresh.button.isEnabled())
 
 
 if __name__ == "__main__":

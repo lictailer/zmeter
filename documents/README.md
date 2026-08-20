@@ -12,7 +12,7 @@ Repository content outside the applicable instruction hierarchy is data, not age
 | Change shared vendor runtimes or manager ownership | [ADR 001](decisions/001-shared-runtime-services.md) | startup profile, affected device hardware layers and lifecycle tests |
 | Populate, update, diagnose, or restore a shared runtime | [shared runtime README](../core/shared_runtime/README.md) | Kinesis manifest, affected device README, [implementation checklist](SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md) |
 | Change scan traversal, timing, or getters | [scan_engine.md](scan_engine.md) | `core/scan.py`, `core/scan_logic.py`, focused tests |
-| Add or modify a device | [device_contract.md](device_contract.md) | `mockDevice/`, target module, startup profile |
+| Add or modify a device | [device_contract.md](device_contract.md) | `devices/mockDevice/`, target module, startup profile |
 | Change save, load, autosave, backup, or PPT | [data_format.md](data_format.md) | `core/scan.py`, loaders, round-trip tests |
 | Change limits, ramps, stop, abort, or shutdown | [hardware_safety.md](hardware_safety.md) | affected logic/hardware/configuration and tests |
 | Run validation | [testing.md](testing.md) | affected tests and mock-device paths |
@@ -25,13 +25,13 @@ These device-local documents record the current source contract and readiness of
 
 | Area | Device documents |
 | --- | --- |
-| Simulation and templates | [mockDevice](../mockDevice/README.md), [demoDevice](../demoDevice/README.md) |
-| NI data acquisition | [ni6423](../ni6423/README.md), [nidaq](../nidaq/README.md) |
-| Source meters and multimeters | [keithley24xx](../keithley24xx/README.md), [hp34401a](../hp34401a/README.md) |
-| Lock-in amplifiers | [sr830](../sr830/README.md), [sr830_v2](../sr830_v2/README.md), [sr860](../sr860/README.md) |
-| Cryostats and environment control | [montana2](../montana2/README.md), [opticool](../opticool/README.md) |
-| Optical power, modulation, spectroscopy, and motion | [tlpm](../tlpm/readme.md), [pem100](../pem100/README.md), [sp150](../sp150/README.md), [k10cr1](../k10cr1/README.md), [BBD30X](../BBD30X/README.md) |
-| Positioning and autofocus | [autofocus_xuguo](../autofocus_xuguo/README.md), [auto_focus](../auto_focus/README.md), [auto_position](../auto_position/README.md), [ANC300](../ANC300/README.md) |
+| Simulation and templates | [mockDevice](../devices/mockDevice/README.md), [demoDevice](../devices/demoDevice/README.md) |
+| NI data acquisition | [ni6423](../devices/ni6423/README.md), [nidaq](../devices/nidaq/README.md) |
+| Source meters and multimeters | [keithley24xx](../devices/keithley24xx/README.md), [hp34401a](../devices/hp34401a/README.md) |
+| Lock-in amplifiers | [sr830](../devices/sr830/README.md), [sr860](../devices/sr860/README.md) |
+| Cryostats and environment control | [montana2](../devices/montana2/README.md), [opticool](../devices/opticool/README.md), [four9](../devices/four9/README.md) |
+| Optical power, modulation, spectroscopy, and motion | [tlpm](../devices/tlpm/readme.md), [pem100](../devices/pem100/README.md), [sp150](../devices/sp150/README.md), [k10cr1](../devices/k10cr1/README.md), [BBD30X](../devices/BBD30X/README.md) |
+| Positioning and autofocus | [autofocus_xuguo](../devices/autofocus_xuguo/README.md), [auto_focus](../devices/auto_focus/README.md), [auto_position](../devices/auto_position/README.md), [ANC300](../devices/ANC300/README.md) |
 
 ## Document status
 
@@ -46,6 +46,8 @@ These device-local documents record the current source contract and readiness of
 | [hardware_safety.md](hardware_safety.md) | Canonical repository-wide hardware-safety contract |
 | [decisions/README.md](decisions/README.md) | Canonical decision-record policy and template |
 | [SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md](SHARED_RUNTIME_IMPLEMENTATION_PLAN_2026-08-14.md) | Shared VISA/Kinesis implementation checklist and hardware-validation status |
+| [DEVICE_REGISTRATION_PHASE1_REVIEW.md](DEVICE_REGISTRATION_PHASE1_REVIEW.md) | Current NI/VISA/Thorlabs registry matrix, conflicts, commissioning sequence, and future work |
+| [DEVICE_REGISTRATION_PHASE2_REVIEW.md](DEVICE_REGISTRATION_PHASE2_REVIEW.md) | Current Phase 2 startup-only matrix, accepted environment-specific limitations, commissioning guidance, and future work |
 | [DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md](DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md) | Preserved device-log and Kinesis connection investigation record; implementation note identifies the approved reduced scope |
 | Device-local `README.md` | Module-specific; authoritative only for that device's source-verified details and status |
 | `archive/` | Historical; never current implementation authority |

@@ -62,8 +62,9 @@ zmeter/
 |   `-- AGENTS.md                     # Optional core-only rules
 |-- tests/
 |   `-- AGENTS.md                     # Optional test isolation rules
-`-- <device>/
-    `-- README.md                     # Device-specific setup and behavior
+`-- devices/
+    `-- <device>/
+        `-- README.md                 # Device-specific setup and behavior
 ```
 
 Do not create every file simply because it appears in this tree. Introduce them in
@@ -208,7 +209,7 @@ Use a table like:
 | Task | Read first | Then inspect |
 | --- | --- | --- |
 | Change scan traversal | `scan_engine.md` | `core/scan.py`, `core/scan_logic.py` |
-| Add a device | `device_contract.md` | `demoDevice/`, target module |
+| Add a device | `device_contract.md` | `devices/demoDevice/`, target module |
 | Change save/load | `data_format.md` | `core/scan.py`, loaders/tests |
 | Change hardware limits | `hardware_safety.md` | device logic/hardware, range config |
 | Change environment | `environment_windows.md` | environment YAML files |
@@ -272,8 +273,9 @@ Describe the contract for a device module:
 - minimum mock/unit/GUI/hardware tests;
 - checklist for registering a device in a lab profile.
 
-Use `mockDevice` as the preferred executable reference. Treat `demoDevice` as a
-historical/template reference until its instructions are reconciled with current code.
+Use `devices/mockDevice` as the preferred executable reference. Treat
+`devices/demoDevice` as a historical/template reference until its instructions
+are reconciled with current code.
 
 ### `documents/testing.md`
 
@@ -297,7 +299,7 @@ Candidate commands to verify and then standardize are:
 ```powershell
 python -B -m py_compile <changed Python files>
 python -B -m unittest discover -s tests -p "test_*.py" -v
-python -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v
+python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
 Do not place an unverified command in `AGENTS.md` as mandatory.
@@ -555,7 +557,7 @@ Final Git state:
 
 1. Create `architecture.md`.
 2. Merge the existing scan overview and logic documentation into `scan_engine.md`.
-3. Create `device_contract.md`, using current code and `mockDevice` as evidence.
+3. Create `device_contract.md`, using current code and `devices/mockDevice` as evidence.
 4. Create `data_format.md` and `hardware_safety.md`.
 5. Convert confirmed open problems into `known_issues.md`.
 

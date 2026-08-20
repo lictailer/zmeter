@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "profile": "example_lab",
+  "paths": {
+    "save": "./data",
+    "backup": null
+  },
+  "devices": []
+}

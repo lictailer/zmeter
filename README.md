@@ -40,8 +40,8 @@ Do not install every vendor package by default. Start with the mock configuratio
 
 Maintained VISA devices share one lazy `VisaRuntime` manager while retaining
 exclusive instrument sessions. K10CR1 and BBD30X share one lazy,
-manifest-validated `KinesisRuntime`. Local vendor binaries live only in the
-ignored `core/shared_runtime/vendor/thorlabs_kinesis/` folder; see its README
+manifest-validated `KinesisRuntime`. The shared Kinesis vendor binaries live in
+the tracked `core/shared_runtime/vendor/thorlabs_kinesis/` folder; see its README
 before enabling either motion device.
 
 ## Installation
@@ -84,9 +84,9 @@ The expected Python series is 3.12; the current environment file pins Python 3.1
 
 ## Safe first launch with mock devices
 
-The following procedure exercises only the simulated devices in the current startup configuration.
+The following procedure exercises only the simulated devices in the checked-in default profile.
 
-1. Review `start_zmeter.py` and confirm that only `MockDevice` imports and instances are active. Real instrument imports and connection calls must remain commented for this first launch.
+1. Review `config/profiles/mock.json` and confirm that it enables only the two `mock_device` entries with `connect_on_start` set to `false`.
 2. Activate `zmeter_May2026`.
 3. From the repository root, launch:
 
@@ -101,21 +101,49 @@ The following procedure exercises only the simulated devices in the current star
 
 The mock device offers direct and ramped A/B setters, A/B and random getters, deterministic fault injection, optional range rejection, and a bounded command log. It does not use PyVISA or communicate with physical equipment.
 
+To select a different reviewed local profile, pass its repository-relative or absolute path explicitly:
+
+```powershell
+python start_zmeter.py --profile config/profiles/my-lab.local.json
+```
+
+An invalid selected profile fails visibly and is never replaced silently with the mock profile.
+
 ## Configuring a laboratory setup
 
-Laboratory equipment is currently selected in `start_zmeter.py`. Configuration includes:
+Session configuration is selected by a validated JSON profile. It includes:
 
-- imports for the device widgets used in that setup;
 - stable labels for each device instance;
-- connection calls and addresses or serial numbers;
+- reviewed registry driver IDs and declared connection fields;
+- whether an enabled device may connect during startup;
 - optional setter/getter channel filters;
 - local measurement and backup paths.
-- one `RuntimeServices` provider whose `.visa` or `.kinesis` service is passed
-  to every enabled device in that family.
+
+`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in profiles keep real devices disabled. The registry recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`, plus the Phase 2 IDs `four9`, `montana2`, `opticool`, and `tlpm`; real devices require an ignored local profile and user-executed commissioning. The [Phase 2 review](documents/DEVICE_REGISTRATION_PHASE2_REVIEW.md) records the explicitly accepted limitations of those environment-specific integrations.
+
+Startup is best effort after profile validation. ZMeter shows broad loading
+stages, skips an enabled device that cannot be constructed, and continues after
+a requested connection fails. The Main Window opens with every successfully
+constructed device and includes a read-only, timestamped System Log. Disabled
+devices appear only in its startup totals; enabled-device results remain
+sanitized. Asynchronous
+Keithley24xx, BBD30X, K10CR1, Four9, Montana2, OptiCool, and TLPM requests may still be completing when it opens;
+use the corresponding device panel for the final result and manual retry.
+
+Runtime device changes are session-only and do not rewrite the selected JSON
+profile. The manager can add, disconnect, or remove only a driver whose
+registration explicitly opts into runtime mutation and provides a reviewed
+busy-state probe; the checked-in registry currently grants that capability only
+to `mock_device`. A change is refused while a scan, queue, manual operation,
+router request, device call, or device-owned job is active, or while a stored
+scan/manual/artificial configuration still references a device proposed for
+removal. Successful changes rebuild device buttons and every channel/catalog
+consumer together. A removed device's older callable handles fail closed, and
+the next launch still uses the unchanged profile.
 
 Before enabling hardware:
 
-1. Create or update a laboratory-specific startup/profile change without deleting the mock setup.
+1. Copy `config/profiles/example_lab.json` to an ignored `*.local.json` profile without changing the checked-in mock default.
 2. Confirm the exact instrument model, interface, address, units, limits, and required vendor runtime.
 3. Verify that each enabled device implements coherent connect, scan start/stop, force-stop, disconnect, termination, and close behavior.
 4. Review `scan_range_limits.json` and ensure its device labels match the configured equipment labels.
@@ -126,15 +154,15 @@ Real-hardware operation and validation must be performed directly by the user. C
 
 ## Instrument integrations in the repository
 
-The source tree contains integrations or experimental work for several equipment families:
+The flat `devices/` package contains integrations or experimental work for several equipment families:
 
 | Area | Modules present |
 | --- | --- |
 | Simulation | `mockDevice`, `demoDevice` |
 | NI data acquisition | `nidaq`, `ni6423` |
 | Source meters and multimeters | `keithley24xx`, `hp34401a` |
-| Lock-in amplifiers | `sr830`, `sr830_v2`, `sr860` |
-| Cryostats/environment control | `opticool`, `montana2` |
+| Lock-in amplifiers | `sr830` (official maintained implementation), `sr860` |
+| Cryostats/environment control | `opticool`, `montana2`, `four9` |
 | Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X` |
 | Positioning/autofocus | `auto_focus`, `auto_position`, `autofocus_xuguo`, `ANC300` |
 
@@ -177,7 +205,7 @@ Run validation only after confirming that the selected command, imports, fixture
 
 ```powershell
 python -B -m unittest discover -s tests -p "test_*.py" -v
-python -B -m unittest discover -s mockDevice/tests -p "test_*.py" -v
+python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 ```
 
 For changed Python files:
@@ -191,11 +219,14 @@ These checks provide static, unit, mock/simulation, or offscreen-GUI evidence on
 ## Project layout
 
 ```text
-start_zmeter.py                 Startup configuration and application entry point
+start_zmeter.py                 Thin profile-selecting application entry point
+config/profiles/                Checked mock profile and ignored local-profile boundary
 core/                           Scan UI, queue, execution, plotting, routing, and persistence
+core/device_management/         Profile loading, reviewed registry, manager ownership
 core/shared_runtime/            Shared VISA/Kinesis ownership and local vendor manifests
-mockDevice/                     Hardware-independent simulated instrument and its tests
-<device>/                       Device-specific widget, logic, hardware, and UI files
+devices/                        Flat package namespace for device integrations
+devices/mockDevice/             Hardware-independent simulated instrument and its tests
+devices/<device>/               Device-specific widget, logic, hardware, and UI files
 tests/                          Hardware-independent core regression tests
 data/                           Default local measurement output
 scan_range_limits.json          Configured scan-output limits

@@ -22,7 +22,7 @@ def _install_pydaqmx_import_stub():
 
 _install_pydaqmx_import_stub()
 
-from nidaq import nidaq_logic, nidaq_main
+from devices.nidaq import nidaq_logic, nidaq_main
 
 
 class FakeDAQ:

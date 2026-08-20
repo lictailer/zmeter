@@ -49,6 +49,13 @@ Changing filename rules requires explicit review of operator workflow, backup or
 
 Before JSON save, ZMeter rebuilds setting arrays and synchronizes comments, `plots_per_page`, and `scan_log`. A configured save directory is created if absent; otherwise the operator receives a file dialog. Save success/failure and backup result are appended to the log.
 
+If the primary JSON write fails, its directory/name preparation fails, or the
+operator cancels the primary save dialog, ZMeter attempts an atomic copy of the
+same scan dictionary under the platform-local application-data directory:
+`ZMeter/recovery/recovery_<timestamp>_<original-name>.json`. Recovery names are
+unique and retain the normal array/`NaN` encoding and schema. Recovery success
+or failure is logged; failure of both paths does not add a retry state machine.
+
 Load requires a JSON object. It defaults missing `comments` and `scan_log`, normalizes a non-list log to `[]`, rebuilds the level/plot widgets, rehydrates plot settings, and loads persisted data into line/image plots. Other missing structural fields are not generally migrated.
 
 Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, but a general schema-version migration layer does not exist.
@@ -93,6 +100,7 @@ Historical compatibility is a deliberate decision, not an automatic requirement;
 - array shape/order and recursive `NaN` encoding;
 - duplicate filenames and serial discovery;
 - partial/failed JSON and PPT operations with clear logging;
+- primary-save cancellation/failure, unique atomic recovery output, and recovery failure;
 - hourly autosave overwrite in a temporary directory;
 - backup unavailable, empty path, copy success, and copy failure using temporary/mocked paths;
 - representative downstream loader and legacy files named in the migration decision.

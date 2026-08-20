@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "profile": "phase2_lab",
+  "paths": {
+    "save": "./data",
+    "backup": null
+  },
+  "devices": [
+    {
+      "id": "four9",
+      "driver": "four9",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "host": "REPLACE_WITH_FOUR9_HOST",
+        "port": 5050,
+        "socket_timeout_s": 10.0
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "montana2",
+      "driver": "montana2",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {
+        "address": "REPLACE_WITH_MONTANA2_ADDRESS"
+      },
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "opticool",
+      "driver": "opticool",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {},
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    },
+    {
+      "id": "tlpm",
+      "driver": "tlpm",
+      "enabled": false,
+      "connect_on_start": false,
+      "connection": {},
+      "scan_channels": {
+        "set": null,
+        "get": null
+      }
+    }
+  ]
+}

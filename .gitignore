@@ -19,6 +19,12 @@ __pycache__/
 # Project data (ignore folder itself and all contents)
 data/
 
+# Local laboratory profiles (may contain addresses, serials, or private paths)
+config/profiles/*.local.json
+config/profiles/local/
+
+# Restructure validation artifacts
+.restructure_tmp/
+
 # Editor settings
 .vscode/
-/keithley24xx/__pycache__
