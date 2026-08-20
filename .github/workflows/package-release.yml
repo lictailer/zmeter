@@ -1,0 +1,147 @@
+name: Package ZMeter release
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, such as v0.10.0"
+        required: true
+        type: string
+      channel:
+        description: "Release channel"
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - tested
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Create deployment ZIP
+    runs-on: windows-latest
+
+    steps:
+      - name: Select release information
+        id: release
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease }}
+          MANUAL_TAG: ${{ inputs.tag }}
+          MANUAL_CHANNEL: ${{ inputs.channel }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if ($env:EVENT_NAME -eq "release") {
+              $tag = $env:RELEASE_TAG
+              $channel = if ($env:RELEASE_IS_PRERELEASE -eq "true") {
+                  "tested"
+              } else {
+                  "stable"
+              }
+          } else {
+              $tag = $env:MANUAL_TAG
+              $channel = $env:MANUAL_CHANNEL
+          }
+
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-rc\.\d+)?$') {
+              throw "Unsupported release tag: $tag"
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "channel=$channel" >> $env:GITHUB_OUTPUT
+
+      - name: Check out tagged source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Generate manifest and package
+        id: package
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.channel }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $tag = $env:RELEASE_TAG
+          $version = $tag.Substring(1)
+          $commit = (git rev-parse HEAD).Trim()
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Unable to determine the tagged commit."
+          }
+
+          $environmentFile = "zmeter_May2026_environment.yml"
+          $environmentPath = Join-Path $PWD $environmentFile
+
+          if (-not (Test-Path -LiteralPath $environmentPath)) {
+              throw "Environment file not found: $environmentFile"
+          }
+
+          $environmentHash = (
+              Get-FileHash -LiteralPath $environmentPath -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+
+          $stagingDirectory = Join-Path $env:RUNNER_TEMP "zmeter-package"
+          $sourceArchive = Join-Path $env:RUNNER_TEMP "zmeter-source.zip"
+          $assetPath = Join-Path $env:RUNNER_TEMP "zmeter-$tag-windows.zip"
+
+          New-Item -ItemType Directory -Path $stagingDirectory -Force |
+              Out-Null
+
+          git archive --format=zip --output=$sourceArchive HEAD
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Unable to archive the tagged source."
+          }
+
+          Expand-Archive `
+              -LiteralPath $sourceArchive `
+              -DestinationPath $stagingDirectory
+
+          $manifest = [ordered]@{
+              schema_version      = 1
+              version             = $version
+              tag                 = $tag
+              channel             = $env:RELEASE_CHANNEL
+              commit              = $commit
+              environment_file    = $environmentFile
+              environment_sha256  = $environmentHash
+          }
+
+          $manifest |
+              ConvertTo-Json |
+              Set-Content `
+                  -LiteralPath (
+                      Join-Path $stagingDirectory "deployment-manifest.json"
+                  ) `
+                  -Encoding utf8
+
+          Compress-Archive `
+              -Path (Join-Path $stagingDirectory "*") `
+              -DestinationPath $assetPath
+
+          "asset_path=$assetPath" >> $env:GITHUB_OUTPUT
+
+      - name: Upload ZIP to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+        run: |
+          gh release upload `
+              $env:RELEASE_TAG `
+              $env:ASSET_PATH `
+              --repo $env:GITHUB_REPOSITORY
