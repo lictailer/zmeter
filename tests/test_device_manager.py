@@ -89,7 +89,11 @@ from core.device_management import DeviceManager, build_default_registry
 
 registry = build_default_registry()
 assert DeviceManager is not None
-assert registry.driver_ids == ("mock_device",)
+assert registry.driver_ids == (
+    "mock_device", "ni6423", "nidaq", "pem100", "sp150",
+    "hp34401a", "keithley24xx", "sr860", "sr830", "demo_device",
+    "bbd30x", "k10cr1",
+)
 watched = (
     "devices", "pyvisa", "clr", "nidaqmx", "PyDAQmx",
     "opticool", "sr830", "sr860", "tlpm",

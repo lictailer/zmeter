@@ -13,6 +13,11 @@ stage independently of ZMeter. Software limits and the ZMeter stop button are
 not substitutes for controller limits, physical clearance, or a hardware
 emergency stop.
 
+It is registered under driver ID `bbd30x` with required connection field
+`serial`. The startup-only adapter rejects `connect_on_start=true`, preserves
+panel-driven connection, injects `RuntimeServices.kinesis`, and remains
+ineligible for runtime mutation.
+
 ## Dependencies and configuration
 
 - 64-bit Windows and the repository's Python 3.12/PyQt6 environment;

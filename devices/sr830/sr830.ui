@@ -38,23 +38,23 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="start_scanning">
+       <widget class="QPushButton" name="disconnect_pushButton">
         <property name="text">
-         <string>pause graph</string>
+         <string>disconnect</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="stop_scanning">
+       <widget class="QPushButton" name="resume_graph_button">
         <property name="text">
-         <string>resume graph</string>
+         <string>start graph</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="reset_graph">
+       <widget class="QPushButton" name="pause_graph_button">
         <property name="text">
-         <string>reset graph</string>
+         <string>stop graph</string>
         </property>
        </widget>
       </item>
@@ -72,7 +72,7 @@
        </spacer>
       </item>
       <item>
-       <widget class="QLabel" name="label_5">
+       <widget class="QLabel" name="status_label">
         <property name="text">
          <string>not connected</string>
         </property>
@@ -799,10 +799,35 @@
      <property name="sizeHint" stdset="0">
       <size>
        <width>20</width>
-       <height>132</height>
+       <height>0</height>
       </size>
      </property>
     </spacer>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="log_groupBox">
+     <property name="title">
+      <string>log</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_log">
+      <item>
+       <widget class="QPlainTextEdit" name="log_textEdit">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>130</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
   </layout>
  </widget>

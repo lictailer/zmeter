@@ -58,3 +58,27 @@ Keep laboratory profiles local. Files named `*.local.json` and the
 addresses, serial numbers, credentials, private endpoints, or laboratory data
 paths. Copy `profiles/example_lab.json` to a local ignored filename and add only
 reviewed registry IDs and connection fields.
+
+## Phase 1 registered driver fields
+
+The default profile remains mock-only. These additional IDs are available for
+one-device-at-a-time user commissioning in an ignored local profile:
+
+| Driver | Connection object |
+| --- | --- |
+| `ni6423`, `nidaq` | `{"device_name": "Dev1"}` |
+| `pem100` | `{"address": "...", "timeout_ms": 20000}` |
+| `sp150` | `{"address": "...", "timeout_ms": 10000, "query_delay_s": 1.0}` |
+| `hp34401a`, `keithley24xx`, `sr860`, `sr830` | `{"address": "..."}` |
+| `demo_device` | `{"address": "DUMMY::INSTR"}` |
+| `bbd30x`, `k10cr1` | `{"serial": "..."}` |
+
+Keep `connect_on_start` false for first commissioning. NI6423, legacy NIDAQ,
+Keithley24xx, BBD30X, and K10CR1 deliberately reject startup auto-connect and
+retain their panel-driven connection workflow. For NI drivers, the field name
+is `device_name`, not `address`; enter the same reviewed NI MAX name in the
+device panel. All real Phase 1 drivers remain ineligible for runtime add,
+manager disconnect, and removal.
+
+See `documents/DEVICE_REGISTRATION_PHASE1_REVIEW.md` and the target device
+README before enabling a driver.

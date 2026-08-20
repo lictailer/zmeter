@@ -4,6 +4,8 @@
 
 `demoDevice` is an older template/simulator and is not the maintained reference integration. Use [mockDevice](../mockDevice/README.md) for new device work.
 
+It is registered under driver ID `demo_device` with required dummy `address`. Its factory deliberately keeps the private `DummyResourceManager` instead of receiving the application's real shared VISA runtime. Runtime mutation remains disabled.
+
 The package now uses normal relative imports and an injected `VisaRuntime` backed by `DummyResourceManager`. It never imports or monkey-patches the real PyVISA manager. After construction, its address selector schedules dummy-resource discovery for the next Qt event-loop turn; the manual Refresh button remains available.
 
 ## Intended behavior

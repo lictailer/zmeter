@@ -4,6 +4,8 @@
 
 `ni6423` is the newer NI-DAQmx integration for a four-output, 32-input NI USB-6423 configuration with gated counter measurement and optional pulse generation. The package separates widget, logic, and hardware and dynamically creates its scan-facing channel methods. It depends on real NI-DAQmx resources and has no hardware-independent simulator in this directory.
 
+It is registered under driver ID `ni6423` with required connection field `device_name`. The registration is startup-only, rejects `connect_on_start=true`, and leaves connection to the existing device panel. Use an ignored local profile and enter the same NI MAX device name in the panel. Runtime mutation remains disabled.
+
 ## Scan channels
 
 | Direction | Channels | Units/meaning |
@@ -33,6 +35,6 @@ Agents must not import/run commands that enumerate NI devices, initialize the de
 
 ## Validation
 
-Hardware-independent syntax check: `python -B -m py_compile devices/ni6423/ni6423_hardware.py devices/ni6423/ni6423_logic.py devices/ni6423/ni6423_main.py`. No hardware-independent NI transport test exists yet.
+Hardware-independent syntax check: `python -B -m py_compile devices/ni6423/ni6423_hardware.py devices/ni6423/ni6423_logic.py devices/ni6423/ni6423_main.py`. `tests.test_ni6423_registration` verifies lazy disconnected construction and exact dynamic channels with a stub that forbids NI task creation. No hardware-independent NI transport test exists yet.
 
 **User-executed hardware test:** disconnect the DAQ from the experiment and use a reviewed breakout/load; verify the NI device name and every PFI/counter route; connect; write 0 V and then +0.1 V to one AO within configured limits; confirm the mapped feedback input; read one grounded AI; measure a known counter source; stop any pulse task; terminate; and confirm all tasks release. Repeat fault cleanup with one deliberately invalid channel name before reconnecting the experiment.

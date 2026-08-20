@@ -119,7 +119,7 @@ Session configuration is selected by a validated JSON profile. It includes:
 - optional setter/getter channel filters;
 - local measurement and backup paths.
 
-`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in registry currently enables the hardware-safe `mock_device` path only; source packages listed below are not automatically profile-ready.
+`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in default profile still enables only the hardware-safe `mock_device` path. The registry also recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`; real devices require an ignored local profile and user-executed commissioning.
 
 Runtime device changes are session-only and do not rewrite the selected JSON
 profile. The manager can add, disconnect, or remove only a driver whose
@@ -152,7 +152,7 @@ The flat `devices/` package contains integrations or experimental work for sever
 | Simulation | `mockDevice`, `demoDevice` |
 | NI data acquisition | `nidaq`, `ni6423` |
 | Source meters and multimeters | `keithley24xx`, `hp34401a` |
-| Lock-in amplifiers | `sr830`, `sr830_v2`, `sr860` |
+| Lock-in amplifiers | `sr830` (official maintained implementation), `sr860` |
 | Cryostats/environment control | `opticool`, `montana2`, `four9` |
 | Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X` |
 | Positioning/autofocus | `auto_focus`, `auto_position`, `autofocus_xuguo`, `ANC300` |

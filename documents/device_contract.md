@@ -147,6 +147,10 @@ Router availability does not bypass device validation. A target write still trav
 - Keep VISA resources, NI device names, serials, calibration paths, lab limits, and backup paths in startup/profile or device configuration—not shared core code.
 - Never commit credentials, private endpoints, or redistributable vendor binaries without an explicit policy decision.
 - Fail with a precise dependency/configuration error; do not silently select another real resource.
+- When a startup-only driver retains panel-driven connection, its reviewed
+  `configure_instance(instance, connection)` hook may copy the validated
+  address/device name/serial into existing UI controls on the owner thread. It
+  must not import a vendor runtime, enumerate, connect, or perform device I/O.
 
 ## Registration checklist
 

@@ -1,58 +1,69 @@
-import types
 import logging
 import time
-import pyvisa
+
+from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
 
 class SR830_Hardware:
-    '''
-    This is the python driver for the Lock-In SR830 from Stanford Research Systems.
-    '''
+    """
+    Python driver wrapper for Stanford Research SR830 lock-in amplifier.
 
-    def __init__(self, address=None):
-        '''
-        Initializes the SR830.
-        Input:
-            address (string) : GPIB address
-        Output:
-            None
-        '''
+    Command semantics and index/value conventions are intentionally preserved
+    from the existing SR830 module.
+    """
+
+    def __init__(self, address=None, visa_runtime: VisaRuntime | None = None):
+        self._address = None
+        self._vi = None
+        self.visa_runtime = visa_runtime or VisaRuntime()
+        self._visa_lease: VisaResourceLease | None = None
+        self._visa_owner = f"SR830v2:{id(self):x}"
         if address:
             self.connect_visa(address)
 
-    # Functions
     def connect_visa(self, address):
         self._address = address
-        resource_manager = pyvisa.ResourceManager()
-        # 'GPIB0::7::INSTR'
-        self._visainstrument = resource_manager.open_resource(self._address)
-        # self._instID = self._visainstrument.query("*IDN?")
-        # print(self._instID)
-        # for i in range(100):
-            # self._visainstrument.read()
+        lease = self.visa_runtime.open_resource(self._visa_owner, self._address)
+        try:
+            self._vi = lease.resource
+            self._vi.write_termination = "\n"
+            self._vi.read_termination = "\n"
+            self._vi.timeout = 1000
+        except Exception:
+            lease.close()
+            self._vi = None
+            raise
+        self._visa_lease = lease
 
+    def _write(self, cmd: str):
+        if self._vi is None:
+            raise RuntimeError("SR830 VISA resource is not connected.")
+        logging.debug(f"-> {cmd}")
+        self._vi.write(cmd)
+
+    def _query(self, cmd: str) -> str:
+        if self._vi is None:
+            raise RuntimeError("SR830 VISA resource is not connected.")
+        logging.debug(f"? {cmd}")
+
+        last_error = None
+        for _ in range(3):
+            try:
+                return self._vi.query(cmd).strip()
+            except Exception as exc:
+                last_error = exc
+                time.sleep(0.01)
+        raise RuntimeError(f"Error querying '{cmd}' after 3 retries: {last_error}")
+
+    def idn(self) -> str:
+        return self._query("*IDN?")
 
     def reset(self):
-        '''
-        Resets the instrument to default values
-        Input:
-            None
-        Output:
-            None
-        '''
-        self._visainstrument.write('*RST')
+        self._write("*RST")
         self.get_all()
 
     def get_all(self):
-        '''
-        Reads all implemented parameters from the instrument,
-        and updates the wrapper.
-        Input:
-            None
-        Output:
-            None
-        '''
-        logging.info(__name__ + ' : reading all settings from instrument')
+        logging.info(__name__ + " : reading all settings from instrument")
         self.get_sensitivity()
         self.get_time_constant()
         self.get_frequency()
@@ -78,471 +89,233 @@ class SR830_Hardware:
         self.get_output_overload()
 
     def disable_front_panel(self):
-        '''
-        disable the front panel of the lock-in
-        while being in remote control
-        '''
-        self._visainstrument.write('OVRM 0')
+        self._write("OVRM 0")
 
     def enable_front_panel(self):
-        '''
-        enables the front panel of the lock-in
-        while being in remote control
-        '''
-        self._visainstrument.write('OVRM 1')
+        self._write("OVRM 1")
 
     def auto_phase(self):
-        '''
-        offsets the phase so that
-        the Y component is zero
-        '''
-        self._visainstrument.write('APHS')
+        self._write("APHS")
 
     def direct_output(self):
-        '''
-        select GPIB as interface
-        '''
-        self._visainstrument.write('OUTX 1')
+        self._write("OUTX 1")
 
     def read_output(self, output, ovl):
-        '''
-        Read out R,X,Y or phase (P) of the Lock-In
-        Input:
-            mode (int) :
-            1 : "X",
-            2 : "Y",
-            3 : "R"
-            4 : "P"
-        '''
         parameters = {
             1: "X",
             2: "Y",
             3: "R",
-            4: "P"
+            4: "P",
         }
-        # self.direct_output()
-        if parameters.__contains__(output):
-            logging.info(__name__ + ' : Reading parameter from instrument: %s ' % parameters.get(output))
-            if ovl:
-                self.get_input_overload()
-                self.get_time_constant_overload()
-                self.get_output_overload()
-            readvalue = float(self._visainstrument.query('OUTP?%s' % output))
-        else:
-            print('Wrong output requested.')
-        return readvalue
+        if output not in parameters:
+            raise ValueError("Wrong output requested.")
+
+        logging.info(__name__ + " : Reading parameter from instrument: %s " % parameters.get(output))
+        if ovl:
+            self.get_input_overload()
+            self.get_time_constant_overload()
+            self.get_output_overload()
+        return float(self._query(f"OUTP?{output}"))
 
     def get_X(self, ovl=False):
-        '''
-        Read out X of the Lock In
-        Check for overloads if ovl is True
-        '''
         return self.read_output(1, ovl)
 
     def get_Y(self, ovl=False):
-        '''
-        Read out Y of the Lock In
-        Check for overloads if ovl is True
-        '''
         return self.read_output(2, ovl)
 
     def get_R(self, ovl=False):
-        '''
-        Read out R of the Lock In
-        Check for overloads if ovl is True
-        '''
         return self.read_output(3, ovl)
 
     def get_Theta(self, ovl=False):
-        '''
-        Read out P of the Lock In
-        Check for overloads if ovl is True
-        '''
         return self.read_output(4, ovl)
 
     def set_frequency(self, frequency):
-        '''
-        Set frequency of the local oscillator
-        Input:
-            frequency (float) : frequency in Hz
-        Output:
-            None
-        '''
-        logging.debug(__name__ + ' : setting frequency to %s Hz' % frequency)
-        self._visainstrument.write('FREQ %e' % frequency)
+        logging.debug(__name__ + " : setting frequency to %s Hz" % frequency)
+        self._write("FREQ %e" % frequency)
 
     def get_frequency(self):
-        '''
-        Get the frequency of the local oscillator
-        Input:
-            None
-        Output:
-            frequency (float) : frequency in Hz
-        '''
         self.direct_output()
-        logging.debug(__name__ + ' : reading frequency from instrument')
-        return float(self._visainstrument.query('FREQ?'))
+        logging.debug(__name__ + " : reading frequency from instrument")
+        return float(self._query("FREQ?"))
 
     def get_amplitude(self):
-        '''
-        Get the frequency of the local oscillator
-        Input:
-            None
-        Output:
-            frequency (float) : frequency in Hz
-        '''
         self.direct_output()
-        logging.debug(__name__ + ' : reading frequency from instrument')
-        return float(self._visainstrument.query('SLVL?'))
+        logging.debug(__name__ + " : reading amplitude from instrument")
+        return float(self._query("SLVL?"))
 
     def set_mode(self, val):
-        logging.debug(__name__ + ' : Setting Reference mode to external')
-        self._visainstrument.write('FMOD %d' % val)
+        logging.debug(__name__ + " : Setting Reference mode to external")
+        self._write("FMOD %d" % val)
 
     def set_amplitude(self, amplitude):
-        '''
-        Set frequency of the local oscillator
-        Input:
-            frequency (float) : frequency in Hz
-        Output:
-            None
-        '''
-        logging.debug(__name__ + ' : setting amplitude to %s V' % amplitude)
-        self._visainstrument.write('SLVL %e' % amplitude)
+        logging.debug(__name__ + " : setting amplitude to %s V" % amplitude)
+        self._write("SLVL %e" % amplitude)
 
     def set_time_constant(self, timeconstant):
-        '''
-        Set the time constant of the LockIn
-        Input:
-            time constant (integer) : integer from 0 to 19
-        Output:
-            None
-        '''
-
         self.direct_output()
-        logging.debug(__name__ + ' : setting time constant on instrument to %s' % (timeconstant))
-        self._visainstrument.write('OFLT %s' % timeconstant)
+        logging.debug(__name__ + " : setting time constant on instrument to %s" % timeconstant)
+        self._write("OFLT %s" % timeconstant)
 
     def get_time_constant(self):
-        '''
-        Get the time constant of the LockIn
-        Input:
-            None
-        Output:
-            time constant (integer) : integer from 0 to 19
-        '''
-
         self.direct_output()
-        logging.debug(__name__ + ' : getting time constant on instrument')
-        return float(self._visainstrument.query('OFLT?'))
+        logging.debug(__name__ + " : getting time constant on instrument")
+        return float(self._query("OFLT?"))
 
     def set_sensitivity(self, sens):
-        '''
-        Set the sensitivity of the LockIn
-        Input:
-            sensitivity (integer) : integer from 0 to 26
-        Output:
-            None
-        '''
-
         self.direct_output()
-        logging.debug(__name__ + ' : setting sensitivity on instrument to %s' % (sens))
-        self._visainstrument.write('SENS %d' % sens)
+        logging.debug(__name__ + " : setting sensitivity on instrument to %s" % sens)
+        self._write("SENS %d" % sens)
 
     def get_sensitivity(self):
-        '''
-        Get the sensitivity
-            Output:
-            sensitivity (integer) : integer from 0 to 26
-        '''
         self.direct_output()
-        logging.debug(__name__ + ' : reading sensitivity from instrument')
-        return float(self._visainstrument.query('SENS?'))
+        logging.debug(__name__ + " : reading sensitivity from instrument")
+        return float(self._query("SENS?"))
 
     def get_phase(self):
-        '''
-        Get the reference phase shift
-        Input:
-            None
-        Output:
-            phase (float) : reference phase shit in degree
-        '''
         self.direct_output()
-        logging.debug(__name__ + ' : reading frequency from instrument')
-        return float(self._visainstrument.query('PHAS?'))
+        logging.debug(__name__ + " : reading phase from instrument")
+        return float(self._query("PHAS?"))
 
     def set_phase(self, phase):
-        '''
-        Set the reference phase shift
-        Input:
-            phase (float) : reference phase shit in degree
-        Output:
-            None
-        '''
-        logging.debug(__name__ + ' : setting the reference phase shift to %s degree' % phase)
-        self._visainstrument.write('PHAS %e' % phase)
+        logging.debug(__name__ + " : setting the reference phase shift to %s degree" % phase)
+        self._write("PHAS %e" % phase)
 
     def set_aux(self, output, value):
-        '''
-        Set the voltage on the aux output
-        Input:
-            output - number 1-4 (defining which output you are addressing)
-            value  - the voltage in Volts
-        Output:
-            None
-        '''
-        logging.debug(__name__ + ' : setting the output %(out)i to value %(val).3f' % {'out': output, 'val': value})
-        self._visainstrument.write('AUXV %(out)i, %(val).3f' % {'out': output, 'val': value})
+        logging.debug(
+            __name__ + " : setting the output %(out)i to value %(val).3f"
+            % {"out": output, "val": value}
+        )
+        self._write("AUXV %(out)i, %(val).3f" % {"out": output, "val": value})
 
     def read_aux(self, output):
-        '''
-        Query the voltage on the aux output
-        Input:
-            output - number 1-4 (defining which output you are addressing)
-        Output:
-            voltage on the output D/A converter
-        '''
-        logging.debug(__name__ + ' : reading the output %i' % output)
-        return float(self._visainstrument.query('AUXV? %i' % output))
+        logging.debug(__name__ + " : reading the output %i" % output)
+        return float(self._query("AUXV? %i" % output))
 
     def get_oaux(self, value):
-        '''
-        Query the voltage on the aux output
-        Input:
-            output - number 1-4 (defining which output you are adressing)
-        Output:
-            voltage on the input A/D converter
-        '''
-        logging.debug(__name__ + ' : reading the input %i' % value)
-        return float(self._visainstrument.query('OAUX? %i' % value))
+        logging.debug(__name__ + " : reading the input %i" % value)
+        return float(self._query("OAUX? %i" % value))
 
     def set_out(self, value, channel):
-        '''
-        Set output voltage, rounded to nearest mV.
-        '''
         self.set_aux(channel, value)
 
     def get_out(self, channel):
-        '''
-        Read output voltage.
-        '''
         return self.read_aux(channel)
 
     def get_in(self, channel):
-        '''
-        Read input voltage, resolution is 1/3 mV.
-        '''
         return self.get_oaux(channel)
 
     def get_ref_input(self):
-        '''
-        Query reference input: internal (true,1) or external (false,0)
-        '''
-        return int(self._visainstrument.query('FMOD?')) == 1
+        return int(self._query("FMOD?")) == 1
 
     def set_ref_input(self, value):
-        '''
-        Set reference input: internal (true,1) or external (false,0)
-        '''
         if value:
-            self._visainstrument.write('FMOD 1')
+            self._write("FMOD 1")
         else:
-            self._visainstrument.write('FMOD 0')
+            self._write("FMOD 0")
 
     def get_ext_trigger(self):
-        '''
-        Query trigger source for external reference: sine (0), TTL rising edge (1), TTL falling edge (2)
-        '''
-        return int(self._visainstrument.query('RSLP?'))
+        return int(self._query("RSLP?"))
 
     def set_ext_trigger(self, value):
-        '''
-        Set trigger source for external reference: sine (0), TTL rising edge (1), TTL falling edge (2)
-        '''
-        self._visainstrument.write('RSLP ' + str(value))
+        self._write("RSLP " + str(value))
 
     def get_sync_filter(self):
-        '''
-        Query sync filter. Note: only available below 200Hz
-        '''
-        return int(self._visainstrument.query('SYNC?')) == 1
+        return int(self._query("SYNC?")) == 1
 
     def set_sync_filter(self, value):
-        '''
-        Set sync filter. Note: only available below 200Hz
-        '''
         if value:
-            self._visainstrument.write('SYNC 1')
+            self._write("SYNC 1")
         else:
-            self._visainstrument.write('SYNC 0')
+            self._write("SYNC 0")
 
     def get_harmonic(self):
-        '''
-        Query detection harmonic in the range of 1..19999.
-        Note: frequency*harmonic<102kHz
-        '''
-        return int(self._visainstrument.query('HARM?'))
+        return int(self._query("HARM?"))
 
     def set_harmonic(self, value):
-        '''
-        Set detection harmonic in the range of 1..19999.
-        Note: frequency*harmonic<102kHz
-        '''
-        self._visainstrument.write('HARM ' + str(value))
+        self._write("HARM " + str(value))
 
     def get_input_config(self):
-        '''
-        Query input configuration: A (0), A-B (1), CVC 1MOhm (2), CVC 100MOhm (3)
-        '''
-        return int(self._visainstrument.query('ISRC?'))
+        return int(self._query("ISRC?"))
 
     def set_input_config(self, value):
-        '''
-        Set input configuration: A (0), A-B (1), CVC 1MOhm (2), CVC 100MOhm (3)
-        '''
-        self._visainstrument.write('ISRC ' + str(value))
+        self._write("ISRC " + str(value))
 
     def get_input_shield(self):
-        '''
-        Query input shield: float (false,0), gnd (true,1)
-        '''
-        return int(self._visainstrument.query('IGND?')) == 1
+        return int(self._query("IGND?")) == 1
 
     def set_input_shield(self, value):
-        '''
-        Set input shield: float (false,0), gnd (true,1)
-        '''
         if value:
-            self._visainstrument.write('IGND 1')
+            self._write("IGND 1")
         else:
-            self._visainstrument.write('IGND 0')
+            self._write("IGND 0")
 
     def get_input_coupling(self):
-        '''
-        Query input coupling: AC (false,0), DC (true,1)
-        '''
-        return int(self._visainstrument.query('ICPL?')) == 1
+        return int(self._query("ICPL?")) == 1
 
     def set_input_coupling(self, value):
-        '''
-        Set input coupling: AC (false,0), DC (true,1)
-        '''
         if value:
-            self._visainstrument.write('ICPL 1')
+            self._write("ICPL 1")
         else:
-            self._visainstrument.write('ICPL 0')
+            self._write("ICPL 0")
 
     def get_notch_filter(self):
-        '''
-        Query notch filter: none (0), 1xline (1), 2xline(2), both (3)
-        '''
-        return int(self._visainstrument.query('ILIN?'))
+        return int(self._query("ILIN?"))
 
     def set_notch_filter(self, value):
-        '''
-        Set notch filter: none (0), 1xline (1), 2xline(2), both (3)
-        '''
-        self._visainstrument.write('ILIN ' + str(value))
+        self._write("ILIN " + str(value))
 
     def get_reserve(self):
-        '''
-        Query reserve: High reserve (0), Normal (1), Low noise (2)
-        '''
-        return int(self._visainstrument.query('RMOD?'))
+        return int(self._query("RMOD?"))
 
     def set_reserve(self, value):
-        '''
-        Set reserve: High reserve (0), Normal (1), Low noise (2)
-        '''
-        self._visainstrument.write('RMOD ' + str(value))
+        self._write("RMOD " + str(value))
 
     def get_filter_slope(self):
-        '''
-        Query filter slope: 6dB/oct. (0), 12dB/oct. (1), 18dB/oct. (2), 24dB/oct. (3)
-        '''
-        return int(self._visainstrument.query('OFSL?'))
+        return int(self._query("OFSL?"))
 
     def set_filter_slope(self, value):
-        '''
-        Set filter slope: 6dB/oct. (0), 12dB/oct. (1), 18dB/oct. (2), 24dB/oct. (3)
-        '''
-        self._visainstrument.write('OFSL ' + str(value))
+        self._write("OFSL " + str(value))
 
     def get_unlocked(self, update=True):
-        '''
-        Query if PLL is locked.
-        Note: the status bit will be cleared after readout!
-        Set update to True for querying present unlock situation, False for querying past events
-        '''
         if update:
-            self._visainstrument.query('LIAS? 3')  # for realtime detection we clear the bit by reading it
-            time.sleep(0.02)  # and wait for a little while so that it can be set
-        return int(self._visainstrument.query('LIAS? 3')) == 1
+            self._query("LIAS? 3")
+            time.sleep(0.02)
+        return int(self._query("LIAS? 3")) == 1
 
     def get_input_overload(self, update=True):
-        '''
-        Query if input or amplifier is in overload.
-        Note: the status bit will be cleared after readout!
-        Set update to True for querying present overload, False for querying past events
-        '''
         if update:
-            self._visainstrument.query('LIAS? 0')  # for realtime detection we clear the bit by reading it
-            time.sleep(0.02)  # and wait for a little while so that it can be set again
-        return int(self._visainstrument.query('LIAS? 0')) == 1
+            self._query("LIAS? 0")
+            time.sleep(0.02)
+        return int(self._query("LIAS? 0")) == 1
 
     def get_time_constant_overload(self, update=True):
-        '''
-        Query if filter is in overload.
-        Note: the status bit will be cleared after readout!
-        Set update to True for querying present overload, False for querying past events
-        '''
         if update:
-            self._visainstrument.query('LIAS? 1')  # for realtime detection we clear the bit by reading it
-            time.sleep(0.02)  # and wait for a little while so that it can be set again
-        return int(self._visainstrument.query('LIAS? 1')) == 1
+            self._query("LIAS? 1")
+            time.sleep(0.02)
+        return int(self._query("LIAS? 1")) == 1
 
     def get_output_overload(self, update=True):
-        '''
-        Query if output (also main display) is in overload.
-        Note: the status bit will be cleared after readout!
-        Set update to True for querying present overload, False for querying past events
-        '''
         if update:
-            self._visainstrument.query('LIAS? 2')  # for realtime detection we clear the bit by reading it
-            time.sleep(0.02)  # and wait for a little while so that it can be set again
-        return int(self._visainstrument.query('LIAS? 2')) == 1
+            self._query("LIAS? 2")
+            time.sleep(0.02)
+        return int(self._query("LIAS? 2")) == 1
 
     def disconnect(self):
-        """Safely close the VISA resource.
-
-        Before closing we attempt to clear the device buffer so that no
-        outstanding responses remain in the queue. Any exceptions during
-        cleanup are caught and ignored to ensure the application can
-        continue shutting down gracefully.
-        """
-        if getattr(self, "_visainstrument", None) is None:
-            return  # nothing to do
+        if getattr(self, "_vi", None) is None:
+            return
 
         try:
-            # IEEE-488.2 device clear: flush buffers on the instrument side
-            self._visainstrument.clear()  # type: ignore[attr-defined]
+            self._vi.clear()  # type: ignore[attr-defined]
         except Exception:
-            pass  # ignore issues during buffer clear
+            pass
 
-        try:
-            self._visainstrument.close()  # type: ignore[attr-defined]
-        except Exception:
-            pass  # ignore errors if already closed
+        if self._visa_lease is not None:
+            self._visa_lease.close()
+        else:
+            try:
+                self._vi.close()  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
-        self._visainstrument = None
-
-
-if __name__ == "__main__":
-
-    resource_manager = pyvisa.ResourceManager()
-    print(resource_manager.list_resources())
-    l1 = SR830_Hardware('GPIB0::8::INSTR')
-
-    for i in range(10):
-        a = l1.get_X()
-        print(a)
+        self._vi = None
+        self._visa_lease = None

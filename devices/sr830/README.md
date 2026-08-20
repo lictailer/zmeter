@@ -1,14 +1,12 @@
-# Stanford Research Systems SR830 (Legacy)
+# Stanford Research Systems SR830
 
 ## Purpose and status
 
-This is the original PyVISA integration for the SRS SR830 lock-in amplifier. The checked-in startup profile explicitly recommends `sr830_v2` instead. Keep this module for comparison or lab-specific compatibility; do not select it for new profiles without a concrete reason.
+This is the sole official SR830 integration and stable registry driver `sr830`. It is the maintained former `sr830_v2` source, now at the canonical `devices/sr830` path after removal of the legacy direct-PyVISA implementation. It uses the shared `VisaRuntime` while retaining its widget/logic/hardware protocol behavior, identity checking, logging, and monitor coordination. Shared-session lifecycle and offscreen construction have fake coverage; bench validation remains pending.
 
-This legacy package is intentionally excluded from `VisaRuntime`. It directly
-constructs and manages PyVISA resources and is unsupported in profiles that use
-the shared VISA service; enabling both ownership models can invalidate sessions.
+The registration requires connection field `address`. Keep `connect_on_start=false` for first commissioning and use explicit numeric scan filters. Runtime mutation remains disabled.
 
-Constructing the widget enumerates VISA resources and starts a 50 ms UI monitor timer. Do not instantiate it during hardware-independent tests.
+After construction, the widget schedules one VISA enumeration on the next Qt event-loop turn. Discovery runs in a worker thread, populates a width-adjusted address dropdown, and never opens an instrument session. The operator can still click **Refresh VISA**. Disconnect closes only its session lease.
 
 ## Current scan discovery
 
@@ -16,28 +14,27 @@ The `.logic` object exposes getter signatures for:
 
 - measurements: `X`, `Y`, `R`, `Theta`, `aux_1`, and `aux_2`;
 - configuration/readback: `frequency`, `amplitude`, `phase`, `time_constant`, `sensitivity`, reference/input/filter/reserve settings;
-- status: `unlocked`, `input_overload`, `time_constant_overload`, and `output_overload`.
+- status: `unlocked`, `input_overload`, `time_constant_overload`, and `output_overload`;
+- `get_all`, which refreshes values but does not return a measurement.
 
-It exposes no scan setters: logic-layer `set_*` methods use stored setpoints and take no value argument. Widget methods with value arguments are not inspected by `MainWindow`.
-
-Several configuration getters return labels or codes rather than measurement scalars. Use explicit profile getter filters; for ordinary acquisition, expose only the intended numeric channels.
+It exposes no scan setters because its logic-layer `set_*` methods take no value argument. Filter `get_all` and any string-valued configuration getters from measurement scans.
 
 ## Setup and units
 
 - Python: PyQt6, PyVISA, NumPy, and pyqtgraph;
 - system: compatible VISA backend/interface driver;
-- configuration: exact VISA address, input mode, reference, sensitivity, time constant, harmonic, filters, and auxiliary-channel use.
+- configuration: explicit VISA resource and reviewed input/reference/sensitivity/time-constant/filter/auxiliary settings.
 
-Frequency is in hertz, sine amplitude and X/Y/R/aux values are in volts for voltage-mode operation, and `Theta`/phase are in degrees. Verify current-input interpretation separately.
+Connection requires a nonempty `*IDN?` response containing `SR830`. VISA timeout is 1000 ms. Frequency is in hertz, sine amplitude and voltage-mode X/Y/R/aux values are in volts, and phase/`Theta` are in degrees.
 
-## Lifecycle and limitations
+## Lifecycle and safety
 
-The widget can pause/resume monitoring around scans and disconnect on termination. Its `force_stop` writes a misspelled attribute (`reject_siginal`) and does not constitute a reliable stop path. There are no focused tests or recorded hardware validation.
+`stop_scan` records whether monitoring was active and stops it; `start_scan` resumes it only when appropriate. `force_stop` stops monitoring and waits for any current logic job to return; termination stops monitoring then disconnects. These methods stop software polling; they do not interrupt an in-flight VISA call or undo instrument settings or auxiliary outputs.
 
-Agents must not enumerate VISA resources, connect, configure, read, write auxiliary outputs, reset, or disconnect the SR830. See [hardware_safety.md](../../documents/hardware_safety.md). Prefer [sr830_v2](../sr830_v2/README.md) for maintained work.
+Agents must not enumerate VISA resources, connect, configure, read, write, reset, or disconnect the SR830. Before production use, the user must verify channel filters, timeout/error recovery, aux-output limits, and final instrument state in a **User-executed hardware test**. See [hardware_safety.md](../../documents/hardware_safety.md).
 
 ## Validation
 
 Hardware-independent syntax check: `python -B -m py_compile devices/sr830/sr830_hardware.py devices/sr830/sr830_logic.py devices/sr830/sr830_main.py`.
 
-No production bench test is recommended for this legacy path while its force-stop defect remains. If continued use is required, the **User-executed hardware test** must first use a disconnected/dummy signal path: verify SR830 identity; record existing settings; read X/Y/R/Theta; pause/resume monitoring; write only a reviewed low sine amplitude and 0 V auxiliary output; terminate; and confirm the VISA session closes without changing unrelated settings.
+**User-executed hardware test:** use a disconnected/dummy signal path; connect to the explicit VISA address and confirm SR830 identity; record current settings; read X/Y/R/Theta and status; pause/resume monitoring via scan lifecycle calls; set only a user-approved low sine amplitude and 0 V auxiliary output; simulate a VISA timeout; terminate; and confirm monitoring stops and the session closes without altering unrelated settings.

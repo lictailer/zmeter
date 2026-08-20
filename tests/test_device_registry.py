@@ -21,6 +21,7 @@ from core.device_management.models import (
 )
 from core.device_management.registry import (
     DisabledDeviceError,
+    DriverConstructionError,
     DriverRegistration,
     DriverRegistry,
     DriverConfigurationError,
@@ -70,7 +71,11 @@ import sys
 from core.device_management.registry import build_default_registry
 
 registry = build_default_registry()
-assert registry.driver_ids == ("mock_device",)
+assert registry.driver_ids == (
+    "mock_device", "ni6423", "nidaq", "pem100", "sp150",
+    "hp34401a", "keithley24xx", "sr860", "sr830", "demo_device",
+    "bbd30x", "k10cr1",
+)
 assert "mock_device" in registry.config_specs
 watched = (
     "devices", "pyvisa", "clr", "nidaqmx", "PyDAQmx",
@@ -125,6 +130,32 @@ print("registry lookup remained lazy")
 
         self.assertEqual(received, [selected_visa])
         self.assertIs(adapter.instance.__class__, SimpleNamespace)
+
+    def test_constructed_instance_is_configured_and_closed_on_configuration_failure(self):
+        calls = []
+
+        class Instance:
+            def close(self):
+                calls.append("close")
+
+        registration = fake_registration(
+            factory=lambda: calls.append("factory") or Instance(),
+            configure_instance=lambda _instance, connection: (
+                calls.append(("configure", dict(connection)))
+                or (_ for _ in ()).throw(RuntimeError("bad panel configuration"))
+            ),
+        )
+        registry = DriverRegistry((registration,))
+
+        with self.assertRaisesRegex(
+            DriverConstructionError, "bad panel configuration"
+        ):
+            registry.create(make_config(), SimpleNamespace())
+
+        self.assertEqual(
+            calls,
+            ["factory", ("configure", {}), "close"],
+        )
 
     def test_runtime_service_declaration_is_frozen(self):
         service_names = ["visa"]

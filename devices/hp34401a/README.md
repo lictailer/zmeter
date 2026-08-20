@@ -4,6 +4,8 @@
 
 This package controls an HP 34401A-compatible digital multimeter through the shared `VisaRuntime` and exposes DC-voltage acquisition to ZMeter. The implementation has fake shared-session lifecycle and offscreen widget-construction coverage, but no recorded hardware validation.
 
+It is registered under driver ID `hp34401a` with required connection field `address`. Keep `connect_on_start=false` for first commissioning. Runtime mutation remains disabled, and cleanup after a VISA close failure still requires operator verification.
+
 After construction, the widget schedules one VISA enumeration on the next Qt event-loop turn. Discovery runs in a worker thread, populates a width-adjusted address dropdown, and never opens an instrument session. The operator can still click **Refresh VISA**. Connection owns one exclusive session lease; disconnect does not close other devices or the shared manager.
 
 ## Scan channels

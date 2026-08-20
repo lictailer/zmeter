@@ -12,7 +12,7 @@ from core.shared_runtime.visa import VisaRuntime
 from devices.demoDevice.demoDevice_main import DemoDevice
 from devices.hp34401a.hp34401a_main import HP34401A
 from devices.keithley24xx.keithley24xx_main import Keithley24xx
-from devices.sr830_v2.sr830_main import SR830
+from devices.sr830.sr830_main import SR830
 from devices.sr860.sr860_main import SR860
 
 

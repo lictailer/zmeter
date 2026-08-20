@@ -4,6 +4,8 @@
 
 This package integrates a PEM100 photoelastic modulator through an explicit PyVISA serial connection. Its transport, scan discovery, lifecycle, and widget behavior have hardware-independent fake-VISA coverage. No physical PEM100 has been accessed or validated by the coding agent.
 
+It is registered under driver ID `pem100` with required `address` and optional positive `timeout_ms`. The adapter uses the shared `RuntimeServices.visa`; keep `connect_on_start=false` for the first disconnected panel inspection, then use a separate reviewed run with `connect_on_start=true` because the retained widget has no connection control. Runtime mutation remains disabled.
+
 ## Dependencies and configuration
 
 - Python: PyQt6 and PyVISA from `zmeter_May2026_environment.yml`;

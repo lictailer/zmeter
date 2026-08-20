@@ -10,6 +10,7 @@ from .models import ConnectionFieldSpec, DeviceConfig, DriverConfigSpec
 
 DeviceFactory = Callable[..., object]
 ConnectionAction = Callable[[object, Mapping[str, object], int], bool]
+InstanceConfigurationAction = Callable[[object, Mapping[str, object]], object]
 LifecycleAction = Callable[[object], object]
 StateProbe = Callable[[object], bool]
 
@@ -58,6 +59,17 @@ def _thaw_json_value(value):
     return value
 
 
+def _close_failed_instance(instance: object | None) -> None:
+    if instance is None:
+        return
+    close = getattr(instance, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            pass
+
+
 @dataclass(frozen=True, slots=True)
 class DriverRegistration:
     """Code-reviewed factory and lifecycle contract for one stable driver ID."""
@@ -66,6 +78,7 @@ class DriverRegistration:
     factory: DeviceFactory
     terminate: LifecycleAction
     runtime_services: tuple[str, ...] = ()
+    configure_instance: InstanceConfigurationAction | None = None
     connect: ConnectionAction | None = None
     connect_timeout_ms: int = 10_000
     disconnect: LifecycleAction | None = None
@@ -311,16 +324,24 @@ class DriverRegistry:
                     f"'{service_name}'"
                 ) from None
 
+        instance = None
         try:
             instance = registration.factory(**runtime_kwargs)
+            if registration.configure_instance is not None:
+                registration.configure_instance(
+                    instance,
+                    _thaw_json_value(config.connection),
+                )
         except (ImportError, ModuleNotFoundError) as exc:
+            _close_failed_instance(instance)
             raise DriverUnavailableError(
                 f"driver '{config.driver}' could not load an optional dependency: "
                 f"{exc}"
             ) from exc
         except Exception as exc:
+            _close_failed_instance(instance)
             raise DriverConstructionError(
-                f"device '{config.id}' construction failed for driver "
+                f"device '{config.id}' construction/configuration failed for driver "
                 f"'{config.driver}': {type(exc).__name__}: {exc}"
             ) from exc
 
@@ -418,4 +439,8 @@ def mock_device_registration() -> DriverRegistration:
 def build_default_registry() -> DriverRegistry:
     """Return reviewed registrations without importing any device package."""
 
-    return DriverRegistry((mock_device_registration(),))
+    from .registrations import phase1_device_registrations
+
+    return DriverRegistry(
+        (mock_device_registration(), *phase1_device_registrations())
+    )

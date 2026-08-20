@@ -4,6 +4,8 @@
 
 This package controls an SRS SR860 lock-in amplifier through the shared `VisaRuntime`. It covers demodulated outputs, reference/source settings, input configuration, sensitivity/time constant, filters, display/status values, and auxiliary I/O. Shared-session lifecycle and offscreen construction have fake coverage; bench validation remains pending.
 
+It is registered under driver ID `sr860` with required connection field `address`. Keep `connect_on_start=false` for first commissioning and use explicit numeric scan filters. Runtime mutation remains disabled.
+
 After construction, the widget schedules one VISA enumeration on the next Qt event-loop turn. Discovery runs in a worker thread, populates a width-adjusted address dropdown, and never opens an instrument session. The operator can still click **Refresh VISA**. Disconnect closes only its session lease.
 
 ## Current scan discovery

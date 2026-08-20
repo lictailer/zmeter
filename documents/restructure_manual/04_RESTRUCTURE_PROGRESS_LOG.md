@@ -695,3 +695,69 @@ Copy and complete:
 - Final `git status --short --branch`: `## codex/structural_update_vibeeee` (clean; this completion entry is the final documentation checkpoint).
 - Ready for user review: Yes.
 - Remote/main merge actions performed: None. Nothing was pushed or merged.
+
+## 2026-08-19 — Post-restructure device registration roadmap, Phase 1
+
+### Intended outcome
+
+- Register the roadmap's NI, maintained VISA, and Thorlabs integrations without
+  changing normal-condition device behavior or the checked mock-only default.
+- Keep every real driver startup-only and disabled from runtime mutation.
+- Consolidate the maintained SR830 implementation at the sole official
+  `devices/sr830` package and registry ID `sr830`; remove the legacy path.
+- Document exact connection schemas, admitted special-condition risks, future
+  improvements, and user-executed one-device-at-a-time commissioning.
+
+### Changes
+
+- Added lazy Phase 1 registrations for `ni6423`, `nidaq`, `pem100`, `sp150`,
+  `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and
+  `k10cr1`. The registry still imports no device/vendor package at lookup time.
+- Added explicit `device_name`, VISA `address`/timeout/delay, dummy address, and
+  Kinesis `serial` schemas. Validated profile values prefill existing device
+  panel controls without discovery, connection, or I/O.
+- Kept all real registrations `runtime_mutation_allowed=False`. NI6423, legacy
+  NIDAQ, Keithley24xx, BBD30X, and K10CR1 explicitly reject startup auto-connect
+  and retain panel-driven connection. First commissioning for every real driver
+  remains `connect_on_start=false`.
+- Preserved the demo's private `DummyResourceManager`, deferred automatic VISA
+  discovery, and silent skipping of unknown configured scan channels.
+- Removed the legacy direct-PyVISA SR830 package and moved the maintained former
+  `sr830_v2` implementation to canonical `devices/sr830`; updated imports,
+  tests, inventories, profile guidance, and device documentation.
+- Added `documents/DEVICE_REGISTRATION_PHASE1_REVIEW.md` with the driver matrix,
+  exact channels, limitations, future work, corrected NI profile example, and
+  commissioning procedure. Updated the roadmap status and canonical docs.
+
+### Validation
+
+- Maintained interpreter: `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe`
+  (Python 3.12.12), `QT_QPA_PLATFORM=offscreen`, bytecode disabled for tests.
+- Registry/config focused selection: 32/32 passed.
+- Registry/manager/NI integration selection after panel-prefill hardening:
+  64/64 passed.
+- Safe family selection: 39/39 passed for Phase 1 registration, NI6423 stub,
+  legacy NIDAQ fake, migrated VISA fake, deferred VISA fake discovery, K10CR1
+  fake runtime, and shared Kinesis runtime.
+- Device-local fake suites: PEM100 10/10, SP150 12/12, BBD30X 20/20.
+- Full hardware-independent core discovery: 230 tests, exit 0.
+- Moved mock discovery: 18/18 passed.
+- NI6423 construction test used a stub whose `Task` constructor raises, proving
+  disconnected registry construction and exact dynamic channels without NI
+  task creation.
+
+### Safety and remaining work
+
+- No physical hardware, real VISA manager/discovery, NI device/task, PyDAQmx
+  task, CLR/pythonnet/Kinesis DLL, serial port, network endpoint, PowerPoint, or
+  COM operation was executed.
+- No checked profile, address, serial, NI name, credential, measurement output,
+  scan schema, persistence path, limit, command, timing, or device protocol was
+  changed. The checked default remains the two disconnected mocks.
+- Hardware validation is user-executed and pending. Commission exactly one real
+  device from an ignored local profile and return evidence tied to the exact
+  commit/profile/environment/model/configuration.
+- The future backlog remains as recorded in the Phase 1 review: legacy NIDAQ
+  migration, configurable NI routing and fake backend, VISA fault/cleanup and
+  lifecycle standardization, K10CR1 force stop, motion interruption reporting,
+  complete device busy probes, and runtime-removal eligibility.

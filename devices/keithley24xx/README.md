@@ -4,6 +4,8 @@
 
 This package controls a Keithley 24xx-family source-measure unit through the shared `VisaRuntime`. It supports voltage or current sourcing, voltage or current sensing, a software voltage ramp, live UI reads, and output shutdown on close. Shared-session lifecycle and offscreen construction have fake coverage; model-by-model hardware validation remains pending.
 
+It is registered under driver ID `keithley24xx` with required connection field `address`. The startup-only adapter rejects `connect_on_start=true` and preserves the existing asynchronous panel connection. Runtime mutation remains disabled.
+
 After construction, the widget schedules one VISA enumeration on the next Qt event-loop turn. Discovery runs in a worker thread, populates a width-adjusted address dropdown, and never opens an instrument session. The operator can still click **Refresh VISA**. Disconnect closes only this device's session; the manager closes at provider shutdown.
 
 ## Scan channels
