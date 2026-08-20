@@ -117,8 +117,12 @@ PowerPoint/COM/`Z:\` paths. All files are confined to an OS temporary directory.
 Phase 1 registry coverage is in `tests.test_phase1_device_registrations` and
 `tests.test_ni6423_registration`. It verifies exact IDs and schemas, fresh-
 process lazy imports, shared-runtime constructor mapping, official SR830 path,
-startup-only policy, NI `device_name` validation, forbidden NI task creation,
-and exact NI6423 dynamic channels. Run these before the family fake suites.
+startup-only policy, exact best-effort startup argument mapping, NI
+`device_name` validation, forbidden NI task creation, and exact NI6423 dynamic
+channels. `tests.test_best_effort_startup` covers ordered construction skipping,
+all-failed empty sessions, startup-result states, one-shot/owner-thread rules,
+pending-request teardown, launcher stage order, and the sanitized read-only
+Main Window log. Run these before the family fake suites.
 
 ## User-executed hardware tests
 

@@ -754,7 +754,7 @@ class LauncherTeardownTests(unittest.TestCase):
                 events.append("runtime_shutdown")
                 return {}
 
-        def fail_load(_services, _profile_path):
+        def fail_load(_services, _profile_path, **_kwargs):
             events.append("manager_load_failed")
             raise RuntimeError("profile load failed")
 

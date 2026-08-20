@@ -1,8 +1,9 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Callable
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtWidgets
 
 from core.scan_info import ScanInfo
 from core.mainWindow import MainWindow
@@ -18,6 +19,49 @@ from core.shared_runtime import RuntimeServices
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent
 DEFAULT_PROFILE_PATH = REPOSITORY_ROOT / "config" / "profiles" / "mock.json"
+
+
+class StartupWindow(QtWidgets.QWidget):
+    """Small stage-only window shown while the profile session is prepared."""
+
+    def __init__(self) -> None:
+        flags = (
+            QtCore.Qt.WindowType.Dialog
+            | QtCore.Qt.WindowType.CustomizeWindowHint
+            | QtCore.Qt.WindowType.WindowTitleHint
+            | QtCore.Qt.WindowType.WindowStaysOnTopHint
+        )
+        super().__init__(None, flags)
+        self.setWindowTitle("Starting ZMeter")
+        self.setFixedSize(380, 110)
+        layout = QtWidgets.QVBoxLayout(self)
+        self.stage_label = QtWidgets.QLabel("Starting ZMeter…", self)
+        self.stage_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.progress_bar = QtWidgets.QProgressBar(self)
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setTextVisible(False)
+        layout.addWidget(self.stage_label)
+        layout.addWidget(self.progress_bar)
+
+    def set_stage(self, message: str) -> None:
+        self.stage_label.setText(str(message))
+
+
+def _show_startup_stage(app, startup_window, message: str) -> None:
+    startup_window.set_stage(message)
+    process_events = getattr(app, "processEvents", None)
+    if callable(process_events):
+        process_events()
+
+
+def _close_startup_window(app, startup_window) -> None:
+    if startup_window is None:
+        return
+    startup_window.close()
+    startup_window.deleteLater()
+    process_events = getattr(app, "processEvents", None)
+    if callable(process_events):
+        process_events()
 
 
 def _parse_launch_options(argv):
@@ -37,6 +81,8 @@ def _parse_launch_options(argv):
 def create_profile_session(
     runtime_services: RuntimeServices,
     profile_path: str | Path = DEFAULT_PROFILE_PATH,
+    *,
+    before_device_load: Callable[[], None] | None = None,
 ):
     """Validate a selected profile, then construct its enabled devices."""
     registry = build_default_registry()
@@ -45,6 +91,8 @@ def create_profile_session(
         driver_specs=registry.config_specs,
         repository_root=REPOSITORY_ROOT,
     )
+    if before_device_load is not None:
+        before_device_load()
     manager = DeviceManager(registry, runtime_services)
     manager.load_profile(profile)
     return profile, manager
@@ -59,22 +107,34 @@ def main(argv=None):
     # from silently launching the default profile.
     app = QtWidgets.QApplication([sys.argv[0], *launch_arguments])
     options = _parse_launch_options(app.arguments()[1:])
-    runtime_services = RuntimeServices()
+    runtime_services = None
     profile = None
     device_manager = None
     window = None
+    startup_window = None
     startup_error = None
     pending_shutdown_error = None
     safe_to_release_runtimes = True
     try:
+        startup_window = StartupWindow()
+        startup_window.show()
+        _show_startup_stage(app, startup_window, "Loading profile…")
+        runtime_services = RuntimeServices()
         try:
             profile, device_manager = create_profile_session(
                 runtime_services,
                 options.profile,
+                before_device_load=lambda: _show_startup_stage(
+                    app,
+                    startup_window,
+                    "Loading devices…",
+                ),
             )
         except ProfileValidationError as exc:
             message = str(exc)
             print(message, file=sys.stderr)
+            _close_startup_window(app, startup_window)
+            startup_window = None
             QtWidgets.QMessageBox.critical(
                 None,
                 "Invalid ZMeter Profile",
@@ -85,6 +145,9 @@ def main(argv=None):
             startup_error = exc
             raise
         assert profile is not None
+        assert device_manager is not None
+        _show_startup_stage(app, startup_window, "Connecting configured devices…")
+        startup_report = device_manager.request_startup_connections()
         window = MainWindow(
             info=ScanInfo,
             save_path=str(profile.paths.save),
@@ -94,11 +157,17 @@ def main(argv=None):
                 else str(profile.paths.backup)
             ),
             device_manager=device_manager,
+            startup_report=startup_report,
         )
-        window.show()
         window.setWindowTitle("Main Window")
+        _show_startup_stage(app, startup_window, "Loading main window…")
+        _close_startup_window(app, startup_window)
+        startup_window = None
+        window.show()
         return app.exec()
     finally:
+        if startup_window is not None:
+            _close_startup_window(app, startup_window)
         primary_exception_active = sys.exc_info()[0] is not None
         if window is not None:
             try:
@@ -146,7 +215,7 @@ def main(argv=None):
             if report.failures:
                 safe_to_release_runtimes = False
 
-        if safe_to_release_runtimes:
+        if safe_to_release_runtimes and runtime_services is not None:
             diagnostics = runtime_services.shutdown()
             for family in ("visa", "kinesis"):
                 error = diagnostics.get(f"{family}_error")

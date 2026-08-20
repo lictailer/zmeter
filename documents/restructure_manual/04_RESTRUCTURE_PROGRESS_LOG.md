@@ -761,3 +761,43 @@ Copy and complete:
   migration, configurable NI routing and fake backend, VISA fault/cleanup and
   lifecycle standardization, K10CR1 force stop, motion interruption reporting,
   complete device busy probes, and runtime-removal eligibility.
+
+## 2026-08-20 — Best-effort profile startup connections
+
+### Outcome
+
+- Profile validation remains fatal and has no fallback. Duplicate configured
+  IDs and unknown registry IDs are rejected before any device construction.
+- Enabled devices are then constructed independently in profile order. A
+  device-local dependency, runtime-service, factory, or configuration-time
+  construction failure is printed with full console diagnostics, recorded as
+  skipped, and does not roll back successfully constructed devices.
+- Added a separate registration `startup_connect` contract. Profile startup
+  issues every requested connection once on the UI-owner thread and records
+  confirmed, pending, failed, or manual-ready status without aborting later
+  requests. The strict transactional runtime-add `connect` path is unchanged.
+- NI6423, NIDAQ, PEM100, SP150, HP34401A, SR860, SR830, demo, and mock use their
+  existing synchronous public paths. Keithley24xx, BBD30X, and K10CR1 use their
+  existing asynchronous workers and return immediately as pending.
+- Added a stage-only launcher window and a permanent read-only Main Window
+  Startup Log. The public report contains only ordered device label, driver ID,
+  and sanitized status; no address, serial, connection mapping, or exception
+  text is exposed in the UI.
+- The tracked `config/profiles/phase1_lab.json` remains unchanged with all 16
+  `connect_on_start` flags false. Deferred automatic VISA discovery, unknown
+  channel silent-skip behavior, and real-driver runtime-mutation policy remain
+  unchanged.
+
+### Validation
+
+- Maintained interpreter: `C:\Users\Taylo\anaconda3\envs\zmeter_May2026\python.exe`
+  with `QT_QPA_PLATFORM=offscreen` and bytecode disabled for test runs.
+- Complete hardware-independent core discovery: 239/239 passed.
+- New best-effort startup plus Phase 1 callback mapping selection: 17/17 passed
+  before final full discovery; manager/registry focused selection: 49/49 passed.
+- Runtime-mutation lifecycle/teardown regression: 17/17 passed with the new
+  explicit load-then-request startup sequence.
+- Device-local fake suites: mock 18/18, PEM100 10/10, SP150 12/12, BBD30X
+  20/20. Additional NI/VISA/Kinesis/shared-runtime fake selection: 47/47.
+- No physical device, NI task, VISA resource manager or enumeration, CLR/Kinesis
+  DLL, network endpoint, PowerPoint, COM, or laboratory data path was accessed.

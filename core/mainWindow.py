@@ -18,7 +18,13 @@ from .device_catalog import (
     DeviceCatalogRollbackError,
     DeviceCatalogSnapshot,
 )
-from .device_management import DeviceLifecycleError, DeviceManagerError, DeviceSnapshot
+from .device_management import (
+    DeviceLifecycleError,
+    DeviceManagerError,
+    DeviceSnapshot,
+    StartupDeviceStatus,
+    StartupReport,
+)
 
 from .scan_info import *
 from .scanlist import (
@@ -73,11 +79,14 @@ class MainWindow(QtWidgets.QWidget):
         equips_set_channels=None,
         equips_get_channels=None,
         device_manager=None,
+        startup_report=None,
     ):
         super().__init__()
         print("Loading the Main Window")
         uic.loadUi(r"core/ui/mainwindow.ui", self)
         self.info = info
+        self.startup_report = startup_report
+        self._render_startup_report(startup_report)
         
         # ------------------------------------------------------------
         # Configuration previously hard-coded here is now supplied via
@@ -219,6 +228,54 @@ class MainWindow(QtWidgets.QWidget):
         self._commit_device_button_reconciliation(initial_button_plan)
         self._finalize_device_button_reconciliation(initial_button_plan)
         self._configure_device_manager_runtime_hooks()
+
+    def _render_startup_report(self, report) -> None:
+        if report is None:
+            self.startup_log.setPlainText("No startup device report was supplied.")
+            return
+        if not isinstance(report, StartupReport):
+            raise TypeError("startup_report must be StartupReport or None")
+
+        labels = {
+            StartupDeviceStatus.READY: (
+                "READY",
+                "ready for manual connection",
+            ),
+            StartupDeviceStatus.CONNECTED: ("CONNECTED", "connected"),
+            StartupDeviceStatus.PENDING: (
+                "PENDING",
+                "connection request issued; check the device panel",
+            ),
+            StartupDeviceStatus.CONNECTION_FAILED: (
+                "FAILED",
+                "connection failed; manual retry is available",
+            ),
+            StartupDeviceStatus.CONSTRUCTION_SKIPPED: (
+                "SKIPPED",
+                "device construction failed; no panel was created",
+            ),
+            StartupDeviceStatus.DISABLED: ("DISABLED", "disabled in profile"),
+        }
+        lines = []
+        for result in report.results:
+            label, detail = labels[result.status]
+            lines.append(
+                f"[{label}] {result.device_id} ({result.driver_id}): {detail}"
+            )
+
+        summary_order = (
+            StartupDeviceStatus.CONNECTED,
+            StartupDeviceStatus.PENDING,
+            StartupDeviceStatus.CONNECTION_FAILED,
+            StartupDeviceStatus.READY,
+            StartupDeviceStatus.CONSTRUCTION_SKIPPED,
+            StartupDeviceStatus.DISABLED,
+        )
+        totals = ", ".join(
+            f"{status.value}={report.count(status)}" for status in summary_order
+        )
+        lines.append(f"Total configured={len(report.results)}; {totals}")
+        self.startup_log.setPlainText("\n".join(lines))
 
     def _configure_device_manager_runtime_hooks(self):
         manager = self.device_manager

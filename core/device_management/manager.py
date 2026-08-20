@@ -6,6 +6,7 @@ from enum import Enum
 from functools import wraps
 import re
 from threading import Event, RLock, get_ident
+import traceback
 from types import MappingProxyType
 from typing import Callable, Iterable, Mapping
 import weakref
@@ -13,7 +14,12 @@ import weakref
 from PyQt6 import QtCore
 
 from .models import ChannelFilters, DeviceConfig, ProfileConfig
-from .registry import DriverAdapter, DriverRegistry
+from .registry import (
+    DriverAdapter,
+    DriverConstructionError,
+    DriverRegistry,
+    DriverUnavailableError,
+)
 
 
 _RUNTIME_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -31,6 +37,36 @@ class DeviceState(str, Enum):
     ERROR = "error"
     REMOVING = "removing"
     REMOVED = "removed"
+
+
+class StartupDeviceStatus(str, Enum):
+    """One ordered profile-startup outcome suitable for a sanitized UI log."""
+
+    READY = "ready"
+    CONNECTED = "connected"
+    PENDING = "pending"
+    CONNECTION_FAILED = "connection_failed"
+    CONSTRUCTION_SKIPPED = "construction_skipped"
+    DISABLED = "disabled"
+
+
+@dataclass(frozen=True, slots=True)
+class StartupDeviceResult:
+    device_id: str
+    driver_id: str
+    status: StartupDeviceStatus
+
+
+@dataclass(frozen=True, slots=True)
+class StartupReport:
+    profile_name: str
+    results: tuple[StartupDeviceResult, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "results", tuple(self.results))
+
+    def count(self, status: StartupDeviceStatus) -> int:
+        return sum(result.status is status for result in self.results)
 
 
 @dataclass(frozen=True, slots=True)
@@ -550,6 +586,8 @@ class DeviceManager(QtCore.QObject):
         self._quarantined_records: dict[str, _DeviceRecord] = {}
         self._removed_operations: dict[str, DeviceOperation] = {}
         self._profile_name = ""
+        self._startup_results: tuple[StartupDeviceResult, ...] = ()
+        self._startup_connections_requested = False
         self._generation = 0
         self._load_attempted = False
         self._loaded = False
@@ -623,6 +661,11 @@ class DeviceManager(QtCore.QObject):
         with self._lock:
             return tuple(self._quarantined_records)
 
+    @property
+    def startup_report(self) -> StartupReport:
+        with self._lock:
+            return StartupReport(self._profile_name, self._startup_results)
+
     def set_runtime_hooks(
         self,
         blockers: BlockersHook,
@@ -669,7 +712,7 @@ class DeviceManager(QtCore.QObject):
                 )
 
     def load_profile(self, profile: ProfileConfig) -> DeviceSnapshot:
-        """Construct enabled entries once, rolling back completely on failure."""
+        """Construct enabled entries once, skipping independent device failures."""
 
         self._require_owner_thread("load_profile")
         with self._lock:
@@ -679,26 +722,58 @@ class DeviceManager(QtCore.QObject):
                 )
             self._load_attempted = True
             self._profile_name = profile.profile
+            startup_results: list[StartupDeviceResult] = []
 
-            duplicate = self._first_duplicate_enabled_id(profile)
+            duplicate = self._first_duplicate_id(profile)
             if duplicate is not None:
                 failure = LifecycleFailure(
                     duplicate,
                     "profile validation",
                     "DuplicateDeviceId",
-                    "enabled device IDs must be unique",
+                    "configured device IDs must be unique",
                 )
                 cleanup = LifecycleReport("startup_rollback")
                 self._teardown_report = cleanup
                 raise DeviceStartupError(failure, cleanup)
 
+            # Profile parsing normally proves every driver ID before the
+            # manager is created. Repeat that invariant check up front for
+            # direct ProfileConfig callers so a fatal unknown ID cannot appear
+            # after earlier widgets have already been constructed.
+            for config in profile.devices:
+                self._registry.registration(config.driver)
+
             for config in profile.devices:
                 if not config.enabled:
+                    startup_results.append(
+                        StartupDeviceResult(
+                            config.id,
+                            config.driver,
+                            StartupDeviceStatus.DISABLED,
+                        )
+                    )
                     continue
                 try:
                     adapter = self._registry.create(config, self._runtime_services)
-                except Exception as exc:
-                    self._raise_startup_failure(config.id, "construction", exc)
+                except (DriverConstructionError, DriverUnavailableError) as exc:
+                    failure = LifecycleFailure.from_exception(
+                        config.id,
+                        "construction",
+                        exc,
+                    )
+                    print(
+                        f"Startup device warning: {failure.describe()}; "
+                        "device skipped"
+                    )
+                    traceback.print_exception(exc)
+                    startup_results.append(
+                        StartupDeviceResult(
+                            config.id,
+                            config.driver,
+                            StartupDeviceStatus.CONSTRUCTION_SKIPPED,
+                        )
+                    )
+                    continue
 
                 record = _DeviceRecord(
                     config=config,
@@ -706,16 +781,15 @@ class DeviceManager(QtCore.QObject):
                     ownership_order=self._take_record_order_locked(),
                 )
                 self._records[config.id] = record
-                if config.connect_on_start:
-                    record.state = DeviceState.CONNECTING
-                    try:
-                        self._connect_and_confirm(record)
-                    except Exception as exc:
-                        record.state = DeviceState.ERROR
-                        record.error = str(exc)
-                        self._raise_startup_failure(config.id, "connection", exc)
-                    record.state = DeviceState.CONNECTED
+                startup_results.append(
+                    StartupDeviceResult(
+                        config.id,
+                        config.driver,
+                        StartupDeviceStatus.READY,
+                    )
+                )
 
+            self._startup_results = tuple(startup_results)
             self._generation += 1
             for record in self._records.values():
                 record.generation = self._generation
@@ -723,6 +797,95 @@ class DeviceManager(QtCore.QObject):
             snapshot = self._snapshot_locked()
             self._last_acknowledged_snapshot = snapshot
             return snapshot
+
+    def request_startup_connections(self) -> StartupReport:
+        """Issue each opted-in profile connection once without rolling back.
+
+        The method runs on the manager's owner/UI thread. Synchronous failures
+        are recorded and later requests still run; asynchronous callbacks return
+        ``None`` and remain owned by their existing device panels.
+        """
+
+        self._require_owner_thread("request_startup_connections")
+        with self._lock:
+            self._require_loaded_locked("request startup connections")
+            if self._startup_connections_requested:
+                raise DeviceManagerLoadError(
+                    "profile startup connections may be requested only once"
+                )
+            if self._shutdown_intent or self._teardown_in_progress:
+                raise DeviceManagerTerminatedError(
+                    "profile startup connections cannot begin during shutdown"
+                )
+            self._startup_connections_requested = True
+            records = tuple(self._records.values())
+
+        for record in records:
+            if not record.config.connect_on_start:
+                continue
+            try:
+                result = record.adapter.startup_connect()
+                if result is True:
+                    if (
+                        record.adapter.registration.is_connected is not None
+                        and not record.adapter.connected()
+                    ):
+                        raise RuntimeError(
+                            "startup connection reported success without a "
+                            "connected device"
+                        )
+                    status = StartupDeviceStatus.CONNECTED
+                    with self._lock:
+                        record.state = DeviceState.CONNECTED
+                        record.error = None
+                elif result is None:
+                    status = StartupDeviceStatus.PENDING
+                elif result is False:
+                    raise RuntimeError(
+                        "startup connection callback reported an immediate failure"
+                    )
+                else:
+                    raise TypeError(
+                        "startup connection callback must return True, False, or None; "
+                        f"received {result!r}"
+                    )
+            except Exception as exc:
+                failure = LifecycleFailure.from_exception(
+                    record.config.id,
+                    "startup connection",
+                    exc,
+                )
+                print(f"Startup device warning: {failure.describe()}")
+                traceback.print_exception(exc)
+                self._replace_startup_result(
+                    record.config.id,
+                    StartupDeviceStatus.CONNECTION_FAILED,
+                )
+                continue
+
+            self._replace_startup_result(record.config.id, status)
+
+        return self.startup_report
+
+    def _replace_startup_result(
+        self,
+        device_id: str,
+        status: StartupDeviceStatus,
+    ) -> None:
+        with self._lock:
+            updated = []
+            for result in self._startup_results:
+                if result.device_id != device_id:
+                    updated.append(result)
+                    continue
+                updated.append(
+                    StartupDeviceResult(
+                        result.device_id,
+                        result.driver_id,
+                        status,
+                    )
+                )
+            self._startup_results = tuple(updated)
 
     def snapshot(self) -> DeviceSnapshot:
         with self._lock:
@@ -2523,31 +2686,13 @@ class DeviceManager(QtCore.QObject):
             raise DeviceUnavailableError(device_id, "runtime mutation is in progress")
 
     @staticmethod
-    def _first_duplicate_enabled_id(profile: ProfileConfig) -> str | None:
+    def _first_duplicate_id(profile: ProfileConfig) -> str | None:
         seen: set[str] = set()
         for config in profile.devices:
-            if not config.enabled:
-                continue
             if config.id in seen:
                 return config.id
             seen.add(config.id)
         return None
-
-    def _raise_startup_failure(
-        self,
-        device_id: str,
-        action: str,
-        error: Exception,
-    ) -> None:
-        failure = LifecycleFailure.from_exception(device_id, action, error)
-        cleanup = self._teardown_records(
-            tuple(self._records.values()),
-            operation="startup_rollback",
-        )
-        self._records.clear()
-        self._loaded = False
-        self._teardown_report = cleanup
-        raise DeviceStartupError(failure, cleanup) from error
 
     def _run_bulk(
         self,

@@ -219,22 +219,18 @@ print("phase1 registry remained lazy")
         self.assertIn("unsupported field 'address'", message)
         self.assertIn("connection.device_name is required", message)
 
-    def test_real_drivers_are_startup_only(self):
+    def test_all_registered_drivers_support_profile_startup_requests(self):
         registry = build_default_registry()
         self.assertTrue(registry.registration("mock_device").runtime_mutation_allowed)
-        for driver_id in EXPECTED_DRIVER_IDS[1:]:
+        for driver_id in EXPECTED_DRIVER_IDS:
             with self.subTest(driver_id=driver_id):
-                self.assertFalse(
-                    registry.registration(driver_id).runtime_mutation_allowed
+                registration = registry.registration(driver_id)
+                self.assertTrue(
+                    registry.config_specs[driver_id].supports_startup_connection
                 )
-
-        manual_startup_connect = (
-            "ni6423", "nidaq", "keithley24xx", "bbd30x", "k10cr1"
-        )
-        for driver_id in manual_startup_connect:
-            self.assertFalse(
-                registry.config_specs[driver_id].supports_startup_connection
-            )
+                self.assertIsNotNone(registration.startup_connect)
+                if driver_id != "mock_device":
+                    self.assertFalse(registration.runtime_mutation_allowed)
 
     def test_reviewed_synchronous_visa_connection_mapping(self):
         registry = build_default_registry()
@@ -276,6 +272,109 @@ print("phase1 registry remained lazy")
         sp.connect.assert_called_once_with(
             "TEST::SP150", timeout_ms=2345, query_delay_s=0.0
         )
+
+    def test_startup_callbacks_map_exact_public_connection_arguments(self):
+        registry = build_default_registry()
+
+        for driver_id in ("ni6423", "nidaq"):
+            with self.subTest(driver_id=driver_id):
+                instance = SimpleNamespace(
+                    logic=SimpleNamespace(is_initialized=True),
+                    connect=mock.Mock(),
+                )
+                config = DeviceConfig(
+                    id=f"{driver_id}_1",
+                    driver=driver_id,
+                    enabled=True,
+                    connect_on_start=True,
+                    connection={"device_name": "Dev42"},
+                    scan_channels=ChannelFilters(setters=None, getters=None),
+                )
+                adapter = DriverAdapter(
+                    registry.registration(driver_id), config, instance
+                )
+                self.assertIs(adapter.startup_connect(), True)
+                instance.connect.assert_called_once_with("Dev42")
+
+        for driver_id, address in (
+            ("hp34401a", "TEST::HP"),
+            ("sr860", "TEST::SR860"),
+            ("sr830", "TEST::SR830"),
+            ("demo_device", "DUMMY::INSTR"),
+        ):
+            with self.subTest(driver_id=driver_id):
+                logic = SimpleNamespace(
+                    connected=True,
+                    _connected=True,
+                    connect_visa=mock.Mock(),
+                )
+                config = DeviceConfig(
+                    id=f"{driver_id}_1",
+                    driver=driver_id,
+                    enabled=True,
+                    connect_on_start=True,
+                    connection={"address": address},
+                    scan_channels=ChannelFilters(setters=None, getters=None),
+                )
+                adapter = DriverAdapter(
+                    registry.registration(driver_id),
+                    config,
+                    SimpleNamespace(logic=logic),
+                )
+                self.assertIs(adapter.startup_connect(), True)
+                logic.connect_visa.assert_called_once_with(address)
+
+        keithley = SimpleNamespace(connect_visa=mock.Mock())
+        keithley_config = DeviceConfig(
+            id="keithley_1",
+            driver="keithley24xx",
+            enabled=True,
+            connect_on_start=True,
+            connection={"address": "TEST::K24XX"},
+            scan_channels=ChannelFilters(setters=None, getters=None),
+        )
+        keithley_adapter = DriverAdapter(
+            registry.registration("keithley24xx"),
+            keithley_config,
+            keithley,
+        )
+        self.assertIsNone(keithley_adapter.startup_connect())
+        keithley.connect_visa.assert_called_once_with("TEST::K24XX")
+
+        bbd = SimpleNamespace(connect=mock.Mock(return_value=True))
+        bbd_config = DeviceConfig(
+            id="bbd_1",
+            driver="bbd30x",
+            enabled=True,
+            connect_on_start=True,
+            connection={"serial": "BBD123"},
+            scan_channels=ChannelFilters(setters=None, getters=None),
+        )
+        bbd_adapter = DriverAdapter(
+            registry.registration("bbd30x"), bbd_config, bbd
+        )
+        self.assertIsNone(bbd_adapter.startup_connect())
+        bbd.connect.assert_called_once_with("BBD123")
+
+        bbd.connect.reset_mock(return_value=True)
+        bbd.connect.return_value = False
+        self.assertIs(bbd_adapter.startup_connect(), False)
+        bbd.connect.assert_called_once_with("BBD123")
+
+        k10 = SimpleNamespace(connect=mock.Mock(return_value=None))
+        k10_config = DeviceConfig(
+            id="k10_1",
+            driver="k10cr1",
+            enabled=True,
+            connect_on_start=True,
+            connection={"serial": "K10123"},
+            scan_channels=ChannelFilters(setters=None, getters=None),
+        )
+        k10_adapter = DriverAdapter(
+            registry.registration("k10cr1"), k10_config, k10
+        )
+        self.assertIsNone(k10_adapter.startup_connect())
+        k10.connect.assert_called_once_with("K10123")
 
     def test_profile_identifiers_prefill_manual_connection_panels(self):
         registry = build_default_registry()

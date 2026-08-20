@@ -25,6 +25,15 @@ missing, unreadable, or invalid profile prints its complete validation report,
 shows the same report in a startup dialog, exits with a nonzero status, and does
 not construct a device manager or device widget.
 
+After validation, a small stage-only window remains visible while ZMeter loads
+devices and issues requested startup connections. An enabled device whose
+package, dependency, runtime, configuration, or widget construction fails is
+reported and skipped; later devices still load, and the Main Window can open
+with an empty or partial catalog. A requested connection failure is also
+nonfatal. The permanent read-only Startup Log in the Main Window shows one
+sanitized status line per configured device. Full exception details are printed
+only to the console.
+
 Relative profile filenames and `paths.save`/`paths.backup` values resolve from
 the repository root, not the process's current directory. Absolute paths remain
 absolute. Profile loading validates structure and registered connection fields
@@ -73,12 +82,18 @@ one-device-at-a-time user commissioning in an ignored local profile:
 | `demo_device` | `{"address": "DUMMY::INSTR"}` |
 | `bbd30x`, `k10cr1` | `{"serial": "..."}` |
 
-Keep `connect_on_start` false for first commissioning. NI6423, legacy NIDAQ,
-Keithley24xx, BBD30X, and K10CR1 deliberately reject startup auto-connect and
-retain their panel-driven connection workflow. For NI drivers, the field name
-is `device_name`, not `address`; enter the same reviewed NI MAX name in the
-device panel. All real Phase 1 drivers remain ineligible for runtime add,
-manager disconnect, and removal.
+Keep `connect_on_start` false for first commissioning. Every registered Phase 1
+driver now supports a best-effort startup request through the same public path
+as its device panel. NI6423, NIDAQ, PEM100, SP150, HP34401A, SR860, SR830, demo,
+and mock connections report immediate success or failure. Keithley24xx,
+BBD30X, and K10CR1 report that their existing asynchronous request was accepted;
+their panels remain authoritative for the final result and manual retry. For NI
+drivers, the field name is `device_name`, not `address`. All real Phase 1
+drivers remain ineligible for runtime add, manager disconnect, and removal.
+
+The tracked `profiles/phase1_lab.json` intentionally keeps every
+`connect_on_start` value false. Copy it to an ignored local profile before
+inserting real identifiers or enabling reviewed connection requests.
 
 See `documents/DEVICE_REGISTRATION_PHASE1_REVIEW.md` and the target device
 README before enabling a driver.

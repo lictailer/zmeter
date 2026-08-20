@@ -10,12 +10,11 @@ has been tested by a coding agent.
 
 Every real driver remains startup-only with `runtime_mutation_allowed=False`.
 For first commissioning use `connect_on_start=false` and enable exactly one real
-device in an ignored `*.local.json` profile. Connect from its device panel when
-the retained widget exposes that control. PEM100 and SP150 do not expose a
-connection control in their retained widgets: inspect their disconnected panels
-first, then use a separate reviewed run with `connect_on_start=true` to connect
-to the exact profile address. Runtime add, manager disconnect, and removal
-remain mock-only.
+device in an ignored `*.local.json` profile. After disconnected inspection, a
+reviewed run may set `connect_on_start=true`; startup uses the same public
+connection path as the retained panel, records failure without aborting the
+application, and leaves manual retry available. Runtime add, manager disconnect,
+and removal remain mock-only.
 
 The compatibility decision is intentionally narrow: normal-condition widget,
 logic, hardware, commands, ranges, timing, monitor, and discovery behavior are
@@ -26,17 +25,17 @@ They must not be interpreted as hardware validation.
 
 | Driver ID | Widget import | Runtime | Required connection fields | Startup auto-connect |
 | --- | --- | --- | --- | --- |
-| `ni6423` | `devices.ni6423.ni6423_main.NI6423` | NI-DAQmx | `device_name: str` | No; use the panel |
-| `nidaq` | `devices.nidaq.nidaq_main.NIDAQ` | legacy PyDAQmx | `device_name: str` | No; use the panel |
-| `pem100` | `devices.pem100.pem100_main.PEM100` | shared VISA | `address: str`; optional `timeout_ms: int` | Supported, but false for commissioning |
-| `sp150` | `devices.sp150.sp150_main.SP150` | shared VISA | `address: str`; optional `timeout_ms: int`, `query_delay_s: int/float` | Supported, but false for commissioning |
-| `hp34401a` | `devices.hp34401a.hp34401a_main.HP34401A` | shared VISA | `address: str` | Supported, but false for commissioning |
-| `keithley24xx` | `devices.keithley24xx.keithley24xx_main.Keithley24xx` | shared VISA | `address: str` | No; use the panel |
-| `sr860` | `devices.sr860.sr860_main.SR860` | shared VISA | `address: str` | Supported, but false for commissioning |
-| `sr830` | `devices.sr830.sr830_main.SR830` | shared VISA | `address: str` | Supported, but false for commissioning |
-| `demo_device` | `devices.demoDevice.demoDevice_main.DemoDevice` | private dummy VISA | `address: str` | Supported; simulator only |
-| `bbd30x` | `devices.BBD30X.BBD30X_main.BBD30X` | shared Kinesis | `serial: str` | No; use the panel |
-| `k10cr1` | `devices.k10cr1.k10cr1_main.K10CR1` | shared Kinesis | `serial: str` | No; use the panel |
+| `ni6423` | `devices.ni6423.ni6423_main.NI6423` | NI-DAQmx | `device_name: str` | Best-effort, synchronous |
+| `nidaq` | `devices.nidaq.nidaq_main.NIDAQ` | legacy PyDAQmx | `device_name: str` | Best-effort, synchronous |
+| `pem100` | `devices.pem100.pem100_main.PEM100` | shared VISA | `address: str`; optional `timeout_ms: int` | Best-effort, synchronous |
+| `sp150` | `devices.sp150.sp150_main.SP150` | shared VISA | `address: str`; optional `timeout_ms: int`, `query_delay_s: int/float` | Best-effort, synchronous |
+| `hp34401a` | `devices.hp34401a.hp34401a_main.HP34401A` | shared VISA | `address: str` | Best-effort, synchronous |
+| `keithley24xx` | `devices.keithley24xx.keithley24xx_main.Keithley24xx` | shared VISA | `address: str` | Best-effort, asynchronous pending |
+| `sr860` | `devices.sr860.sr860_main.SR860` | shared VISA | `address: str` | Best-effort, synchronous |
+| `sr830` | `devices.sr830.sr830_main.SR830` | shared VISA | `address: str` | Best-effort, synchronous |
+| `demo_device` | `devices.demoDevice.demoDevice_main.DemoDevice` | private dummy VISA | `address: str` | Best-effort, synchronous simulator |
+| `bbd30x` | `devices.BBD30X.BBD30X_main.BBD30X` | shared Kinesis | `serial: str` | Best-effort, asynchronous pending |
+| `k10cr1` | `devices.k10cr1.k10cr1_main.K10CR1` | shared Kinesis | `serial: str` | Best-effort, asynchronous pending |
 
 The factory for every entry is lazy. Merely loading or validating a profile
 does not import a device package, create a VISA manager, import NI libraries,
@@ -44,6 +43,14 @@ import CLR/pythonnet, validate Kinesis files, enumerate devices, or connect.
 An enabled legacy VISA widget still schedules its established deferred VISA
 resource discovery for the next Qt event-loop turn. That approved behavior is
 unchanged.
+
+Validated device construction is ordered but independent. A failed factory,
+optional dependency, runtime service, or widget configuration skips only that
+device. Startup then requests every opted-in connection in profile order. A
+synchronous false result or exception is logged and does not roll back earlier
+devices; asynchronous requests are not awaited. The temporary startup window
+shows stages only. The Main Window Startup Log contains labels, driver IDs, and
+sanitized statuses without connection identifiers.
 
 The `demo_device` registration deliberately does not receive the application's
 shared real VISA runtime. It keeps its private `DummyResourceManager`, so this
@@ -144,8 +151,8 @@ and add an entry like this:
 ```
 
 For `nidaq`, use driver `nidaq` with the same `device_name` key. The key is not
-`address`. For these manual-connect registrations, enter the same reviewed NI
-MAX name in the device panel before connecting.
+`address`. Confirm the same reviewed NI MAX name in the device panel before
+connecting manually or enabling a later startup request.
 
 ## Commissioning sequence
 
@@ -157,9 +164,9 @@ each driver:
    and initial physical state;
 2. enable exactly one real driver with `connect_on_start=false`;
 3. launch ZMeter and confirm unrelated NI/VISA/Kinesis stacks stay dormant;
-4. connect from the panel to the exact reviewed resource; for PEM100 and SP150,
-   close the disconnected inspection run and explicitly change only
-   `connect_on_start` to `true` for a reviewed connection run;
+4. connect from the panel to the exact reviewed resource, or close the
+   disconnected inspection run and explicitly change only `connect_on_start`
+   to `true` for a reviewed connection run; inspect the Startup Log and panel;
 5. perform one read-only status/readback check;
 6. perform only the smallest independently approved operation inside both the
    device and experiment limits;

@@ -163,6 +163,7 @@ class RuntimeDriver:
             ),
             factory=self.factory,
             connect=self.connect,
+            startup_connect=self.connect,
             disconnect=self.disconnect,
             stop_scan=self.stop_scan,
             force_stop=self.force_stop,
@@ -256,6 +257,8 @@ class DeviceManagerRuntimeMutationTests(unittest.TestCase):
         )
         profile = make_profile(*configs)
         manager.load_profile(profile)
+        if any(config.connect_on_start for config in configs):
+            manager.request_startup_connections()
         hooks = RuntimeHooks(manager)
         hooks.install()
         return manager, driver, hooks, profile

@@ -151,6 +151,13 @@ Router availability does not bypass device validation. A target write still trav
   `configure_instance(instance, connection)` hook may copy the validated
   address/device name/serial into existing UI controls on the owner thread. It
   must not import a vendor runtime, enumerate, connect, or perform device I/O.
+- A registration that supports profile startup supplies a separate
+  `startup_connect(instance, connection, timeout_ms)` callback. `True` means a
+  confirmed synchronous connection, `False` means immediate failure, and
+  `None` means an existing asynchronous request was accepted. Profile startup
+  catches per-device construction and connection failures and continues in
+  order. The strict `connect` callback used by runtime add remains transactional
+  and is not replaced by this best-effort path.
 
 ## Registration checklist
 

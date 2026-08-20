@@ -101,17 +101,22 @@ def _ni6423_connected(instance) -> bool:
     return _logic_flag(instance, "is_initialized")
 
 
+def _ni_startup_connect(instance, connection, _timeout_ms: int) -> bool:
+    instance.connect(_required_connection_text(connection, "device_name"))
+    return _logic_flag(instance, "is_initialized")
+
+
 def ni6423_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="ni6423",
             connection_fields={"device_name": _required_text()},
-            supports_startup_connection=False,
         ),
         factory=_widget_factory("devices.ni6423.ni6423_main", "NI6423"),
         configure_instance=lambda instance, connection: _prefill_text(
             instance, "dev_name_lineEdit", connection, "device_name"
         ),
+        startup_connect=_ni_startup_connect,
         disconnect=lambda instance: _call_logic(instance, "close"),
         start_scan=lambda instance: _call(instance, "start_scan"),
         stop_scan=lambda instance: _call(instance, "stop_scan"),
@@ -125,12 +130,12 @@ def nidaq_registration() -> DriverRegistration:
         config_spec=DriverConfigSpec(
             driver_id="nidaq",
             connection_fields={"device_name": _required_text()},
-            supports_startup_connection=False,
         ),
         factory=_widget_factory("devices.nidaq.nidaq_main", "NIDAQ"),
         configure_instance=lambda instance, connection: _prefill_text(
             instance, "dev_name_lineEdit", connection, "device_name"
         ),
+        startup_connect=_ni_startup_connect,
         disconnect=lambda instance: _call_logic(instance, "close"),
         terminate=lambda instance: _call_logic(instance, "close"),
         is_connected=lambda instance: _logic_flag(instance, "is_initialized"),
@@ -162,6 +167,7 @@ def pem100_registration() -> DriverRegistration:
         ),
         runtime_services=("visa",),
         connect=_pem100_connect,
+        startup_connect=_pem100_connect,
         connect_timeout_ms=20_000,
         disconnect=lambda instance: _call(instance, "disconnect"),
         start_scan=lambda instance: _call(instance, "start_scan"),
@@ -210,6 +216,7 @@ def sp150_registration() -> DriverRegistration:
         ),
         runtime_services=("visa",),
         connect=_sp150_connect,
+        startup_connect=_sp150_connect,
         connect_timeout_ms=10_000,
         disconnect=lambda instance: _call(instance, "disconnect"),
         start_scan=lambda instance: _call(instance, "start_scan"),
@@ -249,6 +256,7 @@ def hp34401a_registration() -> DriverRegistration:
             instance, "address_comboBox", connection, "address"
         ),
         connect=_visa_logic_connect,
+        startup_connect=_visa_logic_connect,
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
         terminate=lambda instance: _call_logic(instance, "disconnect"),
         is_connected=lambda instance: bool(instance.logic._connected),
@@ -264,12 +272,15 @@ def _terminate_keithley24xx(instance):
     instance.is_connected = False
 
 
+def _keithley_startup_connect(instance, connection, _timeout_ms: int) -> None:
+    instance.connect_visa(_required_connection_text(connection, "address"))
+
+
 def keithley24xx_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="keithley24xx",
             connection_fields={"address": _required_text()},
-            supports_startup_connection=False,
         ),
         factory=_widget_factory(
             "devices.keithley24xx.keithley24xx_main",
@@ -281,6 +292,7 @@ def keithley24xx_registration() -> DriverRegistration:
         configure_instance=lambda instance, connection: _prefill_combo(
             instance, "address_cb", connection, "address"
         ),
+        startup_connect=_keithley_startup_connect,
         disconnect=_terminate_keithley24xx,
         force_stop=lambda instance: _call(instance, "force_stop"),
         terminate=_terminate_keithley24xx,
@@ -305,6 +317,7 @@ def sr860_registration() -> DriverRegistration:
             instance, "address_cb", connection, "address"
         ),
         connect=_visa_logic_connect,
+        startup_connect=_visa_logic_connect,
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
         terminate=lambda instance: _call_logic(instance, "disconnect"),
         is_connected=lambda instance: bool(instance.logic.connected),
@@ -328,6 +341,7 @@ def sr830_registration() -> DriverRegistration:
             instance, "address_cb", connection, "address"
         ),
         connect=_visa_logic_connect,
+        startup_connect=_visa_logic_connect,
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
         start_scan=lambda instance: _call(instance, "start_scan"),
         stop_scan=lambda instance: _call(instance, "stop_scan"),
@@ -356,6 +370,7 @@ def demo_device_registration() -> DriverRegistration:
             instance, "address_comboBox", connection, "address"
         ),
         connect=_demo_connect,
+        startup_connect=_demo_connect,
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
         terminate=lambda instance: _call_logic(instance, "disconnect"),
         is_connected=lambda instance: bool(instance.logic.connected),
@@ -367,7 +382,6 @@ def bbd30x_registration() -> DriverRegistration:
         config_spec=DriverConfigSpec(
             driver_id="bbd30x",
             connection_fields={"serial": _required_text()},
-            supports_startup_connection=False,
         ),
         factory=_widget_factory(
             "devices.BBD30X.BBD30X_main",
@@ -378,6 +392,11 @@ def bbd30x_registration() -> DriverRegistration:
         runtime_services=("kinesis",),
         configure_instance=lambda instance, connection: _prefill_text(
             instance, "serial_lineEdit", connection, "serial"
+        ),
+        startup_connect=lambda instance, connection, _timeout_ms: (
+            None
+            if instance.connect(_required_connection_text(connection, "serial"))
+            else False
         ),
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
         start_scan=lambda instance: _call(instance, "start_scan"),
@@ -395,7 +414,6 @@ def k10cr1_registration() -> DriverRegistration:
         config_spec=DriverConfigSpec(
             driver_id="k10cr1",
             connection_fields={"serial": _required_text()},
-            supports_startup_connection=False,
         ),
         factory=_widget_factory(
             "devices.k10cr1.k10cr1_main",
@@ -406,6 +424,9 @@ def k10cr1_registration() -> DriverRegistration:
         runtime_services=("kinesis",),
         configure_instance=lambda instance, connection: _prefill_text(
             instance, "lineEdit", connection, "serial"
+        ),
+        startup_connect=lambda instance, connection, _timeout_ms: (
+            instance.connect(_required_connection_text(connection, "serial"))
         ),
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
         force_stop=lambda instance: _call(instance, "force_stop"),

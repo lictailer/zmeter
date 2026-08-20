@@ -21,6 +21,7 @@ from core.device_management.manager import (
     DeviceManagerTerminatedError,
     DeviceStartupError,
     DeviceState,
+    StartupDeviceStatus,
 )
 from core.device_management.models import (
     ChannelFilters,
@@ -132,7 +133,7 @@ print("manager import and registry lookup remained lazy")
         manager = DeviceManager(registry, SimpleNamespace())
         profile = make_profile(
             make_config("first", setters=("A", "missing"), getters=()),
-            make_config("disabled", enabled=False, driver="not_registered"),
+            make_config("disabled", enabled=False),
             make_config("second"),
         )
 
@@ -162,7 +163,7 @@ print("manager import and registry lookup remained lazy")
         calls = []
         registration = make_registration(
             factory=lambda: next(instances),
-            connect=lambda instance, connection, timeout_ms: (
+            startup_connect=lambda instance, connection, timeout_ms: (
                 calls.append(
                     ("connect", instance.label, dict(connection), timeout_ms)
                 )
@@ -171,16 +172,26 @@ print("manager import and registry lookup remained lazy")
         )
         manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
 
-        snapshot = manager.load_profile(
+        loaded_snapshot = manager.load_profile(
             make_profile(
                 make_config("first", connect_on_start=False),
                 make_config("second", connect_on_start=True),
             )
         )
 
+        self.assertEqual(calls, [])
+        self.assertEqual(
+            tuple(view.state for view in loaded_snapshot.records),
+            (DeviceState.DISCONNECTED, DeviceState.DISCONNECTED),
+        )
+        report = manager.request_startup_connections()
         self.assertEqual(calls, [("connect", "second", {}, 10_000)])
-        self.assertEqual(snapshot.records[0].state, DeviceState.DISCONNECTED)
-        self.assertEqual(snapshot.records[1].state, DeviceState.CONNECTED)
+        self.assertEqual(manager.snapshot().records[0].state, DeviceState.DISCONNECTED)
+        self.assertEqual(manager.snapshot().records[1].state, DeviceState.CONNECTED)
+        self.assertEqual(
+            tuple(result.status for result in report.results),
+            (StartupDeviceStatus.READY, StartupDeviceStatus.CONNECTED),
+        )
 
     def test_start_after_scan_is_noop_while_shutdown_is_reserved(self):
         calls = []
@@ -200,11 +211,11 @@ print("manager import and registry lookup remained lazy")
         self.assertTrue(manager.start_after_scan().succeeded)
         self.assertEqual(calls, ["start"])
 
-    def test_connect_probe_mismatch_rolls_back_as_startup_failure(self):
+    def test_connect_probe_mismatch_is_nonfatal_startup_failure(self):
         events = []
         registration = make_registration(
             factory=lambda: SimpleNamespace(label="probe"),
-            connect=lambda _instance, _connection, _timeout_ms: (
+            startup_connect=lambda _instance, _connection, _timeout_ms: (
                 events.append("connect") or True
             ),
             is_connected=lambda _instance: False,
@@ -215,34 +226,41 @@ print("manager import and registry lookup remained lazy")
         )
         manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
 
-        with self.assertRaisesRegex(
-            DeviceStartupError,
-            "without reporting a connected device",
-        ):
-            manager.load_profile(
-                make_profile(make_config("probe", connect_on_start=True))
-            )
+        manager.load_profile(
+            make_profile(make_config("probe", connect_on_start=True))
+        )
+        report = manager.request_startup_connections()
 
-        self.assertEqual(events, ["connect", "force", "stop", "terminate", "close"])
-        self.assertEqual(tuple(manager.snapshot().equipment), ())
+        self.assertEqual(events, ["connect"])
+        self.assertEqual(tuple(manager.snapshot().equipment), ("probe",))
+        self.assertEqual(
+            report.results[0].status,
+            StartupDeviceStatus.CONNECTION_FAILED,
+        )
 
-    def test_connection_callback_requires_literal_true(self):
-        for result in (False, None, 1, "connected"):
+    def test_startup_connection_callback_accepts_only_tristate_results(self):
+        expected = {
+            False: StartupDeviceStatus.CONNECTION_FAILED,
+            None: StartupDeviceStatus.PENDING,
+            1: StartupDeviceStatus.CONNECTION_FAILED,
+            "connected": StartupDeviceStatus.CONNECTION_FAILED,
+        }
+        for result, expected_status in expected.items():
             with self.subTest(result=result):
                 registration = make_registration(
-                    connect=lambda _instance, _connection, _timeout_ms, value=result: value,
+                    startup_connect=(
+                        lambda _instance, _connection, _timeout_ms, value=result: value
+                    ),
                 )
                 manager = DeviceManager(
                     DriverRegistry((registration,)), SimpleNamespace()
                 )
-                with self.assertRaisesRegex(
-                    DeviceStartupError,
-                    "must return literal True",
-                ):
-                    manager.load_profile(
-                        make_profile(make_config("strict", connect_on_start=True))
-                    )
-                self.assertEqual(tuple(manager.snapshot().equipment), ())
+                manager.load_profile(
+                    make_profile(make_config("strict", connect_on_start=True))
+                )
+                report = manager.request_startup_connections()
+                self.assertEqual(report.results[0].status, expected_status)
+                self.assertEqual(tuple(manager.snapshot().equipment), ("strict",))
 
     def test_teardown_before_load_seals_manager_without_constructing(self):
         factory_calls = []
@@ -315,7 +333,7 @@ print("manager import and registry lookup remained lazy")
         self.assertTrue(report.succeeded)
         self.assertEqual(events, ["force", "terminate", "close"])
 
-    def test_construction_failure_rolls_back_and_leaves_empty_manager(self):
+    def test_construction_failure_skips_device_and_keeps_successful_records(self):
         events = []
         first = SimpleNamespace(label="first")
         factory_calls = 0
@@ -340,28 +358,24 @@ print("manager import and registry lookup remained lazy")
         )
         manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
 
-        with self.assertRaisesRegex(DeviceStartupError, "constructor fault") as caught:
-            manager.load_profile(
-                make_profile(make_config("first"), make_config("second"))
-            )
-
-        self.assertEqual(
-            events,
-            [
-                "construct:first",
-                "force:first",
-                "stop:first",
-                "terminate:first",
-                "close:first",
-            ],
+        snapshot = manager.load_profile(
+            make_profile(make_config("first"), make_config("second"))
         )
-        self.assertTrue(caught.exception.cleanup_report.succeeded)
-        self.assertEqual(tuple(manager.snapshot().equipment), ())
-        self.assertFalse(manager.loaded)
+
+        self.assertEqual(events, ["construct:first"])
+        self.assertEqual(tuple(snapshot.equipment), ("first",))
+        self.assertEqual(
+            tuple(result.status for result in manager.startup_report.results),
+            (
+                StartupDeviceStatus.READY,
+                StartupDeviceStatus.CONSTRUCTION_SKIPPED,
+            ),
+        )
+        self.assertTrue(manager.loaded)
         with self.assertRaises(DeviceManagerLoadError):
             manager.load_profile(make_profile(make_config("later")))
 
-    def test_connection_failure_aggregates_rollback_failures_and_cleans_all(self):
+    def test_connection_failure_is_nonfatal_and_does_not_teardown_other_devices(self):
         events = []
         instances = iter(
             (SimpleNamespace(label="first"), SimpleNamespace(label="second"))
@@ -377,11 +391,13 @@ print("manager import and registry lookup remained lazy")
 
         def connect(instance, _connection, _timeout_ms):
             events.append(f"connect:{instance.label}")
-            raise RuntimeError("connection fault")
+            if instance.label == "second":
+                raise RuntimeError("connection fault")
+            return True
 
         registration = make_registration(
             factory=lambda: next(instances),
-            connect=connect,
+            startup_connect=connect,
             force_stop=action("force", fail_label="first"),
             stop_scan=action("stop"),
             terminate=action("terminate"),
@@ -389,32 +405,23 @@ print("manager import and registry lookup remained lazy")
         )
         manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
 
-        with self.assertRaises(DeviceStartupError) as caught:
-            manager.load_profile(
-                make_profile(
-                    make_config("first"),
-                    make_config("second", connect_on_start=True),
-                )
+        manager.load_profile(
+            make_profile(
+                make_config("first", connect_on_start=True),
+                make_config("second", connect_on_start=True),
             )
-
-        self.assertIn("connection fault", str(caught.exception))
-        self.assertIn("rollback", str(caught.exception))
-        self.assertEqual(len(caught.exception.failures), 2)
-        self.assertEqual(
-            events,
-            [
-                "connect:second",
-                "force:first",
-                "force:second",
-                "stop:first",
-                "stop:second",
-                "terminate:first",
-                "close:first",
-                "terminate:second",
-                "close:second",
-            ],
         )
-        self.assertEqual(tuple(manager.snapshot().equipment), ())
+        report = manager.request_startup_connections()
+
+        self.assertEqual(events, ["connect:first", "connect:second"])
+        self.assertEqual(tuple(manager.snapshot().equipment), ("first", "second"))
+        self.assertEqual(
+            tuple(result.status for result in report.results),
+            (
+                StartupDeviceStatus.CONNECTED,
+                StartupDeviceStatus.CONNECTION_FAILED,
+            ),
+        )
 
     def test_bulk_lifecycle_continues_and_reports_failures_in_profile_order(self):
         events = []

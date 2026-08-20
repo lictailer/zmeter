@@ -10,6 +10,10 @@ from .models import ConnectionFieldSpec, DeviceConfig, DriverConfigSpec
 
 DeviceFactory = Callable[..., object]
 ConnectionAction = Callable[[object, Mapping[str, object], int], bool]
+StartupConnectionAction = Callable[
+    [object, Mapping[str, object], int],
+    bool | None,
+]
 InstanceConfigurationAction = Callable[[object, Mapping[str, object]], object]
 LifecycleAction = Callable[[object], object]
 StateProbe = Callable[[object], bool]
@@ -80,6 +84,7 @@ class DriverRegistration:
     runtime_services: tuple[str, ...] = ()
     configure_instance: InstanceConfigurationAction | None = None
     connect: ConnectionAction | None = None
+    startup_connect: StartupConnectionAction | None = None
     connect_timeout_ms: int = 10_000
     disconnect: LifecycleAction | None = None
     start_scan: LifecycleAction | None = None
@@ -172,6 +177,28 @@ class DriverAdapter:
             if action is None:
                 raise LifecycleUnsupportedError(
                     f"driver '{self.driver_id}' does not support manager connection"
+                )
+            connection = _thaw_json_value(self.config.connection)
+            return action(
+                self.instance,
+                connection,
+                self.registration.connect_timeout_ms,
+            )
+
+    def startup_connect(self) -> bool | None:
+        """Issue the reviewed profile-startup connection action.
+
+        ``True`` means the device is already confirmed connected, ``False``
+        means an immediate failure, and ``None`` means an asynchronous request
+        was accepted and the device panel owns its eventual result.
+        """
+
+        with self._lifecycle_lock:
+            self._require_active("request startup connection")
+            action = self.registration.startup_connect
+            if action is None:
+                raise LifecycleUnsupportedError(
+                    f"driver '{self.driver_id}' does not support startup connection"
                 )
             connection = _thaw_json_value(self.config.connection)
             return action(
@@ -425,6 +452,7 @@ def mock_device_registration() -> DriverRegistration:
         ),
         factory=_create_mock_device,
         connect=_mock_connect,
+        startup_connect=_mock_connect,
         disconnect=_mock_disconnect,
         start_scan=_mock_start_scan,
         stop_scan=_mock_stop_scan,

@@ -4,6 +4,10 @@
 
 Phase 1 was implemented on 2026-08-19. The default profile remains mock-only;
 all real registrations are startup-only and await user-executed commissioning.
+Profile startup now constructs devices independently and offers a best-effort
+`connect_on_start` request for every Phase 1 driver. Construction and connection
+failures are visible but do not prevent unrelated devices or the Main Window
+from loading. Runtime mutation policy is unchanged.
 The maintained `sr830_v2` source is now the sole official `devices/sr830`
 package and registry ID `sr830`. See
 [DEVICE_REGISTRATION_PHASE1_REVIEW.md](DEVICE_REGISTRATION_PHASE1_REVIEW.md)
