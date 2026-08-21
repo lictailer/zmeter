@@ -218,7 +218,7 @@ These checks provide static, unit, mock/simulation, or offscreen-GUI evidence on
 
 ## Release installer
 
-Installer repository URL: `INSERT_DEPLOY_REPOSITORY_URL_HERE`
+Installer repository URL: `https://github.com/lictailer/zmeter-deploy`
 
 Download the standalone installer repository, then double-click `deploy_zmeter.py` to install a verified published ZMeter release or create/update its release-specific Conda environment. The first time, if Windows asks how to open the file, choose **Python**, enable **Always**, and ensure it uses `python.exe`, not `pythonw.exe`.
 

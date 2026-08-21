@@ -5,7 +5,7 @@
 - **Status:** Phase 2 implementation active; disposable user deployment and Conda smoke tests remain user-executed.
 - **Target platform:** 64-bit Windows with Python 3.12 and Conda already installed.
 - **Repository:** `https://github.com/lictailer/zmeter`
-- **Installer repository:** `INSERT_DEPLOY_REPOSITORY_URL_HERE`
+- **Installer repository:** `https://github.com/lictailer/zmeter-deploy`
 - **Interface:** One Python script launched by double-click, using a popup terminal for concise `print()` and `input()` interaction.
 - **Code location:** The installer source and offline catalog live in a separate repository; this ZMeter repository retains the release workflow and this contract.
 - **Delivery strategy:** The approved Phase 1 interface now uses verified live release downloads, staged extraction, and attached Conda commands. Maintainer preview modes remain side-effect free.
