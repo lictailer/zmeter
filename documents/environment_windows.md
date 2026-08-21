@@ -20,6 +20,14 @@ conda env update -f zmeter_May2026_environment.yml --prune
 conda activate zmeter_May2026
 ```
 
+## One-click release environments
+
+Download the standalone installer repository linked from the root README, double-click `deploy_zmeter.py`, and choose **Set up Python environment** to create or update the environment belonging to a published release. The tool locates Conda even when it is not on `PATH`, verifies the release ZIP, manifest, tagged commit, and YAML hash, and derives an isolated name such as `zmeter-v1.0` or `zmeter-v1.0-beta.3`.
+
+After the exact `Y` confirmation, new environments use `conda env create --name <name> --file <yaml>`. Existing environments use `conda env update --name <name> --file <yaml> --prune`. Conda output and prompts remain visible in the popup terminal. The exported YAML's `name:` or `prefix:` does not select the destination because `--name` is always explicit.
+
+The installer does not activate the environment, install Windows drivers or vendor runtimes, launch ZMeter, or validate hardware. If Conda fails or is interrupted, review its visible output and the named environment; the tool does not claim rollback or automatically delete it.
+
 Run ZMeter and validation from the repository root because several Qt Designer files use repository-relative paths.
 
 ## Python packages versus system software

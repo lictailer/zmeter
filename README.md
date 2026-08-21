@@ -216,6 +216,16 @@ python -B -m py_compile <changed-file-1.py> <changed-file-2.py>
 
 These checks provide static, unit, mock/simulation, or offscreen-GUI evidence only. They do not validate physical instruments.
 
+## Release installer
+
+Installer repository URL: `INSERT_DEPLOY_REPOSITORY_URL_HERE`
+
+Download the standalone installer repository, then double-click `deploy_zmeter.py` to install a verified published ZMeter release or create/update its release-specific Conda environment. The first time, if Windows asks how to open the file, choose **Python**, enable **Always**, and ensure it uses `python.exe`, not `pythonw.exe`.
+
+The tool retrieves only published releases from `lictailer/zmeter`, requires an exact `Y` before making changes, shows download/extraction progress, and leaves Conda output attached to the terminal. It does not activate the environment, launch ZMeter, install drivers, or access hardware. The window stays open until Enter is pressed.
+
+From the standalone installer repository, maintainers can run `python deploy_zmeter.py --preview` to use live release and Conda state without downloading or changing anything. `--catalog <path>` is an offline fixture preview and can never perform an installation. A public release needs no token; `GITHUB_TOKEN` may contain an optional read-only token for rate-limited access and is never printed or stored.
+
 ## Project layout
 
 ```text

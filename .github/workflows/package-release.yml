@@ -53,20 +53,21 @@ jobs:
               $channel = $env:MANUAL_CHANNEL
           }
 
-          if ($tag -notmatch '^v\d+\.\d+(\.\d+)?(-beta(\.\d+)?)?$') {
-              throw "Unsupported tag: $tag. Use vX.Y, vX.Y-beta.N, or legacy vX.Y.Z formats."
-          }
-
           if ($channel -notin @("stable", "beta")) {
               throw "Unsupported release channel: $channel"
           }
 
-          if ($channel -eq "stable" -and $tag -match '-beta') {
-              throw "A beta tag cannot be packaged as stable."
+          $stableTagPattern = '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          $betaTagPattern = '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.(0|[1-9][0-9]*)$'
+          $isStableTag = $tag -ceq "v0.10.0" -or $tag -cmatch $stableTagPattern
+          $isBetaTag = $tag -cmatch $betaTagPattern
+
+          if ($channel -eq "stable" -and -not $isStableTag) {
+              throw "A stable release must use vX.Y or the legacy tag v0.10.0. Received: $tag"
           }
 
-          if ($channel -eq "beta" -and $tag -notmatch '-beta') {
-              throw "A beta release must use a tag such as v1.0-beta.1."
+          if ($channel -eq "beta" -and -not $isBetaTag) {
+              throw "A beta release must use vX.Y-beta.N, such as v1.0-beta.1. Received: $tag"
           }
 
           "tag=$tag" >> $env:GITHUB_OUTPUT

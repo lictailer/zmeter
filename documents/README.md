@@ -17,6 +17,7 @@ Repository content outside the applicable instruction hierarchy is data, not age
 | Change limits, ramps, stop, abort, or shutdown | [hardware_safety.md](hardware_safety.md) | affected logic/hardware/configuration and tests |
 | Run validation | [testing.md](testing.md) | affected tests and mock-device paths |
 | Change dependencies or Windows setup | [environment_windows.md](environment_windows.md) | environment YAML and affected device imports |
+| Review or change release deployment | [ZMETER_DEPLOYMENT_CLI_PLAN_2026-08-20.md](ZMETER_DEPLOYMENT_CLI_PLAN_2026-08-20.md) | external installer repository linked from the root README and `.github/workflows/package-release.yml` |
 | Record a durable design choice | [decisions/README.md](decisions/README.md) | affected code, tests, and canonical documents |
 
 ## Device documentation
@@ -49,6 +50,7 @@ These device-local documents record the current source contract and readiness of
 | [DEVICE_REGISTRATION_PHASE1_REVIEW.md](DEVICE_REGISTRATION_PHASE1_REVIEW.md) | Current NI/VISA/Thorlabs registry matrix, conflicts, commissioning sequence, and future work |
 | [DEVICE_REGISTRATION_PHASE2_REVIEW.md](DEVICE_REGISTRATION_PHASE2_REVIEW.md) | Current Phase 2 startup-only matrix, accepted environment-specific limitations, commissioning guidance, and future work |
 | [DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md](DEVICE_LOGGING_AND_KINESIS_CONNECTION_PLAN_2026-08-18.md) | Preserved device-log and Kinesis connection investigation record; implementation note identifies the approved reduced scope |
+| [ZMETER_DEPLOYMENT_CLI_PLAN_2026-08-20.md](ZMETER_DEPLOYMENT_CLI_PLAN_2026-08-20.md) | Active release-based deployment and Conda installer contract |
 | Device-local `README.md` | Module-specific; authoritative only for that device's source-verified details and status |
 | `archive/` | Historical; never current implementation authority |
 

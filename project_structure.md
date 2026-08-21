@@ -49,6 +49,8 @@ The checked-in `config/profiles/mock.json` profile instantiates two disconnected
 | `zmeter_May2026_environment.yml` | Maintained Windows Conda environment |
 | `archive/` | Retired documentation/code evidence; not current authority |
 
+The standalone deployment installer is maintained in a separate repository. Its publication URL placeholder and user instructions are in the root `README.md`; ZMeter retains only its release-packaging workflow and deployment contract.
+
 ## Device integration inventory
 
 Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the target package, dependencies, lifecycle, tests, and device-local documentation before enabling it. The maintained former `sr830_v2` source has replaced the legacy SR830 at the sole canonical `devices/sr830/` path. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
