@@ -2,7 +2,12 @@
 
 ## Purpose and status
 
-This is the sole official SR830 integration and stable registry driver `sr830`. It is the maintained former `sr830_v2` source, now at the canonical `devices/sr830` path after removal of the legacy direct-PyVISA implementation. It uses the shared `VisaRuntime` while retaining its widget/logic/hardware protocol behavior, identity checking, logging, and monitor coordination. Shared-session lifecycle and offscreen construction have fake coverage; bench validation remains pending.
+This is the sole official SR830 integration and stable registry driver `sr830`,
+at the canonical `devices/sr830` path after removal of the legacy direct-PyVISA
+implementation. It uses the shared `VisaRuntime` while retaining its
+widget/logic/hardware protocol behavior, identity checking, logging, and monitor
+coordination. Shared-session lifecycle and offscreen construction have fake
+coverage; bench validation remains pending.
 
 The registration requires connection field `address`. Keep `connect_on_start=false` for first commissioning and use explicit numeric scan filters. Runtime mutation remains disabled.
 

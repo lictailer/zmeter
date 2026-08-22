@@ -1,5 +1,10 @@
 # ZMeter Behavior-Preserving Restructure Manual
 
+> **Archived 2026-08-21 — Eight-phase reconstruction completed.** This manual
+> and its append-only progress log are implementation evidence, not current
+> instructions. See `documents/reconstruction_status.md` and ADR 002 for the
+> maintained outcome and remaining work.
+
 ## Purpose
 
 This manual is the execution contract for restructuring ZMeter while preserving all existing behavior. It is written so the work can be delegated to an implementation agent and inspected later.

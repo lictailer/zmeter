@@ -119,7 +119,7 @@ Session configuration is selected by a validated JSON profile. It includes:
 - optional setter/getter channel filters;
 - local measurement and backup paths.
 
-`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in profiles keep real devices disabled. The registry recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`, plus the Phase 2 IDs `four9`, `montana2`, `opticool`, and `tlpm`; real devices require an ignored local profile and user-executed commissioning. The [Phase 2 review](documents/DEVICE_REGISTRATION_PHASE2_REVIEW.md) records the explicitly accepted limitations of those environment-specific integrations.
+`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in profiles keep real devices disabled. The registry recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`, plus the Phase 2 IDs `four9`, `montana2`, `opticool`, and `tlpm`; real devices require an ignored local profile and user-executed commissioning. The current [device readiness matrix](documents/device_status.md) records registration, validation, accepted limitations, and future work.
 
 Startup is best effort after profile validation. ZMeter shows broad loading
 stages, skips an enabled device that cannot be constructed, and continues after
@@ -167,6 +167,11 @@ The flat `devices/` package contains integrations or experimental work for sever
 | Positioning/autofocus | `auto_focus`, `auto_position`, `autofocus_xuguo`, `ANC300` |
 
 Treat this as a source inventory, not a compatibility or validation matrix. Check the current module, its dependencies, and its lifecycle behavior before selecting it for a lab profile.
+
+See [reconstruction status](documents/reconstruction_status.md) for the completed
+structural update and remaining release/commissioning gates, and
+[known issues](documents/known_issues.md) for confirmed partial behavior and
+future fixes.
 
 ## Measurement workflow
 
@@ -218,7 +223,9 @@ These checks provide static, unit, mock/simulation, or offscreen-GUI evidence on
 
 ## Release installer
 
-Installer repository URL: `https://github.com/lictailer/zmeter-deploy`
+Installer repository: [lictailer/zmeter-deploy](https://github.com/lictailer/zmeter-deploy).
+The maintained ZMeter-side release boundary is documented in
+[release_deployment.md](documents/release_deployment.md).
 
 Download the standalone installer repository, then double-click `deploy_zmeter.py` to install a verified published ZMeter release or create/update its release-specific Conda environment. The first time, if Windows asks how to open the file, choose **Python**, enable **Always**, and ensure it uses `python.exe`, not `pythonw.exe`.
 
@@ -290,7 +297,9 @@ Before changing the project:
 6. Update maintained documentation when setup, structure, channels, data formats, workflows, limits, or lifecycle behavior changes.
 7. Report what was tested, what was not tested, and the user-executed hardware-validation status.
 
-Historical documents are indexed in `archive/README.md`. They are evidence only and may contain stale or lab-specific information.
+Current technical documents are indexed in `documents/README.md`. Historical
+plans and evidence are indexed in `archive/README.md`; they may contain stale or
+lab-specific information and are not current authority.
 
 ## License
 

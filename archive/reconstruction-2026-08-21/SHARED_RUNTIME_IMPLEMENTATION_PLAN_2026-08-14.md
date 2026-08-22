@@ -1,5 +1,9 @@
 # Implement Shared VISA and Thorlabs Kinesis Runtime Services
 
+> **Archived 2026-08-21 — Implemented; hardware validation remains pending.**
+> Current runtime ownership is documented in `core/shared_runtime/README.md`
+> and ADR 001. This checklist is retained as implementation evidence only.
+
 ## Status checklist
 
 - [x] Phase 1: baseline, shared-runtime skeleton, vendor manifest, and fake-service tests

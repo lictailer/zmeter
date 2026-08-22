@@ -2,14 +2,11 @@
 
 ## Purpose of this tutorial
 
-This document is an operating guide for upgrading how Codex contributes to ZMeter.
-It describes what should be created later, what each document should contain, how the
-documents relate to one another, and what workflow Codex should follow for every
-implementation task.
-
-This tutorial is the only workflow file being created at this stage. It does **not**
-create `AGENTS.md`, nested instruction files, new technical references, CI files, or
-test tooling. Use it as the plan for introducing those pieces deliberately.
+This document is the maintained operating guide for how Codex contributes to
+ZMeter. It describes the current information hierarchy, what each document
+contains, how the documents relate, and the workflow Codex follows for every
+implementation task. The original one-time rollout is complete; current code,
+tests, `AGENTS.md`, and `documents/README.md` are authoritative.
 
 The intended source repository is:
 
@@ -38,7 +35,7 @@ Build the system around five rules:
 
 ## 2. Target information hierarchy
 
-Use the following hierarchy when the workflow is implemented:
+Use the following maintained hierarchy:
 
 ```text
 zmeter/
@@ -47,6 +44,9 @@ zmeter/
 |-- start_zmeter.py                   # Active startup/profile entry point
 |-- documents/
 |   |-- README.md                     # Documentation index and reading routes
+|   |-- reconstruction_status.md      # Completed reconstruction and release gates
+|   |-- device_status.md              # Device registration/readiness matrix
+|   |-- release_deployment.md         # Published-release installer boundary
 |   |-- architecture.md               # Stable system architecture
 |   |-- scan_engine.md                # Scan schema and runtime contract
 |   |-- device_contract.md            # Rules for adding/integrating devices
@@ -67,20 +67,17 @@ zmeter/
         `-- README.md                 # Device-specific setup and behavior
 ```
 
-Do not create every file simply because it appears in this tree. Introduce them in
-the rollout order in Section 10 and merge overlapping existing documents instead of
-creating duplicate sources of truth.
+Do not create a new document merely because a topic exists. Update the current
+canonical owner and merge overlapping material instead of creating duplicate
+sources of truth.
 
 ## 3. Root `AGENTS.md`
 
 ### Why it is required
 
-Codex automatically looks for `AGENTS.md` and `AGENTS.override.md`. The existing
-`agent.md` is not the standard filename and should not be assumed to load unless an
-explicit fallback is configured.
-
-Create a fresh `AGENTS.md` rather than blindly renaming the existing file. The current
-file contains useful knowledge, but it also contains stale and contradictory details.
+Codex automatically looks for `AGENTS.md` and `AGENTS.override.md`. Maintain the
+current root `AGENTS.md`; the former lowercase instruction file is archived and
+must not be restored as a competing source.
 
 ### Recommended size
 
@@ -194,10 +191,9 @@ It should contain:
 8. Links to the documentation index and testing guide.
 9. A short troubleshooting section.
 
-Before writing it, decide whether `zmeter_Mar2026_environment.yml` or
-`zmeter_May2026_environment.yml` is canonical, or create a consolidated environment
-as a separate implementation task. Do not document `environment.yml` unless that file
-actually exists.
+The maintained exported environment is `zmeter_May2026_environment.yml`. Do not
+document a generic `environment.yml` unless that file is deliberately introduced
+and its migration is reviewed.
 
 ## 5. Documentation index: `documents/README.md`
 
@@ -530,7 +526,11 @@ Remaining risks:
 Final Git state:
 ```
 
-## 10. Recommended rollout sequence
+## 10. Completed rollout and ongoing maintenance
+
+The documentation hierarchy rollout below is complete and retained only to
+explain the consolidation order. New work follows Section 9 and updates the
+existing canonical owners rather than replaying these phases.
 
 ### Phase 0: Preserve and classify
 

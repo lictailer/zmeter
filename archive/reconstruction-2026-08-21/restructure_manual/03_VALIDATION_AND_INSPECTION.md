@@ -1,5 +1,9 @@
 # Validation, Safety, and Inspection Plan
 
+> **Archived 2026-08-21 — Reconstruction validation completed.** Preserved as
+> historical implementation evidence. See `documents/reconstruction_status.md`
+> and ADR 002 for the maintained outcome and remaining work.
+
 ## Validation principle
 
 This is a behavior-preserving refactor. Passing new tests is insufficient; the agent must show that existing observable behavior did not change. Validate the smallest affected surface first, then run the broader hardware-independent suite.

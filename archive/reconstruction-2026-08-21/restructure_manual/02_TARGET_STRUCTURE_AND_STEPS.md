@@ -1,5 +1,9 @@
 # Target Structure and Implementation Steps
 
+> **Archived 2026-08-21 — Reconstruction procedure completed.** Preserved as
+> historical implementation evidence. See `documents/reconstruction_status.md`
+> and ADR 002 for the maintained outcome and remaining work.
+
 ## Minimal target layout
 
 This project deliberately avoids a full packaging rewrite. Keep current core module names and runtime relationships while removing device-package clutter from the repository root.

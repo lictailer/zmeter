@@ -120,7 +120,9 @@ add/connect/disconnect/remove behavior, the busy probe above, bounded stop and
 termination behavior, reversible router attachment, and complete stored catalog
 reference reporting. The checked-in registry currently enables runtime mutation
 only for the mock driver; real drivers require separate user-executed bench
-review after these contracts are satisfied.
+review after these contracts are satisfied. Current driver readiness is indexed
+in [device_status.md](device_status.md), and the partial operator workflow is
+recorded in [known_issues.md](known_issues.md).
 
 ## Cross-device commands
 

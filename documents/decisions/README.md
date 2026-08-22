@@ -6,7 +6,8 @@ Use this directory for durable choices with meaningful alternatives and conseque
 
 | ADR | Decision | Status | Date |
 | --- | --- | --- | --- |
-| 001 | [Shared process runtime services for hardware integrations](001-shared-runtime-services.md) | Accepted; implementation pending | 2026-08-14 |
+| 001 | [Shared process runtime services for hardware integrations](001-shared-runtime-services.md) | Implemented; hardware validation pending | 2026-08-14 |
+| 002 | [Profile-driven device management and behavior-preserving reconstruction](002-profile-driven-device-management-reconstruction.md) | Implemented in beta; stable promotion and hardware commissioning pending | 2026-08-21 |
 
 ## Naming
 

@@ -4,6 +4,10 @@
 services stay independent: replacing or reverting VISA must not change Kinesis,
 and replacing or reverting Kinesis must not change VISA.
 
+The durable ownership decision is recorded in
+`documents/decisions/001-shared-runtime-services.md`; current driver readiness
+and pending hardware evidence are indexed in `documents/device_status.md`.
+
 The standard local vendor layout is:
 
 ```text

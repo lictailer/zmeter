@@ -130,7 +130,10 @@ Migration will be incremental:
 3. Migrate PEM100, SP150, HP34401A, Keithley24xx, SR830 v2, and SR860 to
    `VisaRuntime`, then route UI resource listing through the same service.
 4. Replace `demoDevice`'s global PyVISA monkey-patch with injected fake services.
-5. Leave legacy `sr830/` unchanged and unsupported in shared-VISA profiles.
+5. At adoption, leave the legacy SR830 package unchanged and unsupported in
+   shared-VISA profiles. The later reconstruction superseded this boundary by
+   removing the legacy implementation and making `devices/sr830/` canonical;
+   see ADR 002.
 6. Evaluate additional typed adapters or reservation policies only when their
    device packages are actively maintained.
 

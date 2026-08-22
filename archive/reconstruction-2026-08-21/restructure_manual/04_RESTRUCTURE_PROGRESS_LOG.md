@@ -1,5 +1,9 @@
 # Restructure Progress Log
 
+> **Archived 2026-08-21 — Reconstruction evidence closed.** Preserved as an
+> append-only historical record. See `documents/reconstruction_status.md` and
+> ADR 002 for the maintained outcome and remaining work.
+
 ## Rules
 
 This is the inspection ledger for the restructure. The implementation agent must update it after baseline inspection and after every phase, maintenance integration, scope decision, test gate, and user review.

@@ -14,9 +14,11 @@ not substitutes for controller limits, physical clearance, or a hardware
 emergency stop.
 
 It is registered under driver ID `bbd30x` with required connection field
-`serial`. The startup-only adapter rejects `connect_on_start=true`, preserves
-panel-driven connection, injects `RuntimeServices.kinesis`, and remains
-ineligible for runtime mutation.
+`serial`. For first commissioning keep `connect_on_start=false`; a later
+reviewed startup request queues the existing asynchronous panel connection and
+reports pending without waiting for completion. The panel remains authoritative
+for the final result and manual retry. The adapter injects
+`RuntimeServices.kinesis`; runtime mutation remains disabled.
 
 ## Dependencies and configuration
 

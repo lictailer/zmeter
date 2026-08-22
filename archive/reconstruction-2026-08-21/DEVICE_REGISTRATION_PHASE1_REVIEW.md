@@ -1,5 +1,9 @@
 # Phase 1 Device Registration Review
 
+> **Archived 2026-08-21 — Completed and consolidated.** This review records
+> the Phase 1 admission evidence. Current registration readiness and future
+> work are maintained in `documents/device_status.md` and device-local READMEs.
+
 ## Outcome and policy
 
 Phase 1 of [DEVICE_REGISTRATION_ROADMAP.md](DEVICE_REGISTRATION_ROADMAP.md) is

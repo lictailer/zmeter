@@ -1,5 +1,11 @@
 # Device Logging and Kinesis Connection Update Plan
 
+> **Archived 2026-08-21 — Implemented with approved reduced scope.** This
+> investigation is historical evidence, not a current implementation plan.
+> Current device status is maintained in
+> `documents/device_status.md`; current architecture is maintained in
+> `documents/architecture.md`.
+
 > Implementation note (2026-08-18): this file preserves the original
 > investigation and its more defensive proposal. The subsequently approved
 > implementation keeps the connection change smaller: initialize each Kinesis

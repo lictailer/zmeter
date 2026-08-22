@@ -1,5 +1,9 @@
 # Agent Task Contract
 
+> **Archived 2026-08-21 — Reconstruction contract completed.** Preserved as
+> historical implementation evidence. See `documents/reconstruction_status.md`
+> and ADR 002 for the maintained outcome and remaining work.
+
 ## Objective
 
 Restructure ZMeter so device code is organized under one parent directory, startup device selection is profile-driven, and a centralized device manager safely owns device instances and runtime catalog updates. Preserve every existing behavior except the two explicitly approved device-configuration/runtime-management capabilities.

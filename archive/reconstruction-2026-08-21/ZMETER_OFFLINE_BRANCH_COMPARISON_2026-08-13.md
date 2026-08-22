@@ -1,5 +1,10 @@
 # ZMeter offline-version comparison and integration procedure
 
+> **Archived 2026-08-21 — Historical analysis completed.** Selected changes
+> were incorporated through later reviewed work. Current behavior and backlog
+> are maintained in canonical documentation, `documents/device_status.md`, and
+> `documents/known_issues.md`.
+
 Date: 2026-08-13
 
 ## Integration status update

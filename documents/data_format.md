@@ -79,7 +79,7 @@ The title uses the shared unique JSON base. Export relies on the Qt GUI and desk
 
 JSON and PPT save paths attempt a copy only when `Z:\` exists. They then read the live backup-path UI value, create it if non-empty, and copy with metadata using `shutil.copy2`. Missing drive/path and copy exceptions are logged without deleting the local artifact.
 
-The configured backup path and the hard-coded `Z:\` availability gate must be reviewed together before lab use. Local JSON is the primary recovery artifact until copy success is confirmed.
+The configured backup path and the hard-coded `Z:\` availability gate must be reviewed together before lab use. Local JSON is the primary recovery artifact until copy success is confirmed. The retained gate and required future migration are tracked in [known_issues.md](known_issues.md).
 
 ## Compatibility policy
 
@@ -105,4 +105,4 @@ Historical compatibility is a deliberate decision, not an automatic requirement;
 - backup unavailable, empty path, copy success, and copy failure using temporary/mocked paths;
 - representative downstream loader and legacy files named in the migration decision.
 
-Never write test artifacts into a laboratory data or backup folder. PPT/COM manual verification is not hardware operation but can alter a real log file; use a disposable presentation.
+Never write test artifacts into a laboratory data or backup folder. PPT/COM manual verification is not hardware operation but can alter a real log file; use a disposable presentation. Current integration-evidence limits are tracked in [known_issues.md](known_issues.md).

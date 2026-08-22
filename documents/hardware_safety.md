@@ -81,7 +81,12 @@ The user reviews and executes this checklist. The agent records the result only 
 
 ## Post-restructure user bench plan
 
-The checked-in real-device profile templates keep every device disabled. The registry recognizes the startup-only Phase 1 NI/VISA/Thorlabs drivers documented in [DEVICE_REGISTRATION_PHASE1_REVIEW.md](DEVICE_REGISTRATION_PHASE1_REVIEW.md) and the Phase 2 Four9, Montana2, OptiCool, and TLPM drivers documented in [DEVICE_REGISTRATION_PHASE2_REVIEW.md](DEVICE_REGISTRATION_PHASE2_REVIEW.md), but their presence is not hardware approval. The user adapts and executes the instrument-specific checklist above with exactly one real device enabled in an ignored local profile and `connect_on_start=false` for first commissioning.
+The checked-in real-device profile templates keep every device disabled. The
+registry recognizes the startup-only real drivers listed in
+[device_status.md](device_status.md), but their presence is not hardware
+approval. The user adapts and executes the instrument-specific checklist above
+with exactly one real device enabled in an ignored local profile and
+`connect_on_start=false` for first commissioning.
 
 Record the exact deployed Git commit, selected profile and profile hash, maintained Python environment/interpreter, vendor SDK/runtime version, device model/firmware/interface, approved limits, and initial physical state. If that driver is separately approved for runtime mutation, test idle disconnect/removal and verify that removal is refused during a safe controlled dependent scan. Otherwise record those two mutation checks as pending or not applicable; never enable runtime mutation merely to exercise the checklist.
 

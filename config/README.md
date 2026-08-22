@@ -97,8 +97,8 @@ The tracked `profiles/phase1_lab.json` intentionally keeps every
 `connect_on_start` value false. Copy it to an ignored local profile before
 inserting real identifiers or enabling reviewed connection requests.
 
-See `documents/DEVICE_REGISTRATION_PHASE1_REVIEW.md` and the target device
-README before enabling a driver.
+See `documents/device_status.md`, `documents/hardware_safety.md`, and the target
+device README before enabling a driver.
 
 ## Phase 2 registered driver fields
 
@@ -121,5 +121,5 @@ tracked `profiles/phase2_lab.json` keeps all entries disabled and all startup
 flags false. Copy it to an ignored local profile for commissioning.
 
 `autofocus_xz`, `auto_focus`, `auto_position`, and `anc300` remain deliberately
-unregistered. See `documents/DEVICE_REGISTRATION_PHASE2_REVIEW.md` for the
-accepted limitations and future work; registration is not hardware approval.
+unregistered. See `documents/device_status.md` for the current blockers and
+future work; registration is not hardware approval.

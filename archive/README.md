@@ -2,6 +2,15 @@
 
 This directory contains material retained for project history and recovery. It is not the source of truth for current ZMeter behavior.
 
+## 2026-08-21 reconstruction consolidation
+
+Completed reconstruction manuals, implementation plans, registration reviews,
+and investigation records are indexed in
+[archive/reconstruction-2026-08-21/README.md](reconstruction-2026-08-21/README.md).
+They were removed from the active `documents/` surface after their current
+outcomes, readiness state, known issues, and durable decisions were consolidated
+into canonical documentation.
+
 ## 2026-08-13 documentation snapshot
 
 All documentation that existed before the new agent-instruction system was moved to:
@@ -32,4 +41,6 @@ The snapshot preserves every file's former repository-relative path:
 
 These files include useful design history, device notes, known-risk observations, and the workflow tutorial used to begin the documentation rebuild. They also contain stale, contradictory, lab-specific, or unverified statements. Consult them only as historical evidence and confirm all behavior in current code and tests.
 
-The only active documentation introduced in this first rebuild step is the repository-root `AGENTS.md`. New architecture, testing, environment, data-format, hardware-safety, and device documents will be created deliberately in later steps.
+At the time of this snapshot, the only active documentation introduced by that
+first rebuild step was the repository-root `AGENTS.md`. Later canonical
+documentation is indexed by `documents/README.md`.

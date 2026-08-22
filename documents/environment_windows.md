@@ -22,7 +22,7 @@ conda activate zmeter_May2026
 
 ## One-click release environments
 
-Download the standalone installer repository linked from the root README, double-click `deploy_zmeter.py`, and choose **Set up Python environment** to create or update the environment belonging to a published release. The tool locates Conda even when it is not on `PATH`, verifies the release ZIP, manifest, tagged commit, and YAML hash, and derives an isolated name such as `zmeter-v1.0` or `zmeter-v1.0-beta.3`.
+Download the standalone installer repository linked from the root README and [release_deployment.md](release_deployment.md), double-click `deploy_zmeter.py`, and choose **Set up Python environment** to create or update the environment belonging to a published release. The tool locates Conda even when it is not on `PATH`, verifies the release ZIP, manifest, tagged commit, and YAML hash, and derives an isolated name such as `zmeter-v1.0` or `zmeter-v1.0-beta.3`.
 
 After the exact `Y` confirmation, new environments use `conda env create --name <name> --file <yaml>`. Existing environments use `conda env update --name <name> --file <yaml> --prune`. Conda output and prompts remain visible in the popup terminal. The exported YAML's `name:` or `prefix:` does not select the destination because `--name` is always explicit.
 
@@ -79,6 +79,9 @@ PPT export uses Qt screen captures and Windows COM. Confirm:
 - `pywin32` imports in the active environment;
 - the target path is writable and no modal PowerPoint dialog is blocking automation;
 - UI execution is available—offscreen/headless validation does not prove COM or screen capture behavior.
+
+Current PowerPoint/COM validation status is recorded in
+[known_issues.md](known_issues.md).
 
 JSON saving is separate. If PPT export fails, preserve and verify the JSON result rather than assuming both failed or succeeded.
 

@@ -75,7 +75,7 @@ ignored local profile entry based on `config/profiles/phase2_lab.json`:
 
 The profile endpoint is copied into the existing panel without opening a
 socket. A startup connection uses the same asynchronous logic job as the
-Connect button, so the Startup Log reports pending and the panel owns the final
+Connect button, so the System Log reports pending and the panel owns the final
 result and manual retry. Runtime add, manager disconnect, and removal remain
 disabled pending a separate busy/lifecycle bench review.
 

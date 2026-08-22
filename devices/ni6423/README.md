@@ -4,7 +4,12 @@
 
 `ni6423` is the newer NI-DAQmx integration for a four-output, 32-input NI USB-6423 configuration with gated counter measurement and optional pulse generation. The package separates widget, logic, and hardware and dynamically creates its scan-facing channel methods. It depends on real NI-DAQmx resources and has no hardware-independent simulator in this directory.
 
-It is registered under driver ID `ni6423` with required connection field `device_name`. The registration is startup-only, rejects `connect_on_start=true`, and leaves connection to the existing device panel. Use an ignored local profile and enter the same NI MAX device name in the panel. Runtime mutation remains disabled.
+It is registered under driver ID `ni6423` with required connection field
+`device_name`. The registration is startup-only. For first commissioning keep
+`connect_on_start=false` and confirm the same NI MAX device name in the existing
+panel; a later reviewed `connect_on_start=true` run uses the same synchronous
+public connection path and records failure without preventing the Main Window
+from opening. Runtime mutation remains disabled.
 
 ## Scan channels
 

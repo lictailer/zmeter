@@ -1,5 +1,9 @@
 # ZMeter Deployment CLI Implementation Plan
 
+> **Archived 2026-08-21 — Implemented externally and superseded.** The
+> maintained installer is `https://github.com/lictailer/zmeter-deploy`; the
+> current ZMeter-side contract is `documents/release_deployment.md`.
+
 ## Document status
 
 - **Status:** Phase 2 implementation active; disposable user deployment and Conda smoke tests remain user-executed.

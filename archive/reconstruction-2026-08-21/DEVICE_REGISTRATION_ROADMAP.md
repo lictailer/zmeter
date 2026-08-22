@@ -1,5 +1,9 @@
 # Device Registration Roadmap
 
+> **Archived 2026-08-21 — Completed and superseded.** The two registration
+> phases were implemented. Current readiness, limitations, and next work are
+> maintained in `documents/device_status.md` and `documents/known_issues.md`.
+
 ## Implementation status
 
 Phase 1 was implemented on 2026-08-19. The default profile remains mock-only;

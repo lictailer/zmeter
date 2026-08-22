@@ -43,21 +43,25 @@ The checked-in `config/profiles/mock.json` profile instantiates two disconnected
 | `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
-| `documents/` | Canonical repository-wide technical documentation and decisions |
+| `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |
 | `scan_range_limits.json` | Default global scan-output limit configuration |
 | `zmeter_May2026_environment.yml` | Maintained Windows Conda environment |
 | `archive/` | Retired documentation/code evidence; not current authority |
 
-The standalone deployment installer is maintained in a separate repository. Its publication URL placeholder and user instructions are in the root `README.md`; ZMeter retains only its release-packaging workflow and deployment contract.
+The standalone deployment installer is maintained in
+`https://github.com/lictailer/zmeter-deploy`. ZMeter retains its release-
+packaging workflow and the maintained contract in
+`documents/release_deployment.md`.
 
 ## Device integration inventory
 
-Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the target package, dependencies, lifecycle, tests, and device-local documentation before enabling it. The maintained former `sr830_v2` source has replaced the legacy SR830 at the sole canonical `devices/sr830/` path. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
+Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the current matrix in `documents/device_status.md` and the target package documentation before enabling it. The maintained replacement is the sole canonical `devices/sr830/` implementation. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
 
 The Phase 2 startup-only registry entries are `four9`, `montana2`, `opticool`,
 and `tlpm`. They are lazy and disabled in tracked profiles; their device-local
-READMEs and Phase 2 review record environment-specific accepted limitations.
+READMEs and `documents/device_status.md` record environment-specific accepted
+limitations.
 
 Maintained VISA packages (`pem100`, `sp150`, `hp34401a`, `keithley24xx`,
 `sr830`, and `sr860`) use `VisaRuntime`. K10CR1 and BBD30X use one injected `KinesisRuntime` and the same local

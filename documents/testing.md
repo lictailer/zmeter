@@ -140,6 +140,27 @@ boundary while checking OptiCool lazy-load retry and TLPM first-resource,
 failure, stop, join, and disconnect behavior. Run both with the existing Four9
 fake suite; none of these selectors opens a laboratory connection or DLL.
 
+## Documentation-only validation
+
+For documentation consolidation or path changes:
+
+- check every non-archive relative Markdown link and the active archive indexes;
+- search active documents for retired filenames, stale package paths, superseded
+  UI terms, and outdated readiness claims;
+- compare `documents/device_status.md` with lazy registry metadata and tracked
+  profiles without constructing a device or importing a vendor package;
+- parse affected JSON examples and confirm tracked real-device templates remain
+  disabled unless a separate behavior change was approved;
+- run the focused configuration/registry suites when registration or startup
+  claims are edited; and
+- run `git diff --check`, inspect the complete changed-file list, and confirm no
+  generated artifacts, local profiles, code, schema, or lab data entered the
+  documentation change.
+
+Archived implementation evidence is not required to retain working relative
+links to its former location. Its archive index and all current replacement
+links must remain valid.
+
 ## User-executed hardware tests
 
 When hardware evidence is required, provide:
