@@ -96,12 +96,28 @@ jobs:
               throw "Unable to determine the tagged commit."
           }
 
-          $environmentFile = "zmeter_May2026_environment.yml"
-          $environmentPath = Join-Path $PWD $environmentFile
+          $environmentFiles = @(
+              Get-ChildItem `
+                  -LiteralPath $PWD `
+                  -File `
+                  -Filter "*environment.yml"
+          )
 
-          if (-not (Test-Path -LiteralPath $environmentPath)) {
-              throw "Environment file not found: $environmentFile"
+          if ($environmentFiles.Count -eq 0) {
+              throw "No environment file matching '*environment.yml' was found in the repository root."
           }
+
+          if ($environmentFiles.Count -gt 1) {
+              $matchingFiles = (
+                  $environmentFiles.Name |
+                      Sort-Object
+              ) -join ", "
+
+              throw "Multiple environment files matching '*environment.yml' were found in the repository root: $matchingFiles"
+          }
+
+          $environmentFile = $environmentFiles[0].Name
+          $environmentPath = $environmentFiles[0].FullName
 
           $environmentHash = (
               Get-FileHash `
