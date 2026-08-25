@@ -32,7 +32,7 @@ Run ZMeter and validation from the repository root because several Qt Designer f
 
 ## Python packages versus system software
 
-The YAML supplies core Python dependencies such as PyQt6, NumPy, SciPy, PyVISA, NI-DAQmx Python bindings, PyDAQmx, PyQtGraph, `python-pptx`, Pillow, `pywin32`, serial, SSH, and scientific utilities. A Python package does not install or validate the corresponding instrument driver.
+The YAML supplies core Python dependencies such as PyQt6, NumPy, SciPy, PyVISA, NI-DAQmx Python bindings, PyDAQmx, PyQtGraph, `openpyxl`, `python-pptx`, Pillow, `pywin32`, serial, SSH, and scientific utilities. A Python package does not install or validate the corresponding instrument driver.
 
 System-installed components are lab/device specific:
 
@@ -43,23 +43,21 @@ System-installed components are lab/device specific:
 | Vendor SDK/runtime/DLL | Thorlabs, cryostat, motion, and other vendor modules | Confirm supported model, bitness, DLL search path, and redistribution terms |
 | Desktop Microsoft PowerPoint | PPT export | ZMeter uses Windows COM through `win32com`; web-only PowerPoint is insufficient |
 
-Install only the components required by the selected lab profile. Device-local README files must record their exact optional dependencies.
+Install only the components required by the selected workbook configuration. Device-local README files must record their exact optional dependencies.
 
-## Mock-only setup
+## Launch configuration
 
-No instrument driver is required for the checked-in mock profile. Verify `config/profiles/mock.json` enables only the two `mock_device` entries with startup connection disabled, then run:
+Review the root `device_config.xlsx` workbook, including every `enabled` and `connect_on_start` value, then run:
 
 ```powershell
 python start_zmeter.py
 ```
 
-The mock device is an in-process simulator and does not use PyVISA or discover physical resources. Save test output only to a disposable local directory.
-
 ## Configuration and paths
 
-The default startup profile is `config/profiles/mock.json`. Select an ignored reviewed local profile with `python start_zmeter.py --profile config/profiles/name.local.json`. Relative profile filenames and configured output paths resolve from the repository root. An invalid selected profile fails without falling back to the mock profile.
+The default startup configuration is the root `device_config.xlsx`. Select another reviewed Excel workbook with `python start_zmeter.py --profile name.xlsx`. Relative workbook filenames resolve from the repository root. An invalid selected workbook fails without falling back to the default.
 
-Profiles control registered device labels, declared connection values, startup-connection policy, optional channel filters, local save path, and backup root. A code-reviewed registry entry controls actual construction, runtime injection, and lifecycle adaptation; disabled entries are never constructed. Real addresses, serial numbers, NI names, credentials, and lab paths must remain in ignored local profiles and must not be generalized into core code or canonical docs.
+The workbook controls registered device labels, one text address per device, startup-connection policy, and optional channel filters. A code-reviewed registry entry controls actual construction, runtime injection, and lifecycle adaptation; disabled entries are never constructed. Initial data and PPT paths are `<repository>/data` and `<repository>/data/log.pptx`, with backup initially blank; the Main Window fields remain editable for the current session.
 
 `scan_range_limits.json` is loaded from the repository root by default. Core UI files retain their repository/current-working-directory lookup, while device-package UI files resolve relative to their Python modules under `devices/`. The environment YAML contains a machine-specific exported `prefix`; Conda normally creates the named environment from `name`, and maintainers should review/remove hardcoded export prefixes when regenerating the file.
 

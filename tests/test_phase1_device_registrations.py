@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from core.device_management.config import ProfileValidationError, load_profile
 from core.device_management.models import ChannelFilters, DeviceConfig
 from core.device_management.registry import DriverAdapter, build_default_registry
 
@@ -65,21 +62,17 @@ FACTORIES = {
 }
 
 CONNECTIONS = {
-    "ni6423": {"device_name": "Dev1"},
-    "nidaq": {"device_name": "Dev1"},
-    "pem100": {"address": "TEST::PEM", "timeout_ms": 1},
-    "sp150": {
-        "address": "TEST::SP150",
-        "timeout_ms": 1,
-        "query_delay_s": 0,
-    },
+    "ni6423": {"address": "Dev1"},
+    "nidaq": {"address": "Dev1"},
+    "pem100": {"address": "TEST::PEM"},
+    "sp150": {"address": "TEST::SP150"},
     "hp34401a": {"address": "TEST::HP"},
     "keithley24xx": {"address": "TEST::K24XX"},
     "sr860": {"address": "TEST::SR860"},
     "sr830": {"address": "TEST::SR830"},
     "demo_device": {"address": "DUMMY::INSTR"},
-    "bbd30x": {"serial": "TEST_BBD30X"},
-    "k10cr1": {"serial": "TEST_K10CR1"},
+    "bbd30x": {"address": "TEST_BBD30X"},
+    "k10cr1": {"address": "TEST_K10CR1"},
 }
 
 
@@ -152,72 +145,13 @@ print("phase1 registry remained lazy")
                 )
                 self.assertEqual(received, [expected_kwargs])
 
-    def test_all_phase1_schemas_validate_while_disabled(self):
+    def test_all_phase1_schemas_use_one_optional_address(self):
         registry = build_default_registry()
-        payload = {
-            "schema_version": 1,
-            "profile": "phase1_schema",
-            "paths": {"save": "./data", "backup": None},
-            "devices": [
-                {
-                    "id": f"{driver_id}_1",
-                    "driver": driver_id,
-                    "enabled": False,
-                    "connect_on_start": False,
-                    "connection": connection,
-                    "scan_channels": {"set": None, "get": None},
-                }
-                for driver_id, connection in CONNECTIONS.items()
-            ],
-        }
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            profile_path = root / "phase1.json"
-            profile_path.write_text(json.dumps(payload), encoding="utf-8")
-            profile = load_profile(
-                profile_path,
-                driver_specs=registry.config_specs,
-                repository_root=root,
-            )
-
-        self.assertEqual(
-            tuple(device.driver for device in profile.devices), tuple(CONNECTIONS)
-        )
-        self.assertTrue(all(not device.enabled for device in profile.devices))
-
-    def test_ni_drivers_require_device_name_not_address(self):
-        registry = build_default_registry()
-        payload = {
-            "schema_version": 1,
-            "profile": "bad_ni",
-            "paths": {"save": "./data", "backup": None},
-            "devices": [
-                {
-                    "id": "ni_1",
-                    "driver": "ni6423",
-                    "enabled": True,
-                    "connect_on_start": False,
-                    "connection": {"address": "Dev1"},
-                    "scan_channels": {"set": None, "get": None},
-                }
-            ],
-        }
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            profile_path = root / "bad.json"
-            profile_path.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaises(ProfileValidationError) as raised:
-                load_profile(
-                    profile_path,
-                    driver_specs=registry.config_specs,
-                    repository_root=root,
-                )
-
-        message = str(raised.exception)
-        self.assertIn("unsupported field 'address'", message)
-        self.assertIn("connection.device_name is required", message)
+        for driver_id in CONNECTIONS:
+            with self.subTest(driver_id=driver_id):
+                fields = registry.config_specs[driver_id].connection_fields
+                self.assertEqual(tuple(fields), ("address",))
+                self.assertFalse(fields["address"].required)
 
     def test_all_registered_drivers_support_profile_startup_requests(self):
         registry = build_default_registry()
@@ -250,12 +184,12 @@ print("phase1 registry remained lazy")
             driver="pem100",
             enabled=True,
             connect_on_start=True,
-            connection={"address": "TEST::PEM", "timeout_ms": 1234},
+            connection={"address": "TEST::PEM"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
         adapter = DriverAdapter(registry.registration("pem100"), config, pem)
         self.assertIs(adapter.connect(), True)
-        pem.connect.assert_called_once_with("TEST::PEM", timeout_ms=1234)
+        pem.connect.assert_called_once_with("TEST::PEM")
 
         sp = SimpleNamespace(
             logic=SimpleNamespace(connected=True),
@@ -266,18 +200,12 @@ print("phase1 registry remained lazy")
             driver="sp150",
             enabled=True,
             connect_on_start=True,
-            connection={
-                "address": "TEST::SP150",
-                "timeout_ms": 2345,
-                "query_delay_s": 0,
-            },
+            connection={"address": "TEST::SP150"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
         adapter = DriverAdapter(registry.registration("sp150"), config, sp)
         self.assertIs(adapter.connect(), True)
-        sp.connect.assert_called_once_with(
-            "TEST::SP150", timeout_ms=2345, query_delay_s=0.0
-        )
+        sp.connect.assert_called_once_with("TEST::SP150")
 
     def test_startup_callbacks_map_exact_public_connection_arguments(self):
         registry = build_default_registry()
@@ -293,7 +221,7 @@ print("phase1 registry remained lazy")
                     driver=driver_id,
                     enabled=True,
                     connect_on_start=True,
-                    connection={"device_name": "Dev42"},
+                    connection={"address": "Dev42"},
                     scan_channels=ChannelFilters(setters=None, getters=None),
                 )
                 adapter = DriverAdapter(
@@ -353,7 +281,7 @@ print("phase1 registry remained lazy")
             driver="bbd30x",
             enabled=True,
             connect_on_start=True,
-            connection={"serial": "BBD123"},
+            connection={"address": "BBD123"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
         bbd_adapter = DriverAdapter(
@@ -373,7 +301,7 @@ print("phase1 registry remained lazy")
             driver="k10cr1",
             enabled=True,
             connect_on_start=True,
-            connection={"serial": "K10123"},
+            connection={"address": "K10123"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
         k10_adapter = DriverAdapter(
@@ -385,18 +313,18 @@ print("phase1 registry remained lazy")
     def test_profile_identifiers_prefill_manual_connection_panels(self):
         registry = build_default_registry()
         text_cases = (
-            ("ni6423", "dev_name_lineEdit", "device_name", "Dev1"),
-            ("nidaq", "dev_name_lineEdit", "device_name", "Dev2"),
-            ("bbd30x", "serial_lineEdit", "serial", "BBD123"),
-            ("k10cr1", "lineEdit", "serial", "K10123"),
+            ("ni6423", "dev_name_lineEdit", "Dev1"),
+            ("nidaq", "dev_name_lineEdit", "Dev2"),
+            ("bbd30x", "serial_lineEdit", "00000000"),
+            ("k10cr1", "lineEdit", "K10123"),
         )
 
-        for driver_id, widget_name, field, value in text_cases:
+        for driver_id, widget_name, value in text_cases:
             with self.subTest(driver_id=driver_id):
                 control = SimpleNamespace(setText=mock.Mock())
                 instance = SimpleNamespace(**{widget_name: control})
                 registry.registration(driver_id).configure_instance(
-                    instance, {field: value}
+                    instance, {"address": value}
                 )
                 control.setText.assert_called_once_with(value)
 

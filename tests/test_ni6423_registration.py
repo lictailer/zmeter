@@ -58,7 +58,7 @@ class NI6423RegistrationTests(unittest.TestCase):
             driver="ni6423",
             enabled=True,
             connect_on_start=False,
-            connection={"device_name": "DevTest"},
+            connection={"address": "DevTest"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
 

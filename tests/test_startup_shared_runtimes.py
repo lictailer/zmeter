@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -13,13 +12,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
+import start_zmeter
 from core.shared_runtime import RuntimeServices
 from start_zmeter import (
     REPOSITORY_ROOT,
     create_profile_session,
 )
-
-MOCK_PROFILE_PATH = REPOSITORY_ROOT / "config" / "profiles" / "mock.json"
+from tests.excel_config_fixture import write_test_device_config
 
 
 class StartupSharedRuntimeTests(unittest.TestCase):
@@ -27,15 +26,20 @@ class StartupSharedRuntimeTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
-    def test_checked_in_mock_profile_constructs_no_vendor_runtime(self):
+    def test_temporary_mock_workbook_constructs_no_vendor_runtime(self):
+        config_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(config_directory.cleanup)
+        config_path = write_test_device_config(
+            Path(config_directory.name) / "mock.xlsx"
+        )
         services = RuntimeServices()
         self.addCleanup(services.shutdown)
-        profile, manager = create_profile_session(services, MOCK_PROFILE_PATH)
+        profile, manager = create_profile_session(services, config_path)
         self.addCleanup(manager.teardown_all)
         snapshot = manager.snapshot()
 
         self.assertEqual(profile.profile, "mock")
-        self.assertEqual(profile.source_path, MOCK_PROFILE_PATH)
+        self.assertEqual(profile.source_path, config_path.resolve())
         self.assertEqual(profile.paths.save, REPOSITORY_ROOT / "data")
         self.assertIsNone(profile.paths.backup)
         self.assertEqual(
@@ -88,7 +92,7 @@ print("launcher import remained device/vendor free")
         self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
         self.assertIn("device/vendor free", result.stdout)
 
-    def test_qt_options_are_consumed_before_strict_profile_parsing(self):
+    def test_qt_options_are_consumed_before_strict_workbook_parsing(self):
         script = r"""
 from pathlib import Path
 from PyQt6 import QtWidgets
@@ -96,10 +100,10 @@ from start_zmeter import _parse_launch_options
 
 app = QtWidgets.QApplication([
     "zmeter", "-platform", "offscreen",
-    "--profile", "config/profiles/session.local.json",
+    "--profile", "session.xlsx",
 ])
 options = _parse_launch_options(app.arguments()[1:])
-assert options.profile == Path("config/profiles/session.local.json")
+assert options.profile == Path("session.xlsx")
 print("Qt options and strict launcher options separated")
 """
         result = subprocess.run(
@@ -114,47 +118,54 @@ print("Qt options and strict launcher options separated")
         self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
         self.assertIn("strict launcher options separated", result.stdout)
 
-    def test_relative_profile_path_is_resolved_from_repository_not_current_directory(self):
+    def test_relative_workbook_path_is_resolved_from_repository_not_current_directory(self):
         services = RuntimeServices()
         self.addCleanup(services.shutdown)
         original_directory = Path.cwd()
 
-        with tempfile.TemporaryDirectory() as directory:
+        with (
+            tempfile.TemporaryDirectory() as repository,
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            repository_root = Path(repository)
+            workbook_path = write_test_device_config(
+                repository_root / "mock.xlsx"
+            )
             try:
                 os.chdir(directory)
-                profile, manager = create_profile_session(
-                    services,
-                    Path("config/profiles/mock.json"),
-                )
+                with mock.patch.object(
+                    start_zmeter,
+                    "REPOSITORY_ROOT",
+                    repository_root,
+                ):
+                    profile, manager = create_profile_session(
+                        services,
+                        Path("mock.xlsx"),
+                    )
             finally:
                 os.chdir(original_directory)
 
-        self.addCleanup(manager.teardown_all)
-        self.assertEqual(profile.source_path, MOCK_PROFILE_PATH)
-        self.assertEqual(profile.paths.save, REPOSITORY_ROOT / "data")
+            manager.teardown_all()
+            self.assertEqual(profile.source_path, workbook_path.resolve())
+            self.assertEqual(profile.paths.save, repository_root / "data")
 
-    def test_disabled_profile_entry_never_calls_its_registered_factory(self):
-        payload = {
-            "schema_version": 1,
-            "profile": "disabled_mock",
-            "paths": {"save": "./data", "backup": None},
-            "devices": [
-                {
-                    "id": "disabled_mock",
-                    "driver": "mock_device",
-                    "enabled": False,
-                    "connect_on_start": False,
-                    "connection": {"address": "MOCK::INSTR"},
-                    "scan_channels": {"set": None, "get": None},
-                }
-            ],
-        }
+    def test_disabled_workbook_entry_never_calls_its_registered_factory(self):
         services = RuntimeServices()
         self.addCleanup(services.shutdown)
 
         with tempfile.TemporaryDirectory() as directory:
-            profile_path = Path(directory) / "disabled.json"
-            profile_path.write_text(json.dumps(payload), encoding="utf-8")
+            profile_path = write_test_device_config(
+                Path(directory) / "disabled.xlsx",
+                rows=(
+                    {
+                        "id": "disabled_mock",
+                        "driver": "mock_device",
+                        "enabled": False,
+                        "connect_on_start": False,
+                        "address": "MOCK::INSTR",
+                    },
+                ),
+            )
             with mock.patch(
                 "core.device_management.registry._create_mock_device",
                 side_effect=AssertionError("disabled factory must stay lazy"),

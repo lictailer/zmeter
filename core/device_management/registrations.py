@@ -32,33 +32,16 @@ def _widget_factory(
     return create
 
 
-def _required_text() -> ConnectionFieldSpec:
-    return ConnectionFieldSpec((str,), required=True)
+def _address_spec() -> ConnectionFieldSpec:
+    """Return the common, intentionally optional Excel address contract."""
+
+    return ConnectionFieldSpec((str,))
 
 
-def _positive_integer(value: object, field_name: str) -> int:
-    if type(value) is not int or value <= 0:
-        raise ValueError(f"{field_name} must be a positive integer")
-    return value
+def _connection_address(connection: Mapping[str, object]) -> str:
+    """Return the address exactly as configured, including an empty string."""
 
-
-def _nonnegative_number(value: object, field_name: str) -> float:
-    if type(value) not in (int, float) or value < 0:
-        raise ValueError(f"{field_name} must be a nonnegative number")
-    return float(value)
-
-
-def _positive_number(value: object, field_name: str) -> float:
-    if type(value) not in (int, float) or value <= 0:
-        raise ValueError(f"{field_name} must be a positive number")
-    return float(value)
-
-
-def _required_connection_text(connection: Mapping[str, object], field: str) -> str:
-    value = str(connection[field]).strip()
-    if not value:
-        raise ValueError(f"connection field '{field}' must not be empty")
-    return value
+    return str(connection.get("address", ""))
 
 
 def _call(instance, method_name: str):
@@ -69,15 +52,13 @@ def _call_logic(instance, method_name: str):
     return getattr(instance.logic, method_name)()
 
 
-def _prefill_text(instance, widget_name: str, connection, field: str) -> None:
-    getattr(instance, widget_name).setText(
-        _required_connection_text(connection, field)
-    )
+def _prefill_text(instance, widget_name: str, connection) -> None:
+    getattr(instance, widget_name).setText(_connection_address(connection))
 
 
-def _prefill_combo(instance, widget_name: str, connection, field: str) -> None:
+def _prefill_combo(instance, widget_name: str, connection) -> None:
     combo_box = getattr(instance, widget_name)
-    value = _required_connection_text(connection, field)
+    value = _connection_address(connection)
     if combo_box.findText(value) < 0:
         combo_box.addItem(value)
     combo_box.setCurrentText(value)
@@ -108,7 +89,7 @@ def _ni6423_connected(instance) -> bool:
 
 
 def _ni_startup_connect(instance, connection, _timeout_ms: int) -> bool:
-    instance.connect(_required_connection_text(connection, "device_name"))
+    instance.connect(_connection_address(connection))
     return _logic_flag(instance, "is_initialized")
 
 
@@ -116,11 +97,11 @@ def ni6423_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="ni6423",
-            connection_fields={"device_name": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory("devices.ni6423.ni6423_main", "NI6423"),
         configure_instance=lambda instance, connection: _prefill_text(
-            instance, "dev_name_lineEdit", connection, "device_name"
+            instance, "dev_name_lineEdit", connection
         ),
         startup_connect=_ni_startup_connect,
         disconnect=lambda instance: _call_logic(instance, "close"),
@@ -135,11 +116,11 @@ def nidaq_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="nidaq",
-            connection_fields={"device_name": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory("devices.nidaq.nidaq_main", "NIDAQ"),
         configure_instance=lambda instance, connection: _prefill_text(
-            instance, "dev_name_lineEdit", connection, "device_name"
+            instance, "dev_name_lineEdit", connection
         ),
         startup_connect=_ni_startup_connect,
         disconnect=lambda instance: _call_logic(instance, "close"),
@@ -148,22 +129,15 @@ def nidaq_registration() -> DriverRegistration:
     )
 
 
-def _pem100_connect(instance, connection, timeout_ms: int) -> bool:
-    address = _required_connection_text(connection, "address")
-    configured_timeout = _positive_integer(
-        connection.get("timeout_ms", timeout_ms), "timeout_ms"
-    )
-    return instance.connect(address, timeout_ms=configured_timeout) is True
+def _pem100_connect(instance, connection, _timeout_ms: int) -> bool:
+    return instance.connect(_connection_address(connection)) is True
 
 
 def pem100_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="pem100",
-            connection_fields={
-                "address": _required_text(),
-                "timeout_ms": ConnectionFieldSpec((int,)),
-            },
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.pem100.pem100_main",
@@ -174,7 +148,6 @@ def pem100_registration() -> DriverRegistration:
         runtime_services=("visa",),
         connect=_pem100_connect,
         startup_connect=_pem100_connect,
-        connect_timeout_ms=20_000,
         disconnect=lambda instance: _call(instance, "disconnect"),
         start_scan=lambda instance: _call(instance, "start_scan"),
         stop_scan=lambda instance: _call(instance, "stop_scan"),
@@ -186,33 +159,15 @@ def pem100_registration() -> DriverRegistration:
     )
 
 
-def _sp150_connect(instance, connection, timeout_ms: int) -> bool:
-    address = _required_connection_text(connection, "address")
-    configured_timeout = _positive_integer(
-        connection.get("timeout_ms", timeout_ms), "timeout_ms"
-    )
-    query_delay_s = _nonnegative_number(
-        connection.get("query_delay_s", 1.0), "query_delay_s"
-    )
-    return (
-        instance.connect(
-            address,
-            timeout_ms=configured_timeout,
-            query_delay_s=query_delay_s,
-        )
-        is True
-    )
+def _sp150_connect(instance, connection, _timeout_ms: int) -> bool:
+    return instance.connect(_connection_address(connection)) is True
 
 
 def sp150_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="sp150",
-            connection_fields={
-                "address": _required_text(),
-                "timeout_ms": ConnectionFieldSpec((int,)),
-                "query_delay_s": ConnectionFieldSpec((int, float)),
-            },
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.sp150.sp150_main",
@@ -223,7 +178,6 @@ def sp150_registration() -> DriverRegistration:
         runtime_services=("visa",),
         connect=_sp150_connect,
         startup_connect=_sp150_connect,
-        connect_timeout_ms=10_000,
         disconnect=lambda instance: _call(instance, "disconnect"),
         start_scan=lambda instance: _call(instance, "start_scan"),
         stop_scan=lambda instance: _call(instance, "stop_scan"),
@@ -236,7 +190,7 @@ def sp150_registration() -> DriverRegistration:
 
 
 def _visa_logic_connect(instance, connection, _timeout_ms: int) -> bool:
-    address = _required_connection_text(connection, "address")
+    address = _connection_address(connection)
     result = instance.logic.connect_visa(address)
     if result is False:
         return False
@@ -249,7 +203,7 @@ def hp34401a_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="hp34401a",
-            connection_fields={"address": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.hp34401a.hp34401a_main",
@@ -259,7 +213,7 @@ def hp34401a_registration() -> DriverRegistration:
         ),
         runtime_services=("visa",),
         configure_instance=lambda instance, connection: _prefill_combo(
-            instance, "address_comboBox", connection, "address"
+            instance, "address_comboBox", connection
         ),
         connect=_visa_logic_connect,
         startup_connect=_visa_logic_connect,
@@ -279,14 +233,14 @@ def _terminate_keithley24xx(instance):
 
 
 def _keithley_startup_connect(instance, connection, _timeout_ms: int) -> None:
-    instance.connect_visa(_required_connection_text(connection, "address"))
+    instance.connect_visa(_connection_address(connection))
 
 
 def keithley24xx_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="keithley24xx",
-            connection_fields={"address": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.keithley24xx.keithley24xx_main",
@@ -296,7 +250,7 @@ def keithley24xx_registration() -> DriverRegistration:
         ),
         runtime_services=("visa",),
         configure_instance=lambda instance, connection: _prefill_combo(
-            instance, "address_cb", connection, "address"
+            instance, "address_cb", connection
         ),
         startup_connect=_keithley_startup_connect,
         disconnect=_terminate_keithley24xx,
@@ -310,7 +264,7 @@ def sr860_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="sr860",
-            connection_fields={"address": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.sr860.sr860_main",
@@ -320,7 +274,7 @@ def sr860_registration() -> DriverRegistration:
         ),
         runtime_services=("visa",),
         configure_instance=lambda instance, connection: _prefill_combo(
-            instance, "address_cb", connection, "address"
+            instance, "address_cb", connection
         ),
         connect=_visa_logic_connect,
         startup_connect=_visa_logic_connect,
@@ -334,7 +288,7 @@ def sr830_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="sr830",
-            connection_fields={"address": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.sr830.sr830_main",
@@ -344,7 +298,7 @@ def sr830_registration() -> DriverRegistration:
         ),
         runtime_services=("visa",),
         configure_instance=lambda instance, connection: _prefill_combo(
-            instance, "address_cb", connection, "address"
+            instance, "address_cb", connection
         ),
         connect=_visa_logic_connect,
         startup_connect=_visa_logic_connect,
@@ -358,7 +312,7 @@ def sr830_registration() -> DriverRegistration:
 
 
 def _demo_connect(instance, connection, _timeout_ms: int) -> bool:
-    address = _required_connection_text(connection, "address")
+    address = _connection_address(connection)
     instance.logic.connect_visa(address)
     return bool(instance.logic.connected)
 
@@ -367,13 +321,13 @@ def demo_device_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="demo_device",
-            connection_fields={"address": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         # Deliberately do not inject RuntimeServices.visa: the demo keeps its
         # private DummyResourceManager and must never become a real VISA driver.
         factory=_widget_factory("devices.demoDevice.demoDevice_main", "DemoDevice"),
         configure_instance=lambda instance, connection: _prefill_combo(
-            instance, "address_comboBox", connection, "address"
+            instance, "address_comboBox", connection
         ),
         connect=_demo_connect,
         startup_connect=_demo_connect,
@@ -387,7 +341,7 @@ def bbd30x_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="bbd30x",
-            connection_fields={"serial": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.BBD30X.BBD30X_main",
@@ -397,11 +351,11 @@ def bbd30x_registration() -> DriverRegistration:
         ),
         runtime_services=("kinesis",),
         configure_instance=lambda instance, connection: _prefill_text(
-            instance, "serial_lineEdit", connection, "serial"
+            instance, "serial_lineEdit", connection
         ),
         startup_connect=lambda instance, connection, _timeout_ms: (
             None
-            if instance.connect(_required_connection_text(connection, "serial"))
+            if instance.connect(_connection_address(connection))
             else False
         ),
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
@@ -419,7 +373,7 @@ def k10cr1_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="k10cr1",
-            connection_fields={"serial": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory(
             "devices.k10cr1.k10cr1_main",
@@ -429,10 +383,10 @@ def k10cr1_registration() -> DriverRegistration:
         ),
         runtime_services=("kinesis",),
         configure_instance=lambda instance, connection: _prefill_text(
-            instance, "lineEdit", connection, "serial"
+            instance, "lineEdit", connection
         ),
         startup_connect=lambda instance, connection, _timeout_ms: (
-            instance.connect(_required_connection_text(connection, "serial"))
+            instance.connect(_connection_address(connection))
         ),
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
         force_stop=lambda instance: _call(instance, "force_stop"),
@@ -460,23 +414,22 @@ def phase1_device_registrations() -> tuple[DriverRegistration, ...]:
 
 
 def _configure_four9(instance, connection) -> None:
-    host = _required_connection_text(connection, "host")
-    port = _positive_integer(connection["port"], "port")
-    if port > 65_535:
-        raise ValueError("port must be between 1 and 65535")
-    socket_timeout_s = _positive_number(
-        connection.get("socket_timeout_s", instance.logic.socket_timeout_s),
-        "socket_timeout_s",
-    )
+    address = _connection_address(connection)
+    host = address
+    port = int(instance.logic.port)
+    candidate_host, separator, candidate_port = address.rpartition(":")
+    if separator and candidate_host and candidate_port.isdecimal():
+        parsed_port = int(candidate_port)
+        if 1 <= parsed_port <= 65_535:
+            host = candidate_host
+            port = parsed_port
 
     instance.host_lineEdit.setText(host)
     instance.port_spinBox.setValue(port)
     instance.logic.host = host
     instance.logic.port = port
-    instance.logic.socket_timeout_s = socket_timeout_s
     instance.logic.hardware.host = host
     instance.logic.hardware.port = port
-    instance.logic.hardware.socket_timeout_s = socket_timeout_s
 
 
 def _four9_startup_connect(instance, _connection, _timeout_ms: int) -> None | bool:
@@ -489,11 +442,7 @@ def four9_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="four9",
-            connection_fields={
-                "host": _required_text(),
-                "port": ConnectionFieldSpec((int,), required=True),
-                "socket_timeout_s": ConnectionFieldSpec((int, float)),
-            },
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory("devices.four9.four9_main", "Four9"),
         configure_instance=_configure_four9,
@@ -506,7 +455,7 @@ def four9_registration() -> DriverRegistration:
 
 
 def _configure_montana2(instance, connection) -> None:
-    address = _required_connection_text(connection, "address")
+    address = _connection_address(connection)
     if address != "136.167.55.165":
         instance.quickConnect_comboBox.setCurrentText("Other")
     instance.ipaddress_lineEdit.setText(address)
@@ -524,7 +473,7 @@ def montana2_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="montana2",
-            connection_fields={"address": _required_text()},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory("devices.montana2.montana2_main", "Montana2"),
         configure_instance=_configure_montana2,
@@ -548,7 +497,7 @@ def opticool_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="opticool",
-            connection_fields={},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory("devices.opticool.opticool_main", "OptiCool"),
         startup_connect=_pending_widget_connect,
@@ -569,7 +518,7 @@ def tlpm_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="tlpm",
-            connection_fields={},
+            connection_fields={"address": _address_spec()},
         ),
         factory=_widget_factory("devices.tlpm.tlpm_main", "TLPM"),
         startup_connect=_tlpm_startup_connect,

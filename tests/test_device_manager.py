@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 from dataclasses import FrozenInstanceError
@@ -12,8 +13,9 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
+from openpyxl import Workbook
 
-from core.device_management.config import load_profile
+from core.device_management.config import DEVICE_HEADERS, load_profile
 from core.device_management.manager import (
     DeviceManager,
     DeviceManagerLoadError,
@@ -63,9 +65,26 @@ def make_profile(*devices: DeviceConfig) -> ProfileConfig:
         profile="unit",
         paths=ProfilePaths(save=root / "data", backup=None),
         devices=tuple(devices),
-        source_path=root / "unit-profile.json",
+        source_path=root / "unit-profile.xlsx",
         repository_root=root,
     )
+
+
+def write_mock_profile_workbook(directory: Path) -> Path:
+    path = directory / "mock.xlsx"
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Devices"
+    worksheet.append(list(DEVICE_HEADERS))
+    worksheet.append(
+        ["mock_device_1", "mock_device", True, False, "MOCK::1", None, None, None]
+    )
+    worksheet.append(
+        ["mock_device_2", "mock_device", True, False, "MOCK::2", None, None, None]
+    )
+    workbook.save(path)
+    workbook.close()
+    return path
 
 
 def make_registration(**overrides) -> DriverRegistration:
@@ -598,12 +617,15 @@ class DeviceManagerMockProfileTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        cls.profile_temp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.profile_temp.cleanup)
+        cls.profile_path = write_mock_profile_workbook(Path(cls.profile_temp.name))
 
     def test_checked_mock_profile_loads_two_disconnected_widgets_in_order(self):
         repository_root = Path(__file__).resolve().parents[1]
         registry = build_default_registry()
         profile = load_profile(
-            repository_root / "config" / "profiles" / "mock.json",
+            self.profile_path,
             driver_specs=registry.config_specs,
             repository_root=repository_root,
         )
@@ -636,7 +658,7 @@ class DeviceManagerMockProfileTests(unittest.TestCase):
         repository_root = Path(__file__).resolve().parents[1]
         registry = build_default_registry()
         profile = load_profile(
-            repository_root / "config" / "profiles" / "mock.json",
+            self.profile_path,
             driver_specs=registry.config_specs,
             repository_root=repository_root,
         )

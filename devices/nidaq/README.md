@@ -4,8 +4,8 @@
 
 `nidaq` is the legacy NI data-acquisition integration built on PyDAQmx. It manages two analog outputs, analog inputs, a sample counter, and lower-level clock/counter tasks. Prefer `ni6423` for the currently documented USB-6423 path; retain this module only for configurations that require its older API.
 
-It is separately registered under driver ID `nidaq` with required connection
-field `device_name`. It is not an alias for `ni6423`. The registration is
+It is separately registered under driver ID `nidaq` with one optional text
+`address`, interpreted as the existing NI device name. It is not an alias for `ni6423`. The registration is
 startup-only. For first commissioning keep `connect_on_start=false`; a later
 reviewed `connect_on_start=true` run uses the existing synchronous public
 connection path and records failure without preventing the Main Window from

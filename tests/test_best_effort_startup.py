@@ -60,7 +60,7 @@ def _profile(*devices: DeviceConfig) -> ProfileConfig:
         profile="best_effort",
         paths=ProfilePaths(save=root / "data", backup=None),
         devices=tuple(devices),
-        source_path=root / "best-effort.json",
+        source_path=root / "best-effort.xlsx",
         repository_root=root,
     )
 
@@ -508,7 +508,7 @@ class LauncherStartupWindowTests(unittest.TestCase):
             profile="launcher",
             paths=ProfilePaths(save=root / "data", backup=None),
             devices=(),
-            source_path=root / "launcher.json",
+            source_path=root / "launcher.xlsx",
             repository_root=root,
         )
 
@@ -593,7 +593,7 @@ class LauncherStartupWindowTests(unittest.TestCase):
         self.assertEqual(
             stages,
             [
-                "Loading profile…",
+                "Loading configuration…",
                 "Loading devices…",
                 "Connecting configured devices…",
                 "Loading main window…",

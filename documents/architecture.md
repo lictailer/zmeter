@@ -12,7 +12,7 @@ The checked-in startup path is:
 start_zmeter.py
   -> QApplication
   -> RuntimeServices (lazy VisaRuntime + KinesisRuntime)
-  -> validated profile + reviewed lazy DriverRegistry
+  -> validated Excel configuration + reviewed lazy DriverRegistry
   -> DeviceManager
   -> MainWindow
        -> device discovery and command router
@@ -21,7 +21,7 @@ start_zmeter.py
                  -> ScanLogic
 ```
 
-- `start_zmeter.py` is a thin entry point. It selects a profile path, validates it against the reviewed registry, creates one manager, and supplies profile paths plus the manager snapshot to `MainWindow`. It contains no device imports, addresses, serials, or channel lists. The checked-in default profile instantiates only disconnected mock devices.
+- `start_zmeter.py` is a thin entry point. It selects an Excel workbook, validates it against the reviewed registry, creates one manager, and supplies the fixed initial output paths plus the manager snapshot to `MainWindow`. It contains no device imports, addresses, serials, or channel lists. The checked-in default is the root `device_config.xlsx` workbook.
 - `DeviceManager` is the single owner of enabled device instances and ordered lifecycle records. Profile loading, runtime transaction acknowledgement, and final QWidget close/delete run on its UI-owner thread; slow runtime connect/disconnect/stop/terminate work runs on dedicated lifecycle workers. Startup load is transactional, and final shutdown aggregates failures without releasing shared runtimes under a device that failed to terminate.
 - The startup/profile boundary owns one `RuntimeServices` provider. Enabled
   VISA devices receive `provider.visa`; K10CR1 and BBD30X receive
@@ -34,7 +34,7 @@ start_zmeter.py
   validation, `clr`, DLL loading, and device connections remain explicit.
 - `MainWindow` turns an ordered manager snapshot into one immutable `DeviceCatalogSnapshot`. Runtime changes use a manager-issued, single-use proposal: the UI first performs side-effect-free idle/reference preflight, lifecycle work then runs, and the exact committed generation is acknowledged synchronously before one informational publication. Callable maps, display choices, scan/manual menus, artificial-channel choices, active range-limit view, device buttons, and router catalog are reconciled as one UI-thread transaction. A consumer failure restores the preceding snapshot; a destructive change that cannot be acknowledged leaves calls and controls sealed until exact reconciliation succeeds.
 - Catalog replacement is allowed only while scan and queue work, deferred output finalization, and queue UI completion are idle. References from executable available/queued/manual/active work, detached queue workers, artificial-channel mappings, and device-owned state block removal. Completed Past items and the available template remain diagnostic references but do not block; definitions are never silently rewritten.
-- Runtime add/disconnect/remove is session-only and never edits the selected profile. Admission is serialized with scan, queue, manual, whole-router-request, individual device-call, and reviewed device-busy reservations. Per-record generations keep retained callables valid across unrelated changes while making handles to a removed and later re-added label stale. Only the mock registration is currently approved for runtime mutation; [known_issues.md](known_issues.md) records the operator-UI and real-driver eligibility gap.
+- Runtime add/disconnect/remove is session-only and never edits the selected workbook. Admission is serialized with scan, queue, manual, whole-router-request, individual device-call, and reviewed device-busy reservations. Per-record generations keep retained callables valid across unrelated changes while making handles to a removed and later re-added label stale. Only the mock registration is currently approved for runtime mutation; [known_issues.md](known_issues.md) records the operator-UI and real-driver eligibility gap.
 - `ScanList` owns available, queued, manual, and completed items. Its worker runs queue items sequentially and exposes stop-now and stop-after-current behavior.
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.
 - `ScanLogic` owns scan traversal, per-level data arrays, grouped scan I/O, timing, pause/stop checkpoints, progress, and autosave triggers.
@@ -45,14 +45,14 @@ The bottom of the Main Window contains a session-only System Log for concise
 application-level startup, profile, catalog, runtime-device mutation,
 scan-range-configuration, lifecycle, and shutdown events. Entries use local
 timestamps plus `INFO`, `WARNING`, or `ERROR`, auto-scroll, and retain at most
-500 in-memory lines. Enabled-device startup results are shown in profile order;
+500 in-memory lines. Enabled-device startup results are shown in workbook order;
 disabled devices appear only in the startup totals, and connection mappings or
 raw startup exceptions are not exposed.
 
 Device connection/operation details remain in device logs. Scan, queue,
 manual-set, save/export, and ordinary artificial-channel activity remain in
 their owning windows and are not duplicated into the System Log. Critical
-dialogs remain for invalid profiles, refused device mutations, and unsafe
+dialogs remain for invalid configurations, refused device mutations, and unsafe
 shutdown. Before a Main Window exists, or after it is unavailable, fatal
 application diagnostics continue to use stderr as the fallback.
 
@@ -86,9 +86,9 @@ Do not block the GUI thread with device I/O, polling loops, ramps, or long waits
 - `set_<channel>(value)`: exactly one positional argument;
 - variadic signatures are rejected.
 
-Startup-profile filters may reduce the exposed channels. Full scan channel names are `<device_label>_<channel>`; matching uses the exact registered label prefix, so labels may contain underscores.
+Workbook channel filters may reduce the exposed channels. Full scan channel names are `<device_label>_<channel>`; matching uses the exact registered label prefix, so labels may contain underscores.
 
-Catalog snapshots are detached read-only views. Repeated publication must not retain a removed device's bound callables, duplicate buttons/actions/signals, or mutate an older snapshot. Unknown names in a profile allowlist continue to be silently skipped, but an already stored unknown channel still counts as a reference to its exact device label when removal is considered.
+Catalog snapshots are detached read-only views. Repeated publication must not retain a removed device's bound callables, duplicate buttons/actions/signals, or mutate an older snapshot. Unknown names in a workbook allowlist continue to be silently skipped, but an already stored unknown channel still counts as a reference to its exact device label when removal is considered.
 
 For cross-device operations, use the injected `DeviceCommandRouter`/`DeviceCommandClient`. The router publishes readable/writable catalogs and routes validated `read`, `write`, and `list_catalog` requests through `MainWindow`. One manager session lease spans catalog lookup, validation, device execution, and response construction, so a runtime mutation cannot split one request across generations. Device modules must not import or reach into one another directly.
 
@@ -101,7 +101,7 @@ The scan editor constructs ordered level dictionaries and setting arrays. At sta
 ## Extension and coupling rules
 
 - Add instruments as device packages behind the device contract; do not add vendor calls to `core/`.
-- Keep addresses, serials, enabled-device lists, save/backup paths, and lab-specific limits at configuration/profile boundaries.
+- Keep addresses, serials, and enabled-device lists in the configuration workbook; keep output paths and lab-specific limits at their existing UI/configuration boundaries.
 - Keep scan runtime independent of individual device imports; it addresses discovered channels through `MainWindow`.
 - Use the shared router for cross-device reads/writes.
 - Preserve lifecycle coherence across widget, logic, hardware, scan start/stop, force stop, and shutdown.
@@ -112,8 +112,8 @@ The scan editor constructs ordered level dictionaries and setting arrays. At sta
 
 | Change | Primary area | Required review |
 | --- | --- | --- |
-| Startup devices, labels, filters, or paths | selected file under `config/profiles/` plus a reviewed registry entry when needed | README, environment, safety |
-| Launcher/profile-selection behavior | `start_zmeter.py` | profile validation and shutdown tests |
+| Startup devices, labels, addresses, or filters | root `device_config.xlsx` or explicitly selected workbook, plus a reviewed registry entry when needed | README, environment, safety |
+| Launcher/workbook-selection behavior | `start_zmeter.py` | configuration validation and shutdown tests |
 | App ownership, discovery, routing, shutdown | `core/mainWindow.py`, `core/device_command_router.py` | device contract, safety |
 | Queue behavior | `core/scanlist.py` | scan lifecycle and shutdown |
 | Scan UI, plots, save/load | `core/scan.py`, plot/level widgets | scan engine, data format |

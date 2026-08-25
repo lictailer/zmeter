@@ -4,7 +4,7 @@
 
 This package integrates an SP150 monochromator through an explicit PyVISA connection. Its transport, scan discovery, bounded move polling, lifecycle, and widget behavior have hardware-independent fake-VISA coverage. No physical monochromator has been accessed or validated by the coding agent.
 
-It is registered under driver ID `sp150` with required `address` and optional positive `timeout_ms` and nonnegative `query_delay_s`. The adapter uses the shared `RuntimeServices.visa`; keep `connect_on_start=false` for the first disconnected panel inspection, then use a separate reviewed run with `connect_on_start=true` because the retained widget has no connection control. Runtime mutation remains disabled.
+It is registered under driver ID `sp150` with one optional text `address`. The adapter calls the existing `connect(address)` path and retains the driver's hardcoded 10-second VISA timeout and one-second query delay. It uses the shared `RuntimeServices.visa`; keep `connect_on_start=false` for the first disconnected panel inspection, then use a separate reviewed run with `connect_on_start=true` because the retained widget has no connection control. Runtime mutation remains disabled.
 
 ## Dependencies and configuration
 
@@ -27,7 +27,7 @@ mono = SP150(
     poll_interval_s=0.25,
     completion_tolerance_nm=0.1,
 )
-mono.connect("GPIB1::11::INSTR")  # Replace with the reviewed profile address.
+mono.connect("GPIB1::11::INSTR")  # Replace with the reviewed workbook address.
 equips["sp150"] = mono
 ```
 
@@ -41,7 +41,7 @@ Do not copy the example address into a shared profile without verifying it in th
 
 The logic exposes only `set_wavelength(value)` and `get_wavelength()` to scan discovery. Values must be finite. Reads send `?NM`; writes send `<value> <GOTO>` with two decimal places.
 
-After a write, the logic polls readback until it is within the configured tolerance. Defaults are a 120-second move timeout, 0.25-second interval between queries, and 0.1 nm tolerance. These values are software limits awaiting bench confirmation; a lab profile should narrow or adjust them only after reviewing the actual grating, drive speed, and safe operating range. Failed writes are not retried automatically.
+After a write, the logic polls readback until it is within the configured tolerance. Defaults are a 120-second move timeout, 0.25-second interval between queries, and 0.1 nm tolerance. These values are software limits awaiting bench confirmation; changing them requires a separately reviewed driver change after checking the actual grating, drive speed, and safe operating range. Failed writes are not retried automatically.
 
 Repository-wide scan limits remain separate and are keyed by the stable equipment label plus channel. A lab profile may impose a narrower wavelength range.
 

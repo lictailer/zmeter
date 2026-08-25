@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
-import os
 import re
 from pathlib import Path
 from typing import Mapping
+
+from openpyxl import load_workbook
 
 from .models import (
     ChannelFilters,
@@ -16,8 +16,18 @@ from .models import (
 
 
 SCHEMA_VERSION = 1
+DEVICE_SHEET_NAME = "Devices"
+DEVICE_HEADERS = (
+    "id",
+    "driver",
+    "enabled",
+    "connect_on_start",
+    "address",
+    "scan set",
+    "scan get",
+    "config check",
+)
 DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-DRIVER_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 RESERVED_DEVICE_IDS = frozenset({"artificial_channel", "default"})
 
 
@@ -30,233 +40,257 @@ class ProfileValidationError(ValueError):
         super().__init__(f"Invalid ZMeter profile:\n{detail}")
 
 
-class _DuplicateJsonKeyError(ValueError):
-    pass
-
-
-def _object_without_duplicate_keys(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise _DuplicateJsonKeyError(f"duplicate JSON field '{key}'")
-        result[key] = value
-    return result
-
-
 def repository_root_from_module() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _resolve_path(value: str, repository_root: Path) -> Path:
-    if "\x00" in value:
-        raise ValueError("path contains a null character")
-    candidate = Path(value)
-    if not candidate.is_absolute():
-        candidate = repository_root / candidate
-    # Normalize lexically. Path.resolve() can touch existing path components,
-    # including mapped/network drives, which configuration validation must not
-    # probe merely because a path is present in a profile.
-    return Path(os.path.abspath(os.path.normpath(candidate)))
+def _is_blank(value: object) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
-def _unexpected_fields(
-    payload: Mapping[str, object],
-    allowed: set[str],
-    context: str,
-    errors: list[str],
-) -> None:
-    for field in sorted(set(payload) - allowed):
-        errors.append(f"{context} contains unsupported field '{field}'")
+def _parse_device_id(value: object, *, row_number: int, errors: list[str]) -> str:
+    context = f"{DEVICE_SHEET_NAME}!A{row_number} (id)"
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"{context} must be a non-empty text value")
+        return ""
+
+    device_id = value.strip()
+    if DEVICE_ID_PATTERN.fullmatch(device_id) is None:
+        errors.append(
+            f"{context} '{device_id}' may contain only letters, digits, "
+            "underscores, and hyphens"
+        )
+    if device_id in RESERVED_DEVICE_IDS:
+        errors.append(f"{context} '{device_id}' is reserved")
+    return device_id
 
 
-def _parse_configured_path(
+def _canonical_driver_ids(
+    driver_specs: Mapping[str, DriverConfigSpec],
+) -> dict[str, str]:
+    canonical: dict[str, str] = {}
+    for registry_id, spec in driver_specs.items():
+        for candidate in (registry_id, spec.driver_id):
+            normalized = candidate.strip().casefold()
+            if normalized:
+                canonical.setdefault(normalized, spec.driver_id)
+    return canonical
+
+
+def _parse_driver_id(
     value: object,
     *,
-    context: str,
-    repository_root: Path,
-    allow_none: bool,
+    row_number: int,
+    canonical_driver_ids: Mapping[str, str],
     errors: list[str],
-) -> Path | None:
-    if value is None and allow_none:
-        return None
+) -> str:
+    context = f"{DEVICE_SHEET_NAME}!B{row_number} (driver)"
     if not isinstance(value, str) or not value.strip():
-        expected = "a non-empty path string or null" if allow_none else "a non-empty path string"
-        errors.append(f"{context} must be {expected}")
-        return None
-    try:
-        return _resolve_path(value.strip(), repository_root)
-    except (OSError, ValueError) as exc:
-        errors.append(f"{context} is invalid: {exc}")
-        return None
+        errors.append(f"{context} must be a non-empty text value")
+        return ""
+
+    configured = value.strip()
+    driver_id = canonical_driver_ids.get(configured.casefold())
+    if driver_id is None:
+        errors.append(f"{context} '{configured}' is not registered")
+        return configured.casefold()
+    return driver_id
+
+
+def _parse_flag(
+    value: object,
+    *,
+    row_number: int,
+    column: str,
+    field_name: str,
+    errors: list[str],
+) -> bool:
+    if type(value) is bool:
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+
+    errors.append(
+        f"{DEVICE_SHEET_NAME}!{column}{row_number} ({field_name}) "
+        "must be TRUE or FALSE"
+    )
+    return False
+
+
+def _parse_address(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    # Address content is deliberately not validated. Converting a legacy
+    # numeric cell keeps startup non-fatal while the workbook's Text format
+    # prevents new identifiers from losing leading zeroes.
+    return str(value)
 
 
 def _parse_channel_filter(
     value: object,
     *,
-    context: str,
+    row_number: int,
+    column: str,
+    field_name: str,
     errors: list[str],
 ) -> tuple[str, ...] | None:
-    if value is None:
+    if _is_blank(value):
         return None
-    if not isinstance(value, list):
-        errors.append(f"{context} must be a list of channel names or null")
-        return None
-
-    channels: list[str] = []
-    for index, channel in enumerate(value):
-        if not isinstance(channel, str) or not channel.strip():
-            errors.append(f"{context}[{index}] must be a non-empty string")
-            continue
-        # Channel membership is deliberately not checked here. The approved
-        # compatibility contract silently skips names a constructed device does
-        # not expose, exactly as MainWindow.filter_scan_channels() does today.
-        channels.append(channel.strip())
-    return tuple(channels)
-
-
-def _parse_connection(
-    value: object,
-    *,
-    context: str,
-    driver_spec: DriverConfigSpec | None,
-    errors: list[str],
-) -> dict[str, object]:
-    if not isinstance(value, dict):
-        errors.append(f"{context} must be an object")
-        return {}
-
-    connection = dict(value)
-    if driver_spec is None:
-        return connection
-
-    allowed_fields = set(driver_spec.connection_fields)
-    for field in sorted(set(connection) - allowed_fields):
+    if not isinstance(value, str):
         errors.append(
-            f"{context} contains unsupported field '{field}' for driver "
-            f"'{driver_spec.driver_id}'"
+            f"{DEVICE_SHEET_NAME}!{column}{row_number} ({field_name}) "
+            "must be comma-separated text or blank"
         )
+        return None
 
-    for field, field_spec in driver_spec.connection_fields.items():
-        if field not in connection:
-            if field_spec.required:
-                errors.append(f"{context}.{field} is required")
-            continue
-        if not field_spec.accepts(connection[field]):
-            errors.append(
-                f"{context}.{field} must be {field_spec.expected_type_names}"
-            )
-    return connection
+    channels = tuple(part.strip() for part in value.split(",") if part.strip())
+    return channels or None
 
 
-def _parse_device(
-    value: object,
+def _parse_devices(
+    worksheet,
     *,
-    index: int,
     driver_specs: Mapping[str, DriverConfigSpec],
-    errors: list[str],
-) -> DeviceConfig | None:
-    context = f"devices[{index}]"
-    if not isinstance(value, dict):
-        errors.append(f"{context} must be an object")
-        return None
+) -> tuple[tuple[DeviceConfig, ...], list[str]]:
+    errors: list[str] = []
+    devices: list[DeviceConfig] = []
+    seen_ids: dict[str, int] = {}
+    canonical_driver_ids = _canonical_driver_ids(driver_specs)
 
-    _unexpected_fields(
-        value,
-        {"id", "driver", "enabled", "connect_on_start", "connection", "scan_channels"},
-        context,
-        errors,
-    )
-
-    device_id_value = value.get("id")
-    if not isinstance(device_id_value, str) or not device_id_value.strip():
-        errors.append(f"{context}.id must be a non-empty string")
-        device_id = ""
-    else:
-        device_id = device_id_value.strip()
-        if DEVICE_ID_PATTERN.fullmatch(device_id) is None:
-            errors.append(
-                f"{context}.id '{device_id}' may contain only letters, digits, "
-                "underscores, and hyphens"
-            )
-        if device_id in RESERVED_DEVICE_IDS:
-            errors.append(f"{context}.id '{device_id}' is reserved")
-
-    driver_value = value.get("driver")
-    if not isinstance(driver_value, str) or not driver_value.strip():
-        errors.append(f"{context}.driver must be a non-empty string")
-        driver_id = ""
-    else:
-        driver_id = driver_value.strip()
-        if DRIVER_ID_PATTERN.fullmatch(driver_id) is None:
-            errors.append(
-                f"{context}.driver '{driver_id}' must be a lowercase registry ID"
-            )
-
-    driver_spec = driver_specs.get(driver_id)
-    if driver_id and driver_spec is None:
-        errors.append(f"{context}.driver '{driver_id}' is not registered")
-
-    enabled_value = value.get("enabled")
-    if type(enabled_value) is not bool:
-        errors.append(f"{context}.enabled must be a boolean")
-        enabled = False
-    else:
-        enabled = enabled_value
-
-    connect_value = value.get("connect_on_start", False)
-    if type(connect_value) is not bool:
-        errors.append(f"{context}.connect_on_start must be a boolean")
-        connect_on_start = False
-    else:
-        connect_on_start = connect_value
-
-    if connect_on_start and not enabled:
-        errors.append(f"{context}.connect_on_start cannot be true when disabled")
-    if (
-        connect_on_start
-        and driver_spec is not None
-        and not driver_spec.supports_startup_connection
+    for row_number, row in enumerate(
+        worksheet.iter_rows(
+            min_row=2,
+            min_col=1,
+            max_col=len(DEVICE_HEADERS),
+            values_only=True,
+        ),
+        start=2,
     ):
-        errors.append(
-            f"{context}.driver '{driver_id}' does not support startup connection"
+        # Reserved rows may contain a config-check formula in column H. They
+        # are not device entries until at least one input cell A:G is filled.
+        if all(_is_blank(value) for value in row[:7]):
+            continue
+
+        device_id = _parse_device_id(row[0], row_number=row_number, errors=errors)
+        driver_id = _parse_driver_id(
+            row[1],
+            row_number=row_number,
+            canonical_driver_ids=canonical_driver_ids,
+            errors=errors,
         )
-    if enabled and driver_spec is not None and not driver_spec.available:
-        reason = driver_spec.unavailable_reason.strip() or "driver is unavailable"
-        errors.append(f"{context}.driver '{driver_id}' is unavailable: {reason}")
+        enabled = _parse_flag(
+            row[2],
+            row_number=row_number,
+            column="C",
+            field_name="enabled",
+            errors=errors,
+        )
+        connect_on_start = _parse_flag(
+            row[3],
+            row_number=row_number,
+            column="D",
+            field_name="connect_on_start",
+            errors=errors,
+        )
 
-    connection = _parse_connection(
-        value.get("connection"),
-        context=f"{context}.connection",
-        driver_spec=driver_spec,
-        errors=errors,
+        if connect_on_start and not enabled:
+            errors.append(
+                f"{DEVICE_SHEET_NAME}!D{row_number} (connect_on_start) cannot "
+                "be TRUE when enabled is FALSE"
+        )
+
+        if device_id:
+            normalized_device_id = device_id.casefold()
+            previous_row = seen_ids.get(normalized_device_id)
+            if previous_row is None:
+                seen_ids[normalized_device_id] = row_number
+            else:
+                errors.append(
+                    f"{DEVICE_SHEET_NAME}!A{row_number} duplicates "
+                    f"{DEVICE_SHEET_NAME}!A{previous_row} id '{device_id}'"
+                )
+
+        setters = _parse_channel_filter(
+            row[5],
+            row_number=row_number,
+            column="F",
+            field_name="scan set",
+            errors=errors,
+        )
+        getters = _parse_channel_filter(
+            row[6],
+            row_number=row_number,
+            column="G",
+            field_name="scan get",
+            errors=errors,
+        )
+
+        devices.append(
+            DeviceConfig(
+                id=device_id,
+                driver=driver_id,
+                enabled=enabled,
+                connect_on_start=connect_on_start,
+                connection={"address": _parse_address(row[4])},
+                scan_channels=ChannelFilters(setters=setters, getters=getters),
+            )
+        )
+
+    return tuple(devices), errors
+
+
+def _profile_from_workbook(
+    workbook,
+    *,
+    source: Path,
+    repository_root: Path,
+    driver_specs: Mapping[str, DriverConfigSpec],
+) -> ProfileConfig:
+    if DEVICE_SHEET_NAME not in workbook.sheetnames:
+        raise ProfileValidationError(
+            [f"workbook must contain a '{DEVICE_SHEET_NAME}' sheet"]
+        )
+
+    worksheet = workbook[DEVICE_SHEET_NAME]
+    header_row = next(
+        worksheet.iter_rows(
+            min_row=1,
+            max_row=1,
+            min_col=1,
+            max_col=len(DEVICE_HEADERS),
+            values_only=True,
+        ),
+        (),
     )
+    if tuple(header_row) != DEVICE_HEADERS:
+        expected = ", ".join(DEVICE_HEADERS)
+        found = ", ".join(
+            "<blank>" if value is None else str(value) for value in header_row
+        )
+        raise ProfileValidationError(
+            [
+                f"{DEVICE_SHEET_NAME} headers A1:H1 must be exactly: "
+                f"{expected}; found: {found or '<empty row>'}"
+            ]
+        )
 
-    scan_channels_value = value.get("scan_channels")
-    if not isinstance(scan_channels_value, dict):
-        errors.append(f"{context}.scan_channels must be an object")
-        scan_channels: dict[str, object] = {}
-    else:
-        scan_channels = scan_channels_value
-        _unexpected_fields(scan_channels, {"set", "get"}, f"{context}.scan_channels", errors)
+    devices, errors = _parse_devices(worksheet, driver_specs=driver_specs)
+    if errors:
+        raise ProfileValidationError(errors)
 
-    setters = _parse_channel_filter(
-        scan_channels.get("set"),
-        context=f"{context}.scan_channels.set",
-        errors=errors,
-    )
-    getters = _parse_channel_filter(
-        scan_channels.get("get"),
-        context=f"{context}.scan_channels.get",
-        errors=errors,
-    )
-
-    return DeviceConfig(
-        id=device_id,
-        driver=driver_id,
-        enabled=enabled,
-        connect_on_start=connect_on_start,
-        connection=connection,
-        scan_channels=ChannelFilters(setters=setters, getters=getters),
+    return ProfileConfig(
+        schema_version=SCHEMA_VERSION,
+        profile=source.stem,
+        paths=ProfilePaths(save=repository_root / "data", backup=None),
+        devices=devices,
+        source_path=source,
+        repository_root=repository_root,
     )
 
 
@@ -266,7 +300,7 @@ def load_profile(
     driver_specs: Mapping[str, DriverConfigSpec],
     repository_root: str | Path | None = None,
 ) -> ProfileConfig:
-    """Load one profile without importing or constructing a device driver."""
+    """Load one Excel profile without importing or constructing a driver."""
 
     root = Path(repository_root or repository_root_from_module()).resolve()
     source = Path(profile_path)
@@ -274,109 +308,28 @@ def load_profile(
         source = root / source
     source = source.resolve(strict=False)
 
+    if source.suffix.casefold() != ".xlsx":
+        raise ProfileValidationError(
+            [f"profile must be an .xlsx workbook: {source}"]
+        )
+
+    workbook = None
     try:
-        with source.open("r", encoding="utf-8") as handle:
-            payload = json.load(
-                handle,
-                object_pairs_hook=_object_without_duplicate_keys,
-            )
+        workbook = load_workbook(source, read_only=True, data_only=False)
+        return _profile_from_workbook(
+            workbook,
+            source=source,
+            repository_root=root,
+            driver_specs=driver_specs,
+        )
+    except ProfileValidationError:
+        raise
     except FileNotFoundError as exc:
         raise ProfileValidationError([f"profile file not found: {source}"]) from exc
-    except (OSError, json.JSONDecodeError, _DuplicateJsonKeyError) as exc:
-        raise ProfileValidationError([f"profile file could not be read: {exc}"]) from exc
-
-    if not isinstance(payload, dict):
-        raise ProfileValidationError(["profile root must be an object"])
-
-    errors: list[str] = []
-    _unexpected_fields(
-        payload,
-        {"schema_version", "profile", "paths", "devices"},
-        "profile root",
-        errors,
-    )
-
-    schema_value = payload.get("schema_version")
-    if type(schema_value) is not int:
-        errors.append("schema_version must be an integer")
-        schema_version = -1
-    else:
-        schema_version = schema_value
-        if schema_version != SCHEMA_VERSION:
-            errors.append(
-                f"schema_version {schema_version} is unsupported; expected {SCHEMA_VERSION}"
-            )
-
-    profile_value = payload.get("profile")
-    if not isinstance(profile_value, str) or not profile_value.strip():
-        errors.append("profile must be a non-empty string")
-        profile_name = ""
-    else:
-        profile_name = profile_value.strip()
-
-    paths_value = payload.get("paths")
-    if not isinstance(paths_value, dict):
-        errors.append("paths must be an object")
-        paths: dict[str, object] = {}
-    else:
-        paths = paths_value
-        _unexpected_fields(paths, {"save", "backup"}, "paths", errors)
-
-    save_path = _parse_configured_path(
-        paths.get("save"),
-        context="paths.save",
-        repository_root=root,
-        allow_none=False,
-        errors=errors,
-    )
-    backup_path = _parse_configured_path(
-        paths.get("backup"),
-        context="paths.backup",
-        repository_root=root,
-        allow_none=True,
-        errors=errors,
-    )
-
-    devices_value = payload.get("devices")
-    if not isinstance(devices_value, list):
-        errors.append("devices must be a list")
-        device_values: list[object] = []
-    else:
-        device_values = devices_value
-
-    indexed_devices: list[tuple[int, DeviceConfig]] = []
-    for index, value in enumerate(device_values):
-        device = _parse_device(
-            value,
-            index=index,
-            driver_specs=driver_specs,
-            errors=errors,
-        )
-        if device is not None:
-            indexed_devices.append((index, device))
-
-    seen_ids: dict[str, int] = {}
-    for source_index, device in indexed_devices:
-        if not device.id:
-            continue
-        if device.id in seen_ids:
-            errors.append(
-                f"devices[{source_index}].id duplicates "
-                f"devices[{seen_ids[device.id]}].id "
-                f"'{device.id}'"
-            )
-        else:
-            seen_ids[device.id] = source_index
-
-    if errors:
-        raise ProfileValidationError(errors)
-
-    assert save_path is not None
-    return ProfileConfig(
-        schema_version=schema_version,
-        profile=profile_name,
-        paths=ProfilePaths(save=save_path, backup=backup_path),
-        devices=tuple(device for _, device in indexed_devices),
-        source_path=source,
-        repository_root=root,
-    )
+    except Exception as exc:
+        raise ProfileValidationError(
+            [f"profile workbook could not be read: {type(exc).__name__}: {exc}"]
+        ) from exc
+    finally:
+        if workbook is not None:
+            workbook.close()

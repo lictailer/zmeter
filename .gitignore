@@ -19,9 +19,8 @@ __pycache__/
 # Project data (ignore folder itself and all contents)
 data/
 
-# Local laboratory profiles (may contain addresses, serials, or private paths)
-config/profiles/*.local.json
-config/profiles/local/
+# Temporary Microsoft Excel owner files
+~$*.xlsx
 
 # Restructure validation artifacts
 .restructure_tmp/

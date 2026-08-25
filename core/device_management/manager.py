@@ -15,6 +15,7 @@ from PyQt6 import QtCore
 from .models import ChannelFilters, DeviceConfig, ProfileConfig
 from .registry import (
     DriverAdapter,
+    DriverConfigurationError,
     DriverConstructionError,
     DriverRegistry,
     DriverUnavailableError,
@@ -754,7 +755,11 @@ class DeviceManager(QtCore.QObject):
                     continue
                 try:
                     adapter = self._registry.create(config, self._runtime_services)
-                except (DriverConstructionError, DriverUnavailableError):
+                except (
+                    DriverConfigurationError,
+                    DriverConstructionError,
+                    DriverUnavailableError,
+                ):
                     startup_results.append(
                         StartupDeviceResult(
                             config.id,

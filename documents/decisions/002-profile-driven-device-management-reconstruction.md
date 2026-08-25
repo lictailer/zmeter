@@ -1,7 +1,8 @@
 # 002: Profile-driven device management and behavior-preserving reconstruction
 
-- Status: Implemented in `release/beta`; stable promotion and hardware commissioning pending
+- Status: Implemented in `release/beta`; amended for Excel-only configuration
 - Date: 2026-08-21
+- Amended: 2026-08-24
 - Owners: ZMeter maintainers
 - Supersedes: none
 
@@ -20,23 +21,23 @@ configuration while making startup and ownership reviewable.
 
 ## Decision
 
-ZMeter uses validated JSON profiles, a lazy code-reviewed driver registry, one
+ZMeter uses a validated Excel device workbook, a lazy code-reviewed driver registry, one
 `DeviceManager`, and typed shared runtime services. `start_zmeter.py` remains a
-thin composition boundary. Checked profiles stay mock-only or contain disabled
-placeholders; addresses, serials, endpoints, paths, and enabled real-device
-sets remain local configuration.
+thin composition boundary. The root `device_config.xlsx` keeps one generic text
+address and startup policy per device; initial output paths remain code defaults
+and are editable in Main Window.
 
-Profile startup constructs enabled devices independently in order and issues a
+Workbook startup constructs enabled devices independently in order and issues a
 separate best-effort startup connection request. A device-local construction or
 connection failure is visible but does not prevent unrelated devices or the
-Main Window from opening. Invalid profile syntax, duplicate IDs, and unknown
+Main Window from opening. Invalid workbook structure, duplicate IDs, and unknown
 drivers remain fatal validation errors.
 
 The manager owns device lifecycle and publishes generation-bound snapshots.
 MainWindow rebuilds device buttons, callable maps, router catalog, scan/manual
 menus, artificial-channel choices, and active range views as one UI-thread
 transaction. Runtime add, disconnect, and remove are session-only, idle-gated,
-reference-aware, and do not rewrite profiles. Only the mock registration is
+reference-aware, and do not rewrite the workbook. Only the mock registration is
 currently eligible; real drivers remain startup-only until separately reviewed.
 
 All device/source packages live under the flat `devices/` namespace. The
@@ -51,12 +52,12 @@ array-valued getters.
 
 ## Consequences
 
-- Startup is deterministic, configurable, lazy, and mock-safe by default.
+- Startup is deterministic, reviewable, and lazy after workbook validation.
 - Device teardown and shared-runtime release have one owner and tested ordering.
 - Catalog mutation can fail closed without leaving stale device callables.
 - Real-device registration no longer implies runtime mutation or hardware
   approval; per-driver lifecycle work and user commissioning remain necessary.
-- Runtime changes disappear at restart because the selected profile remains the
+- Runtime changes disappear at restart because the selected workbook remains the
   durable source of configuration.
 - Compatibility decisions around discovery, unknown channels, and scalar data
   remain visible future migrations rather than hidden behavioral changes.
@@ -76,7 +77,7 @@ array-valued getters.
   real drivers lack complete busy, bounded lifecycle, reference, and bench
   evidence.
 - Change VISA discovery or unknown-channel behavior during reconstruction:
-  rejected as an unapproved operator/profile compatibility change.
+  rejected as an unapproved operator/configuration compatibility change.
 
 ## Validation implications
 

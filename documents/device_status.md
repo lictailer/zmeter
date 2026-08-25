@@ -32,10 +32,9 @@ final result.
 | `opticool` | [opticool](../devices/opticool/README.md) | Asynchronous pending and retryable | Disabled | Intercepted vendor boundary; bench pending | Configurable DLL location, hard limits, bounded stability/termination, fake .NET backend |
 | `tlpm` | [tlpm](../devices/tlpm/readme.md) | Asynchronous pending and retryable | Disabled | Intercepted native boundary; bench pending | Explicit resource selection, bounded native calls, reviewed scan channels, production fake backend |
 
-The tracked templates are [phase1_lab.json](../config/profiles/phase1_lab.json)
-and [phase2_lab.json](../config/profiles/phase2_lab.json). Copy a template to an
-ignored local profile, enable exactly one real driver, and retain
-`connect_on_start=false` for first commissioning.
+The tracked startup configuration is [device_config.xlsx](../device_config.xlsx).
+For first commissioning, review a workbook with exactly one real driver enabled
+and retain `connect_on_start=FALSE` until the connection is requested manually.
 
 ## Ongoing, unregistered packages
 
@@ -46,12 +45,12 @@ ignored local profile, enable exactly one real driver, and retain
 | [auto_position](../devices/auto_position/README.md) | Prototype retained; not selectable by profile | Port to PyQt6, remove direct task construction, add logic boundary, explicit profile schema, limits, stop, and final cleanup |
 | [ANC300](../devices/ANC300/README.md) | Source fragment retained; not an importable ZMeter device | Build widget/logic/hardware package, explicit transport/axes/units/limits/channels, bounded lifecycle, and simulator |
 
-Selecting an unregistered ID must continue to produce a visible profile
+Selecting an unregistered ID must continue to produce a visible configuration
 validation error rather than constructing an uncertain integration.
 
 ## Commissioning and promotion
 
 Follow [hardware_safety.md](hardware_safety.md) and the target device README.
-Hardware evidence applies only to the exact commit, profile hash, interpreter,
+Hardware evidence applies only to the exact commit, workbook hash, interpreter,
 vendor runtime, model, wiring, limits, operation, and final state observed. Do
 not enable runtime mutation for a real driver merely to test it.

@@ -30,6 +30,7 @@ from core.scan_info import ScanInfo
 from core.scan_logic import ScanLogic
 from core.scanlist import ScanListShutdownTimeoutError
 from core.shared_runtime import RuntimeServices
+from tests.excel_config_fixture import write_test_device_config
 
 
 class _ArgumentApplication:
@@ -50,9 +51,12 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         self.addCleanup(self.temp_directory.cleanup)
         self.services = RuntimeServices()
         self.addCleanup(self.services.shutdown)
+        self.config_path = write_test_device_config(
+            Path(self.temp_directory.name) / "mock.xlsx"
+        )
         self.profile, self.manager = start_zmeter.create_profile_session(
             self.services,
-            start_zmeter.REPOSITORY_ROOT / "config" / "profiles" / "mock.json",
+            self.config_path,
         )
         self.window = MainWindow(
             info=ScanInfo,
@@ -196,7 +200,7 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         ):
             with self.assertRaises(SystemExit) as caught:
                 start_zmeter.main(
-                    ["--profle", "config/profiles/session.local.json"]
+                    ["--profle", "session.xlsx"]
                 )
 
         self.assertEqual(caught.exception.code, 2)
@@ -535,28 +539,28 @@ class LauncherTeardownTests(unittest.TestCase):
             paths=SimpleNamespace(save=Path(save), backup=backup)
         )
 
-    def test_launch_options_select_default_or_explicit_repository_relative_profile(self):
+    def test_launch_options_select_default_or_explicit_repository_relative_workbook(self):
         options = start_zmeter._parse_launch_options([])
         self.assertEqual(options.profile, start_zmeter.DEFAULT_PROFILE_PATH)
 
         options = start_zmeter._parse_launch_options(
             [
                 "--profile",
-                "config/profiles/session.local.json",
+                "session.xlsx",
             ]
         )
         self.assertEqual(
             options.profile,
-            Path("config/profiles/session.local.json"),
+            Path("session.xlsx"),
         )
 
         with redirect_stderr(StringIO()):
             with self.assertRaises(SystemExit):
                 start_zmeter._parse_launch_options(
-                    ["--profle", "config/profiles/session.local.json"]
+                    ["--profle", "session.xlsx"]
                 )
 
-    def test_invalid_selected_profile_is_visible_and_never_falls_back(self):
+    def test_invalid_selected_workbook_is_visible_and_never_falls_back(self):
         events = []
 
         class FakeApplication(_ArgumentApplication):
@@ -570,7 +574,7 @@ class LauncherTeardownTests(unittest.TestCase):
                 return {}
 
         with tempfile.TemporaryDirectory() as directory:
-            selected_path = Path(directory) / "missing.local.json"
+            selected_path = Path(directory) / "missing.xlsx"
             stderr = StringIO()
             with (
                 mock.patch.object(
@@ -604,7 +608,7 @@ class LauncherTeardownTests(unittest.TestCase):
         self.assertIn(str(selected_path), message)
         critical.assert_called_once_with(
             None,
-            "Invalid ZMeter Profile",
+            "Invalid ZMeter Configuration",
             message.strip(),
         )
 

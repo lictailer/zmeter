@@ -7,6 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from dataclasses import replace
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -31,6 +32,7 @@ from core.scan import Scan
 from core.scan_info import ScanInfo
 from core.scanlist import ManualSetItem, ScanList
 from core.shared_runtime import RuntimeServices
+from tests.excel_config_fixture import write_test_device_config
 
 
 class RuntimeDeviceUiTests(unittest.TestCase):
@@ -41,9 +43,12 @@ class RuntimeDeviceUiTests(unittest.TestCase):
     def setUp(self):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.services = RuntimeServices()
+        self.config_path = write_test_device_config(
+            Path(self.temp_directory.name) / "mock.xlsx"
+        )
         self.profile, self.manager = start_zmeter.create_profile_session(
             self.services,
-            start_zmeter.REPOSITORY_ROOT / "config" / "profiles" / "mock.json",
+            self.config_path,
         )
         self.window = MainWindow(
             info=ScanInfo,

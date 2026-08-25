@@ -117,8 +117,8 @@ PowerPoint/COM/`Z:\` paths. All files are confined to an OS temporary directory.
 Phase 1 registry coverage is in `tests.test_phase1_device_registrations` and
 `tests.test_ni6423_registration`. It verifies exact IDs and schemas, fresh-
 process lazy imports, shared-runtime constructor mapping, official SR830 path,
-startup-only policy, exact best-effort startup argument mapping, NI
-`device_name` validation, forbidden NI task creation, and exact NI6423 dynamic
+startup-only policy, exact best-effort startup argument mapping, generic-address
+translation for NI device names, forbidden NI task creation, and exact NI6423 dynamic
 channels. `tests.test_best_effort_startup` covers ordered construction skipping,
 all-failed empty sessions, startup-result states, one-shot/owner-thread rules,
 pending-request teardown, launcher stage order, and the sanitized read-only
@@ -132,7 +132,7 @@ scan write remains local to the Scan Range log. Run these before the family
 fake suites.
 
 Phase 2 registry coverage is in `tests.test_phase2_device_registrations`. It
-verifies the four registered schemas/profile defaults, fresh-process laziness,
+verifies the four registered schemas/configuration defaults, fresh-process laziness,
 Montana2 address mapping, asynchronous panel-worker connection paths,
 lifecycle hooks, startup-only policy, and visible rejection of the remaining
 deferred IDs. `tests.test_phase2_driver_behavior` intercepts every vendor/native
@@ -147,14 +147,13 @@ For documentation consolidation or path changes:
 - check every non-archive relative Markdown link and the active archive indexes;
 - search active documents for retired filenames, stale package paths, superseded
   UI terms, and outdated readiness claims;
-- compare `documents/device_status.md` with lazy registry metadata and tracked
-  profiles without constructing a device or importing a vendor package;
-- parse affected JSON examples and confirm tracked real-device templates remain
-  disabled unless a separate behavior change was approved;
+- compare `documents/device_status.md` with lazy registry metadata and the tracked
+  workbook without constructing a device or importing a vendor package;
+- inspect affected workbook rows and formulas without launching ZMeter;
 - run the focused configuration/registry suites when registration or startup
   claims are edited; and
 - run `git diff --check`, inspect the complete changed-file list, and confirm no
-  generated artifacts, local profiles, code, schema, or lab data entered the
+  unexpected generated artifacts, unreviewed workbooks, code, schema, or lab data entered the
   documentation change.
 
 Archived implementation evidence is not required to retain working relative
@@ -165,7 +164,7 @@ links must remain valid.
 
 When hardware evidence is required, provide:
 
-1. exact instrument model, interface, address/profile, firmware/driver assumptions, and safe initial state;
+1. exact instrument model, interface, address/workbook, firmware/driver assumptions, and safe initial state;
 2. exact command or GUI procedure;
 3. permitted units, range, ramp rate, timeout, and abort action;
 4. expected observations and pass/fail criteria;
