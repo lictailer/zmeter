@@ -18,11 +18,11 @@ from core.device_management import (
 from core.shared_runtime import RuntimeServices
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent
-DEFAULT_PROFILE_PATH = REPOSITORY_ROOT / "config" / "profiles" / "phase2_lab.json"
+DEFAULT_PROFILE_PATH = REPOSITORY_ROOT / "device_config.xlsx"
 
 
 class StartupWindow(QtWidgets.QWidget):
-    """Small stage-only window shown while the profile session is prepared."""
+    """Small stage-only window shown while the configured session is prepared."""
 
     def __init__(self) -> None:
         flags = (
@@ -85,7 +85,7 @@ def _parse_launch_options(argv):
         type=Path,
         default=DEFAULT_PROFILE_PATH,
         help=(
-            "profile JSON path; relative paths are resolved from the "
+            "device configuration workbook path; relative paths are resolved from the "
             "repository root"
         ),
     )
@@ -98,7 +98,7 @@ def create_profile_session(
     *,
     before_device_load: Callable[[], None] | None = None,
 ):
-    """Validate a selected profile, then construct its enabled devices."""
+    """Validate a selected workbook, then construct its enabled devices."""
     registry = build_default_registry()
     profile = load_profile(
         profile_path,
@@ -113,12 +113,12 @@ def create_profile_session(
 
 
 def main(argv=None):
-    """Launch the selected validated profile."""
+    """Launch the selected validated workbook configuration."""
     launch_arguments = list(sys.argv[1:] if argv is None else argv)
     # QApplication must exist before any enabled QWidget-based device is built.
     # Qt consumes its own options (for example ``-platform`` and ``-style``)
     # first. Strict parsing of what remains prevents a misspelled ``--profile``
-    # from silently launching the default profile.
+    # from silently launching the default configuration.
     app = QtWidgets.QApplication([sys.argv[0], *launch_arguments])
     options = _parse_launch_options(app.arguments()[1:])
     runtime_services = None
@@ -132,7 +132,7 @@ def main(argv=None):
     try:
         startup_window = StartupWindow()
         startup_window.show()
-        _show_startup_stage(app, startup_window, "Loading profile…")
+        _show_startup_stage(app, startup_window, "Loading configuration…")
         runtime_services = RuntimeServices()
         try:
             profile, device_manager = create_profile_session(
@@ -151,7 +151,7 @@ def main(argv=None):
             startup_window = None
             QtWidgets.QMessageBox.critical(
                 None,
-                "Invalid ZMeter Profile",
+                "Invalid ZMeter Configuration",
                 message,
             )
             return 2

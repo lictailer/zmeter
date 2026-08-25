@@ -4,6 +4,7 @@ import copy
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -24,6 +25,7 @@ from core.device_management import DeviceSnapshot
 from core.mainWindow import MainWindow
 from core.scan_info import ScanInfo
 from core.shared_runtime import RuntimeServices
+from tests.excel_config_fixture import write_test_device_config
 
 
 class _CatalogLogic:
@@ -143,9 +145,12 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
     def setUp(self):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.services = RuntimeServices()
+        config_path = write_test_device_config(
+            Path(self.temp_directory.name) / "mock.xlsx"
+        )
         _profile, self.manager = start_zmeter.create_profile_session(
             self.services,
-            start_zmeter.REPOSITORY_ROOT / "config" / "profiles" / "mock.json",
+            config_path,
         )
         self.window = MainWindow(
             info=copy.deepcopy(ScanInfo),

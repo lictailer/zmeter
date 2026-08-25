@@ -13,8 +13,8 @@ stage independently of ZMeter. Software limits and the ZMeter stop button are
 not substitutes for controller limits, physical clearance, or a hardware
 emergency stop.
 
-It is registered under driver ID `bbd30x` with required connection field
-`serial`. For first commissioning keep `connect_on_start=false`; a later
+It is registered under driver ID `bbd30x` with one optional text `address`,
+interpreted as the existing controller serial. For first commissioning keep `connect_on_start=false`; a later
 reviewed startup request queues the existing asynchronous panel connection and
 reports pending without waiting for completion. The panel remains authoritative
 for the final result and manual retry. The adapter injects
@@ -50,8 +50,8 @@ configuration and verify it before connecting.
         "delay_stage": ["pos_mm", "pos_um", "delay_ps"],
     }
 
-The checked-in default profile remains mock-only. Do not add lab serials or
-enable this device in a shared profile.
+The checked-in workbook keeps this device disabled. Review the text address and
+do not enable it without the intended lab commissioning procedure.
 
 ## Connection and motion parameters
 

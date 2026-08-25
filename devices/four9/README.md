@@ -52,32 +52,19 @@ The normal defaults are:
 
 ## ZMeter registration
 
-Four9 is a reviewed startup-only registry driver with stable ID `four9`. Use an
-ignored local profile entry based on `config/profiles/phase2_lab.json`:
+Four9 is a reviewed startup-only registry driver with stable ID `four9`. Its
+row in `device_config.xlsx` uses the generic text `address` column:
 
-```json
-{
-  "id": "four9",
-  "driver": "four9",
-  "enabled": true,
-  "connect_on_start": false,
-  "connection": {
-    "host": "REPLACE_LOCALLY",
-    "port": 5050,
-    "socket_timeout_s": 10.0
-  },
-  "scan_channels": {
-    "set": null,
-    "get": null
-  }
-}
-```
+| id | driver | enabled | connect_on_start | address | scan set | scan get |
+| --- | --- | --- | --- | --- | --- | --- |
+| `four9` | `four9` | `TRUE` | `FALSE` | `127.0.0.1:5050` | blank | blank |
 
-The profile endpoint is copied into the existing panel without opening a
+The configured `host:port` endpoint is copied into the existing panel without opening a
 socket. A startup connection uses the same asynchronous logic job as the
 Connect button, so the System Log reports pending and the panel owns the final
-result and manual retry. Runtime add, manager disconnect, and removal remain
-disabled pending a separate busy/lifecycle bench review.
+result and manual retry. Socket timeout remains the driver default rather than
+a workbook setting. Runtime add, manager disconnect, and removal remain disabled
+pending a separate busy/lifecycle bench review.
 
 The UI performs network work on its `Four9Logic` thread. Scan calls already
 run on ZMeter's scan worker and call the same logic methods directly. The

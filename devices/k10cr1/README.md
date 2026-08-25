@@ -4,8 +4,8 @@
 
 This package controls a Thorlabs K10CR1 integrated rotation mount through the Kinesis C API. Its existing C structures and command surface are retained, but native function resolution now uses the injected shared `KinesisRuntime`. The current stop behavior remains incomplete, so it must not be treated as production-ready without corrective work and a user-run bench review.
 
-It is registered under driver ID `k10cr1` with required connection field
-`serial`. For first commissioning keep `connect_on_start=false`; a later
+It is registered under driver ID `k10cr1` with one optional text `address`,
+interpreted as the existing controller serial. For first commissioning keep `connect_on_start=false`; a later
 reviewed startup request calls the existing asynchronous panel connection and
 reports pending without waiting for completion. The panel remains authoritative
 for the final result and manual retry. Runtime mutation remains disabled, and

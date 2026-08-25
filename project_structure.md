@@ -18,15 +18,15 @@ start_zmeter.py
                  -> core.scan_logic.ScanLogic
 ```
 
-The checked-in `config/profiles/mock.json` profile instantiates two disconnected `devices.mockDevice.mock_device_main.MockDevice` widgets through the lazy reviewed registry. `start_zmeter.py` contains no device-specific imports or connection values. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; `core/scan_logic_old.py` is retained source but is not on the active path.
+The checked-in root `device_config.xlsx` workbook supplies the ordered device rows to the lazy reviewed registry. `start_zmeter.py` contains no device-specific imports or connection values. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; `core/scan_logic_old.py` is retained source but is not on the active path.
 
 ## Maintained layout
 
 | Path | Current responsibility |
 | --- | --- |
-| `start_zmeter.py` | Thin command-line profile selection and application/session orchestration |
-| `config/` | Validated checked-in mock profile, examples, and ignored local-profile boundary |
-| `core/device_management/` | Immutable profile models, validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, and lifecycle reports |
+| `start_zmeter.py` | Thin command-line workbook selection and application/session orchestration |
+| `device_config.xlsx` | Default Excel-only device configuration beside the launcher |
+| `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, and lifecycle reports |
 | `core/device_catalog.py` | Immutable rebuilt channel/catalog snapshots and typed refusal errors |
 | `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queued/manual/past items, sequential queue execution, activity reservations, and runtime-mutation seals |
@@ -59,7 +59,7 @@ packaging workflow and the maintained contract in
 Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the current matrix in `documents/device_status.md` and the target package documentation before enabling it. The maintained replacement is the sole canonical `devices/sr830/` implementation. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
 
 The Phase 2 startup-only registry entries are `four9`, `montana2`, `opticool`,
-and `tlpm`. They are lazy and disabled in tracked profiles; their device-local
+and `tlpm`. They are lazy and selected only through the workbook; their device-local
 READMEs and `documents/device_status.md` record environment-specific accepted
 limitations.
 

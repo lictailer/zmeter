@@ -12,7 +12,7 @@ the device package README. Completed plans and investigations live under
 | --- | --- | --- |
 | Understand the completed reconstruction and remaining release gates | [reconstruction_status.md](reconstruction_status.md) | [ADR 002](decisions/002-profile-driven-device-management-reconstruction.md), `project_structure.md` |
 | Understand ownership, startup, catalogs, or shutdown | [architecture.md](architecture.md) | `start_zmeter.py`, affected modules and tests |
-| Check device registration or readiness | [device_status.md](device_status.md) | [device contract](device_contract.md), target device README, local profile |
+| Check device registration or readiness | [device_status.md](device_status.md) | [device contract](device_contract.md), target device README, configuration workbook |
 | Review incomplete or partially available behavior | [known_issues.md](known_issues.md) | affected canonical document, code, and tests |
 | Change shared vendor runtimes | [ADR 001](decisions/001-shared-runtime-services.md) | [shared runtime README](../core/shared_runtime/README.md), manifest, device hardware layer |
 | Change scan traversal, timing, or getters | [scan_engine.md](scan_engine.md) | `core/scan.py`, `core/scan_logic.py`, focused tests |

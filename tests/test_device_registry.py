@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 from pathlib import Path
@@ -11,8 +12,9 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
+from openpyxl import Workbook
 
-from core.device_management.config import load_profile
+from core.device_management.config import DEVICE_HEADERS, load_profile
 from core.device_management.models import (
     ChannelFilters,
     ConnectionFieldSpec,
@@ -61,6 +63,20 @@ def fake_registration(**overrides):
     }
     values.update(overrides)
     return DriverRegistration(**values)
+
+
+def write_mock_profile_workbook(directory: Path) -> Path:
+    path = directory / "mock.xlsx"
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Devices"
+    worksheet.append(list(DEVICE_HEADERS))
+    worksheet.append(
+        ["mock_device_1", "mock_device", True, False, "MOCK::1", None, None, None]
+    )
+    workbook.save(path)
+    workbook.close()
+    return path
 
 
 class DriverRegistryPureTests(unittest.TestCase):
@@ -369,12 +385,15 @@ class DefaultMockRegistryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        cls.profile_temp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.profile_temp.cleanup)
+        cls.profile_path = write_mock_profile_workbook(Path(cls.profile_temp.name))
 
     def test_checked_profile_constructs_disconnected_mock_through_registry(self):
         repository_root = Path(__file__).resolve().parents[1]
         registry = build_default_registry()
         profile = load_profile(
-            repository_root / "config" / "profiles" / "mock.json",
+            self.profile_path,
             driver_specs=registry.config_specs,
             repository_root=repository_root,
         )

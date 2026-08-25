@@ -4,18 +4,17 @@
 
 The behavior-preserving reconstruction is implemented. It was merged into
 `release/beta` by commit `574b186` and is present in the maintained beta line.
-The active architecture now uses validated profiles, a lazy driver registry,
+The active architecture now uses a validated Excel device configuration, a lazy driver registry,
 manager-owned devices and shared runtimes, transactional catalogs, guarded
 session-only runtime mutation, the flat `devices/` namespace, and the Main
 Window System Log.
 
-The checked default remains the disconnected mock profile. Real-device entries
-in tracked Phase 1 and Phase 2 profile templates remain disabled and keep
-`connect_on_start=false`.
+The checked default is the root `device_config.xlsx` workbook. It is the single
+active startup configuration and may contain enabled real-device rows.
 
 ## Completed reconstruction work
 
-- Profile validation, repository-relative path handling, and strict selection
+- Workbook validation, repository-relative path handling, and strict selection
   without fallback.
 - Lazy driver registration and best-effort ordered startup construction and
   connection requests.
@@ -35,8 +34,8 @@ in tracked Phase 1 and Phase 2 profile templates remain disabled and keep
 
 | Item | Status | Completion evidence required |
 | --- | --- | --- |
-| Interactive mock workflow | User reported successful mock operation | Exact commit, selected profile, interpreter/environment, operations performed, shutdown result, and limitations were not supplied and must not be inferred |
-| Real-device commissioning | Pending for every real driver | One device at a time, ignored local profile, exact environment/runtime/model/configuration, observed logs, cleanup, and independently verified final physical state |
+| Interactive mock workflow | User reported successful mock operation | Exact commit, selected workbook, interpreter/environment, operations performed, shutdown result, and limitations were not supplied and must not be inferred |
+| Real-device commissioning | Pending for every real driver | One device at a time, reviewed workbook, exact environment/runtime/model/configuration, observed logs, cleanup, and independently verified final physical state |
 | Office/PPT integration | Pending | User-executed disposable presentation/COM validation on the target Windows installation |
 | Stable promotion | Pending | Integrate the reviewed beta line into `release/main`, run the release validation matrix, and publish only through the maintained release workflow |
 | Real-driver runtime mutation | Pending and disabled | Per-driver busy/lifecycle/reference review, deterministic fake coverage, and user bench approval |

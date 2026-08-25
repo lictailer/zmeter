@@ -9,11 +9,11 @@ remain authoritative; close an item only with the validation named here.
 - **Current behavior:** `MainWindow` and `DeviceManager` expose guarded,
   session-only add, disconnect, and remove APIs. Only `mock_device` is approved,
   and there is no operator Add/Remove Device UI.
-- **Impact:** Real device sets are loaded from a profile and require an
-  application restart to add or remove. Editing JSON during a session has no
-  effect. Existing device panels may still provide their own manual
+- **Impact:** Real device sets are loaded from an Excel workbook and require an
+  application restart to add or remove. Editing the workbook during a session
+  has no effect. Existing device panels may still provide their own manual
   connect/disconnect controls without removing the device from the catalog.
-- **Safe workaround:** Edit an ignored local profile while ZMeter is closed and
+- **Safe workaround:** Edit the selected workbook while ZMeter is closed and
   restart with exactly the reviewed device set.
 - **Future fix:** Add an operator management dialog only after its workflow is
   approved; enable each real driver independently after busy, lifecycle-worker,
@@ -24,22 +24,22 @@ remain authoritative; close an item only with the validation named here.
 ## Real-device support is registered but not commissioned
 
 - **Current behavior:** Phase 1 and admitted Phase 2 real drivers are lazy and
-  startup-only. Tracked profiles keep them disabled and do not contain real
-  addresses, serials, or endpoints.
+  startup-only. The root workbook contains the reviewed device rows and connection
+  addresses.
 - **Impact:** Automated evidence proves configuration, laziness, adapters, and
   simulated behavior, not compatibility with a particular installation.
-- **Safe workaround:** Commission one device at a time from an ignored local
-  profile using [hardware_safety.md](hardware_safety.md).
+- **Safe workaround:** Commission one device at a time from a reviewed workbook
+  using [hardware_safety.md](hardware_safety.md).
 - **Future fix:** Record exact installation-specific bench results and address
   the driver-family backlog in [device_status.md](device_status.md).
-- **Validation:** Exact commit/profile/environment/runtime/model/limits, safe
+- **Validation:** Exact commit/workbook/environment/runtime/model/limits, safe
   operation, cleanup, application close, and independently verified final state.
 
 ## Ongoing device packages are not production integrations
 
 - **Current behavior:** Autofocus XZ, `auto_focus`, `auto_position`, and ANC300
   remain source packages but have no registry IDs.
-- **Impact:** They cannot be selected by a validated profile and are not claimed
+- **Impact:** They cannot be selected by a validated workbook and are not claimed
   safe for normal ZMeter startup or shutdown.
 - **Safe workaround:** Do not add ad hoc registry entries or import them from
   core/startup code.
@@ -137,7 +137,7 @@ remain authoritative; close an item only with the validation named here.
 ## Two compatibility behaviors are intentionally deferred
 
 - **Current behavior:** Enabled VISA widgets retain deferred automatic resource
-  discovery, and syntactically valid unknown profile channel names are silently
+  discovery, and syntactically valid unknown configured channel names are silently
   omitted from exposed allowlists.
 - **Impact:** Construction can initiate discovery after the event loop starts,
   and a channel typo may produce an absent channel instead of profile failure.
@@ -146,7 +146,7 @@ remain authoritative; close an item only with the validation named here.
 - **Future fix:** Treat explicit-only discovery and strict/warning channel
   validation as separate approved migrations with operator guidance.
 - **Validation:** Device/UI compatibility tests and migration tests for existing
-  local profiles.
+  workbooks.
 
 ## Array-valued getters are a separate project
 

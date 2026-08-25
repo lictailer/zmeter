@@ -19,12 +19,12 @@ The installer can:
 - verify the expected release ZIP, digest when available, manifest, tagged
   commit, channel, and environment-file hash;
 - extract a verified release into a new destination without modifying its
-  contents; or
+  contents, including its root `device_config.xlsx`; or
 - create/update the release-specific Conda environment with an explicit name.
 
 It requires explicit confirmation before mutation, does not merge or overwrite
 an existing deployment, and does not launch ZMeter, install hardware drivers,
-select a device profile, access hardware, or copy laboratory data.
+select a device workbook, access hardware, or copy laboratory data.
 
 For a non-modifying live check, run from the installer repository:
 
@@ -46,7 +46,8 @@ documentation.
 
 The ZMeter release workflow must produce the expected Windows ZIP and
 `deployment-manifest.json`, bind the artifact to the release tag/commit/channel,
-include the named environment YAML, and preserve the published source unchanged.
+include the named environment YAML and root device workbook, and preserve the
+published source unchanged.
 Stable promotion remains separate from beta integration and requires the
 maintained release validation process.
 
@@ -61,4 +62,4 @@ remains environment-specific:
 4. confirm cancellation, collision refusal, and visible failure handling;
 5. verify ZMeter and hardware are never launched or accessed by the installer.
 
-This validation does not authorize a laboratory profile or hardware operation.
+This validation does not authorize a laboratory workbook or hardware operation.

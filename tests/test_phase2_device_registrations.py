@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
-import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from dataclasses import replace
@@ -11,7 +9,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from core.device_management.config import ProfileValidationError, load_profile
 from core.device_management.manager import (
     DeviceManager,
     StartupDeviceStatus,
@@ -25,6 +22,7 @@ from core.device_management.models import (
 from core.device_management.registry import (
     DriverAdapter,
     DriverRegistry,
+    UnknownDriverError,
     build_default_registry,
 )
 
@@ -40,42 +38,16 @@ PHASE2_DRIVER_IDS = ("four9", "montana2", "opticool", "tlpm")
 
 
 class Phase2RegistrationTests(unittest.TestCase):
-    def test_tracked_phase2_profile_is_disabled_and_never_auto_connects(self):
-        repository_root = Path(__file__).resolve().parents[1]
-        registry = build_default_registry()
-        profile = load_profile(
-            repository_root / "config" / "profiles" / "phase2_lab.json",
-            driver_specs=registry.config_specs,
-            repository_root=repository_root,
-        )
-
-        self.assertEqual(profile.profile, "phase2_lab")
-        self.assertEqual(
-            tuple(device.driver for device in profile.devices), PHASE2_DRIVER_IDS
-        )
-        self.assertTrue(all(not device.enabled for device in profile.devices))
-        self.assertTrue(
-            all(not device.connect_on_start for device in profile.devices)
-        )
-
     def test_default_registry_adds_phase2_without_importing_devices(self):
         repository_root = Path(__file__).resolve().parents[1]
         script = r"""
 import sys
-from pathlib import Path
-from core.device_management.config import load_profile
 from core.device_management.registry import build_default_registry
 
 registry = build_default_registry()
 assert registry.driver_ids[-4:] == ("four9", "montana2", "opticool", "tlpm")
 for driver_id in registry.driver_ids[-4:]:
     assert driver_id in registry.config_specs
-profile = load_profile(
-    Path("config/profiles/phase2_lab.json"),
-    driver_specs=registry.config_specs,
-    repository_root=Path.cwd(),
-)
-assert all(not device.enabled for device in profile.devices)
 loaded = sorted(
     name for name in sys.modules
     if name == "devices" or name.startswith("devices.")
@@ -97,36 +69,13 @@ print("phase2 registry remained lazy")
         self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
         self.assertIn("remained lazy", result.stdout)
 
-    def test_montana2_schema_requires_an_explicit_address(self):
+    def test_phase2_schemas_use_one_optional_address(self):
         registry = build_default_registry()
-        payload = {
-            "schema_version": 1,
-            "profile": "montana_schema",
-            "paths": {"save": "./data", "backup": None},
-            "devices": [
-                {
-                    "id": "montana2",
-                    "driver": "montana2",
-                    "enabled": False,
-                    "connect_on_start": False,
-                    "connection": {},
-                    "scan_channels": {"set": None, "get": None},
-                }
-            ],
-        }
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            profile_path = root / "phase2.json"
-            profile_path.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaises(ProfileValidationError) as raised:
-                load_profile(
-                    profile_path,
-                    driver_specs=registry.config_specs,
-                    repository_root=root,
-                )
-
-        self.assertIn("connection.address is required", str(raised.exception))
+        for driver_id in PHASE2_DRIVER_IDS:
+            with self.subTest(driver_id=driver_id):
+                fields = registry.config_specs[driver_id].connection_fields
+                self.assertEqual(tuple(fields), ("address",))
+                self.assertFalse(fields["address"].required)
 
     def test_montana2_ui_retains_the_existing_default_address(self):
         repository_root = Path(__file__).resolve().parents[1]
@@ -139,43 +88,14 @@ print("phase2 registry remained lazy")
         self.assertIsNotNone(text)
         self.assertEqual(text.text, "136.167.55.165")
 
-    def test_four9_schema_validates_without_import_or_construction(self):
+    def test_four9_schema_is_side_effect_free(self):
         registry = build_default_registry()
-        payload = {
-            "schema_version": 1,
-            "profile": "phase2_schema",
-            "paths": {"save": "./data", "backup": None},
-            "devices": [
-                {
-                    "id": "four9_1",
-                    "driver": "four9",
-                    "enabled": False,
-                    "connect_on_start": False,
-                    "connection": {
-                        "host": "four9.invalid",
-                        "port": 5050,
-                        "socket_timeout_s": 2.5,
-                    },
-                    "scan_channels": {"set": None, "get": None},
-                }
-            ],
-        }
+        with mock.patch(
+            "core.device_management.registrations.import_module"
+        ) as import_device:
+            spec = registry.config_specs["four9"]
 
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            profile_path = root / "phase2.json"
-            profile_path.write_text(json.dumps(payload), encoding="utf-8")
-            with mock.patch(
-                "core.device_management.registrations.import_module"
-            ) as import_device:
-                profile = load_profile(
-                    profile_path,
-                    driver_specs=registry.config_specs,
-                    repository_root=root,
-                )
-
-        self.assertEqual(profile.devices[0].driver, "four9")
-        self.assertFalse(profile.devices[0].enabled)
+        self.assertEqual(tuple(spec.connection_fields), ("address",))
         import_device.assert_not_called()
 
     def test_four9_factory_configuration_and_startup_use_panel_worker_path(self):
@@ -212,21 +132,17 @@ print("phase2 registry remained lazy")
             driver="four9",
             enabled=True,
             connect_on_start=True,
-            connection={
-                "host": "four9.invalid",
-                "port": 5051,
-                "socket_timeout_s": 3.5,
-            },
+            connection={"address": "four9.invalid:5051"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
 
         registration.configure_instance(instance, dict(config.connection))
         self.assertEqual(logic.host, "four9.invalid")
         self.assertEqual(logic.port, 5051)
-        self.assertEqual(logic.socket_timeout_s, 3.5)
+        self.assertEqual(logic.socket_timeout_s, 10.0)
         self.assertEqual(hardware.host, "four9.invalid")
         self.assertEqual(hardware.port, 5051)
-        self.assertEqual(hardware.socket_timeout_s, 3.5)
+        self.assertEqual(hardware.socket_timeout_s, 10.0)
         instance.host_lineEdit.setText.assert_called_once_with("four9.invalid")
         instance.port_spinBox.setValue.assert_called_once_with(5051)
 
@@ -254,7 +170,7 @@ print("phase2 registry remained lazy")
             driver="four9",
             enabled=True,
             connect_on_start=False,
-            connection={"host": "four9.invalid", "port": 5050},
+            connection={"address": "four9.invalid:5050"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
         adapter = DriverAdapter(registration, config, instance)
@@ -329,7 +245,7 @@ print("phase2 registry remained lazy")
                         driver=driver_id,
                         enabled=True,
                         connect_on_start=True,
-                        connection={},
+                        connection={"address": ""},
                         scan_channels=ChannelFilters(
                             setters=None, getters=None
                         ),
@@ -351,7 +267,7 @@ print("phase2 registry remained lazy")
                 driver="opticool",
                 enabled=True,
                 connect_on_start=True,
-                connection={},
+                connection={"address": ""},
                 scan_channels=ChannelFilters(setters=None, getters=None),
             ),
             opticool,
@@ -392,11 +308,7 @@ print("phase2 registry remained lazy")
             driver="four9",
             enabled=True,
             connect_on_start=True,
-            connection={
-                "host": "four9.invalid",
-                "port": 5050,
-                "socket_timeout_s": 0.1,
-            },
+            connection={"address": "four9.invalid:5050"},
             scan_channels=ChannelFilters(setters=None, getters=None),
         )
         profile = ProfileConfig(
@@ -404,7 +316,7 @@ print("phase2 registry remained lazy")
             profile="phase2",
             paths=ProfilePaths(save=Path("data"), backup=None),
             devices=(config,),
-            source_path=Path("phase2.json"),
+            source_path=Path("device_config.xlsx"),
             repository_root=Path.cwd(),
         )
 
@@ -452,7 +364,7 @@ print("phase2 registry remained lazy")
                 driver="opticool",
                 enabled=True,
                 connect_on_start=False,
-                connection={},
+                connection={"address": ""},
                 scan_channels=ChannelFilters(setters=None, getters=None),
             ),
             DeviceConfig(
@@ -460,7 +372,7 @@ print("phase2 registry remained lazy")
                 driver="tlpm",
                 enabled=True,
                 connect_on_start=False,
-                connection={},
+                connection={"address": ""},
                 scan_channels=ChannelFilters(setters=None, getters=None),
             ),
         )
@@ -469,7 +381,7 @@ print("phase2 registry remained lazy")
             profile="phase2_best_effort",
             paths=ProfilePaths(save=Path("data"), backup=None),
             devices=devices,
-            source_path=Path("phase2.json"),
+            source_path=Path("device_config.xlsx"),
             repository_root=Path.cwd(),
         )
 
@@ -490,35 +402,11 @@ print("phase2 registry remained lazy")
         registry = build_default_registry()
         for driver_id in DEFERRED_DRIVER_IDS:
             with self.subTest(driver_id=driver_id):
-                payload = {
-                    "schema_version": 1,
-                    "profile": "deferred",
-                    "paths": {"save": "./data", "backup": None},
-                    "devices": [
-                        {
-                            "id": f"{driver_id}_1",
-                            "driver": driver_id,
-                            "enabled": False,
-                            "connect_on_start": False,
-                            "connection": {},
-                            "scan_channels": {"set": None, "get": None},
-                        }
-                    ],
-                }
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    profile_path = root / "deferred.json"
-                    profile_path.write_text(json.dumps(payload), encoding="utf-8")
-                    with self.assertRaises(ProfileValidationError) as raised:
-                        load_profile(
-                            profile_path,
-                            driver_specs=registry.config_specs,
-                            repository_root=root,
-                        )
-
-                self.assertIn(
-                    f"driver '{driver_id}' is not registered", str(raised.exception)
-                )
+                with self.assertRaisesRegex(
+                    UnknownDriverError,
+                    f"driver '{driver_id}' is not registered",
+                ):
+                    registry.registration(driver_id)
 
 
 if __name__ == "__main__":

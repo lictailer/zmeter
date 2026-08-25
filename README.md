@@ -20,9 +20,9 @@ The project is used by a small number of laboratories and maintained by a small 
 
 ## Platform and prerequisites
 
-ZMeter currently targets 64-bit Windows. The maintained environment file pins Python 3.12 and the main Python dependencies, including PyQt6, NumPy, SciPy, PyVISA, NI-DAQmx Python support, `python-pptx`, and `pywin32`.
+ZMeter currently targets 64-bit Windows. The maintained environment file pins Python 3.12 and the main Python dependencies, including PyQt6, NumPy, SciPy, PyVISA, NI-DAQmx Python support, `openpyxl`, `python-pptx`, and `pywin32`.
 
-Required for the mock-only setup:
+Required for the base application setup:
 
 - 64-bit Windows;
 - [Git for Windows](https://git-scm.com/install/windows);
@@ -36,7 +36,7 @@ Optional components depend on the selected laboratory equipment:
 - vendor runtimes for device-specific modules such as Thorlabs or cryostat controllers;
 - desktop Microsoft PowerPoint for PPT export; the implementation controls PowerPoint through `win32com`.
 
-Do not install every vendor package by default. Start with the mock configuration, then add only the drivers required by the intended laboratory profile after checking device, driver, Windows, and Python compatibility.
+Do not install every vendor package by default. Add only the drivers required by the intended laboratory configuration after checking device, driver, Windows, and Python compatibility.
 
 Maintained VISA devices share one lazy `VisaRuntime` manager while retaining
 exclusive instrument sessions. K10CR1 and BBD30X share one lazy,
@@ -82,46 +82,41 @@ python -c "import sys; print(sys.executable)"
 
 The expected Python series is 3.12; the current environment file pins Python 3.12.12.
 
-## Safe first launch with mock devices
+## Launching ZMeter
 
-The following procedure exercises only the simulated devices in the checked-in default profile.
+The checked-in `device_config.xlsx` workbook is the default startup configuration. Review its `Devices` sheet before launching because enabled rows with `connect_on_start` set to `TRUE` request a connection.
 
-1. Review `config/profiles/mock.json` and confirm that it enables only the two `mock_device` entries with `connect_on_start` set to `false`.
-2. Activate `zmeter_May2026`.
-3. From the repository root, launch:
-
-   ```powershell
-   python start_zmeter.py
-   ```
-
-4. In each mock-device window, keep the default mock address and click **Connect**.
-5. Use the Scan List window to create a scan. Select mock-device setter/getter channels, use a small number of points, and configure a line plot if desired.
-6. Save test output only under a disposable local directory. Do not point a mock run at a laboratory measurement or backup folder.
-7. Close ZMeter through the main window so the normal stop and cleanup path runs.
-
-The mock device offers direct and ramped A/B setters, A/B and random getters, deterministic fault injection, optional range rejection, and a bounded command log. It does not use PyVISA or communicate with physical equipment.
-
-To select a different reviewed local profile, pass its repository-relative or absolute path explicitly:
+1. Activate `zmeter_May2026`.
+2. From the repository root, launch:
 
 ```powershell
-python start_zmeter.py --profile config/profiles/my-lab.local.json
+python start_zmeter.py
 ```
 
-An invalid selected profile fails visibly and is never replaced silently with the mock profile.
+To select a different reviewed workbook, pass its repository-relative or absolute path explicitly:
+
+```powershell
+python start_zmeter.py --profile my-lab.xlsx
+```
+
+A missing, unreadable, or structurally invalid workbook fails visibly and is never replaced silently with the default. A blank or incorrect address and a connection failure are nonfatal; the corresponding panel remains available for manual correction unless the driver itself cannot be recognized.
 
 ## Configuring a laboratory setup
 
-Session configuration is selected by a validated JSON profile. It includes:
+Session configuration is selected by the validated `device_config.xlsx` workbook. Each device row includes:
 
-- stable labels for each device instance;
-- reviewed registry driver IDs and declared connection fields;
-- whether an enabled device may connect during startup;
-- optional setter/getter channel filters;
-- local measurement and backup paths.
+- a stable `id` and reviewed `driver` ID;
+- `enabled` and `connect_on_start` flags;
+- one generic text-formatted `address` value; and
+- optional comma-separated `scan set` and `scan get` channel filters.
 
-`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before a profile can select it. Disabled entries never construct or connect a device. The checked-in profiles keep real devices disabled. The registry recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`, plus the Phase 2 IDs `four9`, `montana2`, `opticool`, and `tlpm`; real devices require an ignored local profile and user-executed commissioning. The current [device readiness matrix](documents/device_status.md) records registration, validation, accepted limitations, and future work.
+Driver IDs are matched without regard to letter case. The `address` column must remain Excel Text so serials such as `00000000` are preserved. The displayed `config check` column is a review aid; runtime validation reads the source columns directly.
 
-Startup is best effort after profile validation. ZMeter shows broad loading
+`start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before the workbook can select it. Disabled entries never construct or connect a device. The registry recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`, plus the Phase 2 IDs `four9`, `montana2`, `opticool`, and `tlpm`. The current [device readiness matrix](documents/device_status.md) records registration, validation, accepted limitations, and future work.
+
+The initial data directory is fixed in code as `data/`, the initial PPT file is `data/log.pptx`, and backup is initially blank. Operators can continue changing the data, PPT, and backup fields in the Main Window for the current session.
+
+Startup is best effort after workbook validation. ZMeter shows broad loading
 stages, skips an enabled device that cannot be constructed, and continues after
 a requested connection fails. The Main Window opens with every successfully
 constructed device and includes a read-only, timestamped System Log. Disabled
@@ -130,8 +125,8 @@ sanitized. Asynchronous
 Keithley24xx, BBD30X, K10CR1, Four9, Montana2, OptiCool, and TLPM requests may still be completing when it opens;
 use the corresponding device panel for the final result and manual retry.
 
-Runtime device changes are session-only and do not rewrite the selected JSON
-profile. The manager can add, disconnect, or remove only a driver whose
+Runtime device changes are session-only and do not rewrite the selected Excel
+workbook. The manager can add, disconnect, or remove only a driver whose
 registration explicitly opts into runtime mutation and provides a reviewed
 busy-state probe; the checked-in registry currently grants that capability only
 to `mock_device`. A change is refused while a scan, queue, manual operation,
@@ -139,15 +134,15 @@ router request, device call, or device-owned job is active, or while a stored
 scan/manual/artificial configuration still references a device proposed for
 removal. Successful changes rebuild device buttons and every channel/catalog
 consumer together. A removed device's older callable handles fail closed, and
-the next launch still uses the unchanged profile.
+the next launch still uses the unchanged workbook.
 
 Before enabling hardware:
 
-1. Copy `config/profiles/example_lab.json` to an ignored `*.local.json` profile without changing the checked-in mock default.
+1. Edit the workbook only while ZMeter is closed and review every enabled and startup-connect flag.
 2. Confirm the exact instrument model, interface, address, units, limits, and required vendor runtime.
 3. Verify that each enabled device implements coherent connect, scan start/stop, force-stop, disconnect, termination, and close behavior.
 4. Review `scan_range_limits.json` and ensure its device labels match the configured equipment labels.
-5. Keep addresses, serial numbers, and lab paths out of shared core modules.
+5. Keep addresses and serial numbers in the workbook rather than shared core modules.
 6. Have the user review and execute a controlled bench procedure before relying on the configuration for measurements.
 
 Real-hardware operation and validation must be performed directly by the user. Coding agents may prepare code and an exact proposed procedure, but must never execute commands that discover, connect to, configure, move, source, trigger, write to, reset, disconnect, or otherwise affect laboratory instruments.
@@ -166,7 +161,7 @@ The flat `devices/` package contains integrations or experimental work for sever
 | Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X` |
 | Positioning/autofocus | `auto_focus`, `auto_position`, `autofocus_xuguo`, `ANC300` |
 
-Treat this as a source inventory, not a compatibility or validation matrix. Check the current module, its dependencies, and its lifecycle behavior before selecting it for a lab profile.
+Treat this as a source inventory, not a compatibility or validation matrix. Check the current module, its dependencies, and its lifecycle behavior before selecting it in the workbook.
 
 See [reconstruction status](documents/reconstruction_status.md) for the completed
 structural update and remaining release/commissioning gates, and
@@ -236,10 +231,10 @@ From the standalone installer repository, maintainers can run `python deploy_zme
 ## Project layout
 
 ```text
-start_zmeter.py                 Thin profile-selecting application entry point
-config/profiles/                Checked mock profile and ignored local-profile boundary
+start_zmeter.py                 Thin workbook-selecting application entry point
+device_config.xlsx              Default device configuration beside the launcher
 core/                           Scan UI, queue, execution, plotting, routing, and persistence
-core/device_management/         Profile loading, reviewed registry, manager ownership
+core/device_management/         Workbook loading, reviewed registry, manager ownership
 core/shared_runtime/            Shared VISA/Kinesis ownership and local vendor manifests
 devices/                        Flat package namespace for device integrations
 devices/mockDevice/             Hardware-independent simulated instrument and its tests
