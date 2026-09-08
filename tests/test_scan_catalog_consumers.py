@@ -48,9 +48,13 @@ class ScanCatalogConsumerTests(unittest.TestCase):
     def tearDown(self):
         for widget in self.widgets:
             if isinstance(widget, ScanList):
+                if widget.queue_model.is_run_active:
+                    current = widget.queue_model.current_entry
+                    if current is not None:
+                        widget.queue_model.finish_current(current.entry_id)
+                    widget.queue_model.request_stop_now()
+                    widget.queue_model.claim_next()
                 widget.shutdown(timeout_ms=500)
-                widget.logic.current_worker = None
-                widget.logic.workers = []
         for widget in reversed(self.widgets):
             widget.close()
             widget.deleteLater()
@@ -122,12 +126,11 @@ class ScanCatalogConsumerTests(unittest.TestCase):
         )
 
         initial = scan_list.list_available.get_widgets()
-        scan_list.list_queue.layout.addWidget(initial[1])
+        scan_list.list_queue.add_item(initial[3])
+        scan_list.list_queue.add_item(initial[1])
+        self.assertTrue(scan_list.queue_model.begin_run())
+        self.assertIs(scan_list.queue_model.claim_next().item, initial[3])
         scan_list.list_past.layout.addWidget(initial[2])
-        initial[3].setParent(None)
-        self.widgets.append(initial[3])
-        scan_list.logic.current_worker = initial[3]
-        scan_list.logic.workers = [initial[1], initial[3]]
 
         new_setters = {
             "old_device": ["out"],
@@ -263,6 +266,12 @@ class ScanCatalogConsumerTests(unittest.TestCase):
         scan_list._queue_completion_delivered = True
         self.assertNotIn("queue UI completion", scan_list.catalog_mutation_blockers())
 
+        scan_list.queue_model.add_pending(object())
+        self.assertTrue(scan_list.queue_model.begin_run())
+        self.assertIn("queue thread", scan_list.catalog_mutation_blockers())
+        scan_list.queue_model.request_stop_now()
+        self.assertIsNone(scan_list.queue_model.claim_next())
+
     def test_reference_report_covers_live_scans_plots_and_all_manual_locations(self):
         device = "device_with_underscores"
         prefix_device = "device"
@@ -309,20 +318,19 @@ class ScanCatalogConsumerTests(unittest.TestCase):
         }
 
         available, queued, past, active = scan_list.list_available.get_widgets()
-        scan_list.list_queue.layout.addWidget(queued)
+        scan_list.list_queue.add_item(active)
+        scan_list.list_queue.add_item(queued)
         scan_list.list_past.layout.addWidget(past)
-        active.setParent(None)
-        self.widgets.append(active)
         detached = ScanItem(
             name="detached worker",
             info=_scan_info("detached worker"),
             setter_equipment_info=setters,
             getter_equipment_info=getters,
         )
-        detached.setParent(None)
-        self.widgets.extend((detached.scan, detached))
-        scan_list.logic.current_worker = active
-        scan_list.logic.workers = [queued, active, detached]
+        self.widgets.append(detached.scan)
+        scan_list.list_queue.add_item(detached)
+        self.assertTrue(scan_list.queue_model.begin_run())
+        self.assertIs(scan_list.queue_model.claim_next().item, active)
 
         available.scan.all_level_setting.all_level_info = {
             **_one_level_model(
@@ -384,7 +392,6 @@ class ScanCatalogConsumerTests(unittest.TestCase):
                 "queue",
                 "past",
                 "active",
-                "queue_worker",
                 "manual",
             },
             {use.collection for use in uses},
@@ -395,7 +402,7 @@ class ScanCatalogConsumerTests(unittest.TestCase):
         )
         self.assertNotIn("past", {use.collection for use in blocking_uses})
         self.assertTrue(
-            {"available", "queue", "active", "queue_worker", "manual"}
+            {"available", "queue", "active", "manual"}
             <= {use.collection for use in blocking_uses}
         )
         self.assertEqual(
@@ -420,7 +427,7 @@ class ScanCatalogConsumerTests(unittest.TestCase):
         detached_uses = [
             use for use in uses if use.channel == channels["detached"]
         ]
-        self.assertEqual([use.collection for use in detached_uses], ["queue_worker"])
+        self.assertEqual([use.collection for use in detached_uses], ["queue"])
 
         removed = scan_list.find_channel_references(
             removed_setters={channels["out"]},

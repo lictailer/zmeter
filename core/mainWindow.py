@@ -69,6 +69,7 @@ class _NullActivityReservation:
 #Select Virtual Environment under zmeter_venv\.venv\Scripts\python.exe
 class MainWindow(QtWidgets.QWidget):
     sig_system_message = QtCore.pyqtSignal(str, str)
+    sig_scan_range_log = QtCore.pyqtSignal(str, str)
     SCAN_RANGE_CONFIG_FILENAME = "scan_range_limits.json"
     SYSTEM_LOG_LEVELS = frozenset({"INFO", "WARNING", "ERROR"})
 
@@ -87,6 +88,7 @@ class MainWindow(QtWidgets.QWidget):
         uic.loadUi(r"core/ui/mainwindow.ui", self)
         configure_device_log(self.system_log)
         self.sig_system_message.connect(self._append_system_message)
+        self.sig_scan_range_log.connect(self._append_scan_range_log)
         self.info = info
         self.startup_report = startup_report
         self._render_startup_report(startup_report)
@@ -973,6 +975,10 @@ class MainWindow(QtWidgets.QWidget):
             self.scan_range_window.set_status(message)
 
     def _log_scan_range(self, level, message):
+        self.sig_scan_range_log.emit(str(level), str(message))
+
+    @QtCore.pyqtSlot(str, str)
+    def _append_scan_range_log(self, level, message):
         if hasattr(self, "scan_range_window"):
             self.scan_range_window.append_log(level, message)
 

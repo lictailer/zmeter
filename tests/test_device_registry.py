@@ -65,14 +65,18 @@ def fake_registration(**overrides):
     return DriverRegistration(**values)
 
 
-def write_mock_profile_workbook(directory: Path) -> Path:
+def write_mock_profile_workbook(
+    directory: Path,
+    *,
+    driver: str = "mock_device",
+) -> Path:
     path = directory / "mock.xlsx"
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "Devices"
     worksheet.append(list(DEVICE_HEADERS))
     worksheet.append(
-        ["mock_device_1", "mock_device", True, False, "MOCK::1", None, None, None]
+        ["mock_device_1", driver, True, False, "MOCK::1", None, None, None]
     )
     workbook.save(path)
     workbook.close()
@@ -93,6 +97,8 @@ assert registry.driver_ids == (
     "bbd30x", "k10cr1", "four9", "montana2", "opticool", "tlpm",
 )
 assert "mock_device" in registry.config_specs
+assert "mockDevice" not in registry.config_specs
+assert registry.config_specs["mock_device"].aliases == ("mockDevice",)
 watched = (
     "devices", "pyvisa", "clr", "nidaqmx", "PyDAQmx",
     "opticool", "sr830", "sr860", "tlpm",
@@ -126,6 +132,60 @@ print("registry lookup remained lazy")
             registry.register(registration)
         with self.assertRaises(UnknownDriverError):
             registry.registration("arbitrary.module:Class")
+
+    def test_aliases_cannot_shadow_another_registered_driver(self):
+        registry = DriverRegistry(
+            (
+                fake_registration(
+                    config_spec=DriverConfigSpec(
+                        driver_id="primary_driver",
+                        connection_fields={},
+                        aliases=("legacyDriver",),
+                    ),
+                ),
+            )
+        )
+        conflicting = fake_registration(
+            config_spec=DriverConfigSpec(
+                driver_id="legacydriver",
+                connection_fields={},
+            ),
+        )
+
+        with self.assertRaises(DuplicateDriverError):
+            registry.register(conflicting)
+
+    def test_explicit_mock_alias_resolves_to_one_canonical_registration(self):
+        registry = build_default_registry()
+        canonical = registry.registration("mock_device")
+
+        self.assertIs(registry.registration("mockDevice"), canonical)
+        self.assertEqual(canonical.driver_id, "mock_device")
+        self.assertNotIn("mockDevice", registry.driver_ids)
+        self.assertNotIn("mockDevice", registry.config_specs)
+        with self.assertRaises(UnknownDriverError):
+            registry.registration("mock-device")
+
+    def test_default_registry_profile_alias_loads_as_canonical_without_construction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository_root = Path(directory).resolve()
+            profile_path = write_mock_profile_workbook(
+                repository_root,
+                driver="mockDevice",
+            )
+            registry = build_default_registry()
+
+            profile = load_profile(
+                profile_path,
+                driver_specs=registry.config_specs,
+                repository_root=repository_root,
+            )
+
+        self.assertEqual(profile.devices[0].driver, "mock_device")
+        self.assertIs(
+            registry.registration(profile.devices[0].driver),
+            registry.registration("mockDevice"),
+        )
 
     def test_factory_receives_only_declared_runtime_services(self):
         selected_visa = object()

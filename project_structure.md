@@ -14,6 +14,7 @@ start_zmeter.py
   -> reviewed DriverRegistry -> DeviceManager
   -> core.mainWindow.MainWindow
        -> core.scanlist.ScanList
+            -> core.queue_model.LiveQueueModel
             -> core.scan.Scan
                  -> core.scan_logic.ScanLogic
 ```
@@ -29,7 +30,8 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, and lifecycle reports |
 | `core/device_catalog.py` | Immutable rebuilt channel/catalog snapshots and typed refusal errors |
 | `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks, scan coordination, and shutdown barrier |
-| `core/scanlist.py` | Available/queued/manual/past items, sequential queue execution, activity reservations, and runtime-mutation seals |
+| `core/scanlist.py` | Available/queue/manual/past item widgets, queue orchestration, per-item manual-set workers, UI state transitions, and runtime-mutation seals |
+| `core/queue_model.py` | Thread-safe live queue entries with stable IDs, ordered pending mutations, current-item ownership, and atomic run completion |
 | `core/scan.py` | Scan editor/window, plot updates, run logging, primary/recovery JSON, save/load/PPT/autosave UI integration |
 | `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing under whole-request manager leases |

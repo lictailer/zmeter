@@ -31,6 +31,15 @@ On stop or failure, preserve the last confirmed completed waypoint. Do not repor
 
 Stop handling must be idempotent and safe when disconnected, partially initialized, already stopped, or invoked during shutdown. Do not confuse a software flag with verified physical safe state.
 
+A queued manual setter runs outside the GUI thread, so Queue Stop remains
+responsive and preserves every unstarted entry. Stop is cooperative: it blocks
+the next queue item but does not preempt an in-flight setter. The queue waits
+for that setter to return or for the operator to use an existing device Abort
+action. Never use `QThread.terminate()` or introduce an unreviewed generic or
+device timeout to force completion; shutdown must retain its activity barrier
+rather than tear down hardware beneath the worker. This core behavior does not
+change OptiCool or any other device's limits, timeout, or abort contract.
+
 ## Range rejection and skipped measurements
 
 Global range rejection and artificial-channel rejection can suppress a write/read and store `NaN`. Artificial channels may coordinate two underlying channels and ramp through waypoints; a rejected higher-level point normally suppresses lower recursion, except when the immediately lower level completes the paired artificial target.

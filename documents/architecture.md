@@ -17,6 +17,7 @@ start_zmeter.py
   -> MainWindow
        -> device discovery and command router
        -> ScanList
+            -> LiveQueueModel
             -> Scan
                  -> ScanLogic
 ```
@@ -33,9 +34,9 @@ start_zmeter.py
   runtime remain retained until the vendor call actually returns. Kinesis
   validation, `clr`, DLL loading, and device connections remain explicit.
 - `MainWindow` turns an ordered manager snapshot into one immutable `DeviceCatalogSnapshot`. Runtime changes use a manager-issued, single-use proposal: the UI first performs side-effect-free idle/reference preflight, lifecycle work then runs, and the exact committed generation is acknowledged synchronously before one informational publication. Callable maps, display choices, scan/manual menus, artificial-channel choices, active range-limit view, device buttons, and router catalog are reconciled as one UI-thread transaction. A consumer failure restores the preceding snapshot; a destructive change that cannot be acknowledged leaves calls and controls sealed until exact reconciliation succeeds.
-- Catalog replacement is allowed only while scan and queue work, deferred output finalization, and queue UI completion are idle. References from executable available/queued/manual/active work, detached queue workers, artificial-channel mappings, and device-owned state block removal. Completed Past items and the available template remain diagnostic references but do not block; definitions are never silently rewritten.
-- Runtime add/disconnect/remove is session-only and never edits the selected workbook. Admission is serialized with scan, queue, manual, whole-router-request, individual device-call, and reviewed device-busy reservations. Per-record generations keep retained callables valid across unrelated changes while making handles to a removed and later re-added label stale. Only the mock registration is currently approved for runtime mutation; [known_issues.md](known_issues.md) records the operator-UI and real-driver eligibility gap.
-- `ScanList` owns available, queued, manual, and completed items. Its worker runs queue items sequentially and exposes stop-now and stop-after-current behavior.
+- Catalog replacement is allowed only while scan and queue work, deferred output finalization, and queue UI completion are idle. References from executable available/queued/manual/current work, the live queue model, artificial-channel mappings, and device-owned state block removal. Completed Past items and the available template remain diagnostic references but do not block; definitions are never silently rewritten.
+- Runtime add/disconnect/remove is session-only and never edits the selected workbook. Admission is serialized with scan, queue, whole-router-request, individual device-call, and reviewed device-busy reservations. One outer queue activity lease covers the complete run, including queued manual setters; those setters do not acquire a nested manual lease. Per-record generations keep retained callables valid across unrelated changes while making handles to a removed and later re-added label stale. Only the mock registration is currently approved for runtime mutation; [known_issues.md](known_issues.md) records the operator-UI and real-driver eligibility gap.
+- `ScanList` owns available, queued, manual, and completed widgets. `LiveQueueModel` is the authoritative stable-ID state for pending/current queue entries; the queue worker consumes it sequentially and exposes stop-now and stop-after-current behavior.
 - `Scan` owns one scan editor/window, plot widgets, run log, persistence UI, and its `ScanLogic` worker.
 - `ScanLogic` owns scan traversal, per-level data arrays, grouped scan I/O, timing, pause/stop checkpoints, progress, and autosave triggers.
 
@@ -74,9 +75,15 @@ other.
 
 ## Thread boundaries
 
-The Qt GUI thread owns widgets, screen capture, plot presentation, dialogs, GUI-driven save/export finalization, device construction, catalog commit acknowledgement, and final device-widget close/delete. Runtime connection and termination callbacks execute on lifecycle workers and report back only after those workers stop. `ScanLogic` is a `QThread`; it performs scan traversal and delegates per-device reads/writes to `ThreadPoolExecutor` workers. The queue also has a worker thread. Individual devices may provide their own worker threads for long operations. Application shutdown first closes call admission, then waits for direct/queued workers plus deferred GUI output finalizers, and finally performs asynchronous ordered device teardown before shared runtimes are released; its deadline is cooperative for a GUI callback already executing.
+The Qt GUI thread owns widgets, screen capture, plot presentation, dialogs, GUI-driven save/export finalization, device construction, catalog commit acknowledgement, and final device-widget close/delete. Runtime connection and termination callbacks execute on lifecycle workers and report back only after those workers stop. `ScanLogic` is a `QThread`; it performs scan traversal and delegates per-device reads/writes to `ThreadPoolExecutor` workers. The queue has its own worker, and each queued manual setter executes on a dedicated per-item `QThread` while the queue waits for its result. Individual devices may provide their own worker threads for long operations. Application shutdown first closes call admission, then waits for direct/queued/manual workers plus deferred GUI output finalizers, and finally performs asynchronous ordered device teardown before shared runtimes are released; its deadline is cooperative for work already executing.
 
 Do not block the GUI thread with device I/O, polling loops, ramps, or long waits. Cross-thread UI updates must use signals/slots. Device code must document thread ownership and serialize access if the transport is not safe for concurrent calls.
+
+## Queue and manual-item flow
+
+`LiveQueueModel` owns ordered `QueueEntry` records, stable IDs, and `QueueItemState` transitions. Pending add, remove, reorder, and manual-value commit operations update that model during an active run and therefore change the remaining execution order. The current entry is removed from pending order and is locked against editing, reordering, and deletion; terminal manual items are read-only but remain valid immutable clone sources for replay. The Qt lists render model state rather than acting as a second execution snapshot. If a pending scan was already started manually when claimed, the queue adopts that run, clears restart intent, and waits for its GUI output finalization before advancing.
+
+Taking the next entry or atomically closing an empty active run occurs under the same model lock. An addition committed before that close joins the active run; an addition committed afterward remains pending for the next Start. Stop is cooperative: it remains responsive during a manual setter, prevents another item from starting, and preserves pending order, but waits for the current setter to return or for an existing device Abort action. Core never hard-terminates the manual `QThread` and adds no device timeout. This redesign changes neither device/OptiCool behavior nor scan persistence.
 
 ## Device discovery and command routing
 
@@ -115,7 +122,7 @@ The scan editor constructs ordered level dictionaries and setting arrays. At sta
 | Startup devices, labels, addresses, or filters | root `device_config.xlsx` or explicitly selected workbook, plus a reviewed registry entry when needed | README, environment, safety |
 | Launcher/workbook-selection behavior | `start_zmeter.py` | configuration validation and shutdown tests |
 | App ownership, discovery, routing, shutdown | `core/mainWindow.py`, `core/device_command_router.py` | device contract, safety |
-| Queue behavior | `core/scanlist.py` | scan lifecycle and shutdown |
+| Queue behavior | `core/scanlist.py`, `core/queue_model.py` | scan lifecycle and shutdown |
 | Scan UI, plots, save/load | `core/scan.py`, plot/level widgets | scan engine, data format |
 | Traversal, timing, grouped I/O | `core/scan_logic.py` | scan tests and safety |
 | Device behavior | target device widget/logic/hardware | device README and contract |

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -77,20 +78,26 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
         self.assertIn("UPPER(TRIM(C2&\"\"))", formula)
         self.assertIn("UPPER(TRIM(D2&\"\"))", formula)
         self.assertIn("NOW()>=0", formula)
-        self.assertIn("'Guide'!$D$4:$D$19", formula)
+        self.assertRegex(
+            formula,
+            re.compile(r"(?:'Guide'|Guide)!\$D\$4:\$D\$20"),
+        )
         self.assertIn("UNKNOWN DRIVER", formula)
         self.assertIn("INVALID CONNECT FLAG", formula)
-        self.assertEqual(values_workbook["Devices"]["H2"].value, "AUTO-CONNECT")
+        self.assertEqual(values_workbook["Devices"]["H2"].value, "DISABLED")
         self.assertEqual(values_workbook["Devices"]["H3"].value, "DISABLED")
+        self.assertEqual(values_workbook["Devices"]["H22"].value, "ENABLED")
+        self.assertEqual(values_workbook["Devices"]["H23"].value, "ENABLED")
 
         accepted = {
             formula_workbook["Guide"].cell(row=row, column=4).value
-            for row in range(4, 20)
+            for row in range(4, 21)
         }
         self.assertEqual(
             accepted,
             {
                 "mock_device",
+                "mockDevice",
                 "ni6423",
                 "nidaq",
                 "pem100",

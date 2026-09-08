@@ -30,7 +30,12 @@ from core.device_management import (
 from core.mainWindow import MainWindow
 from core.scan import Scan
 from core.scan_info import ScanInfo
-from core.scanlist import ManualSetItem, ScanList
+from core.scanlist import (
+    ManualSetItem,
+    ScanList,
+    ScanListShutdownInProgressError,
+)
+from core.queue_model import LiveQueueModel
 from core.shared_runtime import RuntimeServices
 from tests.excel_config_fixture import write_test_device_config
 
@@ -93,6 +98,35 @@ class RuntimeDeviceUiTests(unittest.TestCase):
         for _ in range(4):
             self.app.processEvents()
         return operation.result
+
+    def test_scan_range_log_from_worker_is_marshalled_to_gui_thread(self):
+        gui_thread_id = threading.get_ident()
+        observed = []
+
+        def observe(level, message):
+            observed.append((threading.get_ident(), level, message))
+
+        with mock.patch.object(
+            self.window.scan_range_window,
+            "append_log",
+            side_effect=observe,
+        ):
+            worker = threading.Thread(
+                target=self.window._log_scan_range,
+                args=("WARNING", "worker log"),
+            )
+            worker.start()
+            worker.join(1.0)
+            self.assertFalse(worker.is_alive())
+            deadline = QtCore.QDeadlineTimer(1_000)
+            while not observed and not deadline.hasExpired():
+                self.app.processEvents()
+                QtCore.QThread.msleep(1)
+
+        self.assertEqual(
+            observed,
+            [(gui_thread_id, "WARNING", "worker log")],
+        )
 
     @staticmethod
     def _request(action, target=None, channel=None, value=None):
@@ -883,7 +917,7 @@ class RuntimeManualSealTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
-    def test_queued_manual_slot_silently_skips_after_shutdown_seal(self):
+    def test_queued_manual_slot_refuses_after_shutdown_seal(self):
         scan_list = SimpleNamespace(
             _shutdown_sealed=False,
             runtime_mutation_sealed=False,
@@ -896,12 +930,16 @@ class RuntimeManualSealTests(unittest.TestCase):
         )
         item = ManualSetItem("default_wait", 0.0, main_window=main_window)
         try:
-            QtCore.QTimer.singleShot(0, item._run_manual_set_from_queue)
+            QtCore.QTimer.singleShot(0, item._start_manual_set_from_queue)
             scan_list._shutdown_sealed = True
             self.app.processEvents()
             main_window.reserve_runtime_activity.assert_not_called()
             main_window.write_info.assert_not_called()
             scan_list._log_warning.assert_called_once()
+            self.assertIsInstance(
+                item._manual_start_error,
+                ScanListShutdownInProgressError,
+            )
         finally:
             item.deleteLater()
             self.app.processEvents()
@@ -915,11 +953,13 @@ class RuntimeManualSealTests(unittest.TestCase):
             ),
             start=mock.Mock(),
         )
+        queue_model = LiveQueueModel()
+        queue_model.add_pending(object())
         target = SimpleNamespace(
             _shutdown_sealed=False,
             _runtime_mutation_sealed=False,
             logic=logic,
-            list_queue=SimpleNamespace(get_widgets=lambda: [object()]),
+            queue_model=queue_model,
             main_window=SimpleNamespace(
                 reserve_runtime_activity=mock.Mock(return_value=reservation)
             ),
