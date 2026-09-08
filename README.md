@@ -110,7 +110,7 @@ Session configuration is selected by the validated `device_config.xlsx` workbook
 - one generic text-formatted `address` value; and
 - optional comma-separated `scan set` and `scan get` channel filters.
 
-Driver IDs are matched without regard to letter case. The `address` column must remain Excel Text so serials such as `00000000` are preserved. The displayed `config check` column is a review aid; runtime validation reads the source columns directly.
+Driver IDs and their explicitly reviewed aliases are matched without regard to letter case. The mock package name `mockDevice` is accepted as a workbook alias and normalized to the stable registry ID `mock_device`; similar spellings are not accepted automatically. The `address` column must remain Excel Text so serials such as `00000000` are preserved. The displayed `config check` column is a review aid; runtime validation reads the source columns directly.
 
 `start_zmeter.py` contains no device imports, addresses, serials, or channel lists. A driver must have a reviewed code-side registry entry before the workbook can select it. Disabled entries never construct or connect a device. The registry recognizes the startup-only Phase 1 IDs `ni6423`, `nidaq`, `pem100`, `sp150`, `hp34401a`, `keithley24xx`, `sr860`, `sr830`, `demo_device`, `bbd30x`, and `k10cr1`, plus the Phase 2 IDs `four9`, `montana2`, `opticool`, and `tlpm`. The current [device readiness matrix](documents/device_status.md) records registration, validation, accepted limitations, and future work.
 

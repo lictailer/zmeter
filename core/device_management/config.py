@@ -70,10 +70,17 @@ def _canonical_driver_ids(
 ) -> dict[str, str]:
     canonical: dict[str, str] = {}
     for registry_id, spec in driver_specs.items():
-        for candidate in (registry_id, spec.driver_id):
+        for candidate in (registry_id, spec.driver_id, *spec.aliases):
             normalized = candidate.strip().casefold()
-            if normalized:
-                canonical.setdefault(normalized, spec.driver_id)
+            if not normalized:
+                continue
+            existing_id = canonical.get(normalized)
+            if existing_id is not None and existing_id != spec.driver_id:
+                raise ValueError(
+                    f"driver name '{candidate.strip()}' is ambiguous between "
+                    f"'{existing_id}' and '{spec.driver_id}'"
+                )
+            canonical[normalized] = spec.driver_id
     return canonical
 
 

@@ -19,6 +19,7 @@ from core.scanlist import (
     ScanListShutdownThreadError,
     ScanListShutdownTimeoutError,
 )
+from core.queue_model import LiveQueueModel
 
 
 class _ProbeLogic:
@@ -152,6 +153,16 @@ def _make_scan_list(logic, available=(), queue=(), past=()):
     scan_list = ScanList.__new__(ScanList)
     QtWidgets.QWidget.__init__(scan_list)
     scan_list.logic = logic
+    scan_list.queue_model = LiveQueueModel()
+    retained_items = []
+    current_worker = getattr(logic, "current_worker", None)
+    if current_worker is not None:
+        retained_items.append(current_worker)
+    retained_items.extend(getattr(logic, "workers", ()))
+    retained_items.extend(queue)
+    for item in retained_items:
+        if scan_list.queue_model.entry_for_item(item) is None:
+            scan_list.queue_model.add_pending(item)
     scan_list.list_available = _Container(available)
     scan_list.list_queue = _Container(queue)
     scan_list.list_past = _Container(past)

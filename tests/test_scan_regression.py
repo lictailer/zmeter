@@ -233,7 +233,9 @@ class ScanQueueRegressionTests(unittest.TestCase):
         logic = ScanListLogic()
         events = []
         workers = [_QueueWorker(name, events) for name in ("first", "second", "third")]
-        logic.workers = list(workers)
+        for worker in workers:
+            logic.queue_model.add_pending(worker)
+        self.assertTrue(logic.queue_model.begin_run())
         logic.sig_item_started.connect(
             lambda worker: events.append(("start", worker.name))
         )

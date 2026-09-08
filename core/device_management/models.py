@@ -50,13 +50,25 @@ class DriverConfigSpec:
     available: bool = True
     unavailable_reason: str = ""
     supports_startup_connection: bool = True
+    aliases: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        aliases = self.aliases
+        if isinstance(aliases, (str, bytes)):
+            raise TypeError("driver aliases must be an iterable of names")
+
+        normalized_aliases = []
+        for alias in aliases:
+            if not isinstance(alias, str) or not alias.strip():
+                raise ValueError("driver aliases must be non-empty strings")
+            normalized_aliases.append(alias.strip())
+
         object.__setattr__(
             self,
             "connection_fields",
             _immutable_mapping(self.connection_fields),
         )
+        object.__setattr__(self, "aliases", tuple(normalized_aliases))
 
 
 @dataclass(frozen=True, slots=True)

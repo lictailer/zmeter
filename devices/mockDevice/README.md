@@ -4,6 +4,8 @@
 
 `mockDevice` is ZMeter's maintained, hardware-independent reference device. It implements the widget/logic/hardware/simulator separation, exact scan-channel signatures, lifecycle hooks, deterministic measurements, fault injection, bounded logging, and offscreen tests.
 
+Its stable registry ID is `mock_device`. The Excel workbook loader also accepts the package-style name `mockDevice` as an explicit, case-insensitive alias and normalizes it to `mock_device`; this does not enable arbitrary spelling variants.
+
 The checked-in startup profile creates two instances. Use this package for safe first launch, core scan development, and new-device contract examples.
 
 ## Scan channels

@@ -54,6 +54,8 @@ class Scan(QtWidgets.QWidget):
 
         self._start_new_scan_after_stop = False
         self._shutdown_requested = False
+        self._queue_configuration_locked = False
+        self._queue_configuration_widget_states = ()
 
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
@@ -145,6 +147,44 @@ class Scan(QtWidgets.QWidget):
     def outputs_finalized(self) -> bool:
         """Return whether GUI-thread output work for the last run is complete."""
         return bool(self._outputs_finalized and not self._finalize_outputs_scheduled)
+
+    @QtCore.pyqtSlot(bool)
+    def set_queue_configuration_locked(self, locked: bool) -> None:
+        """Lock configuration controls while this scan is the current queue item."""
+
+        locked = bool(locked)
+        if locked == self._queue_configuration_locked:
+            return
+
+        if locked:
+            widgets = (
+                self.lineEdit,
+                self.comments_textEdit,
+                self.PlotsPerPage,
+                self.all_level_setting,
+                self.all_plot_setting,
+                self.load_button,
+                self.save_button,
+                self.scan_button,
+                self.scan_button_1,
+                self.scan_button_2,
+                self.scan_button_3,
+            )
+            # Ignore an outer Scan/ScanList disable when capturing this layer.
+            # Otherwise unlocking the queue after that outer seal is lifted
+            # could leave configuration controls disabled permanently.
+            states = tuple((widget, widget.isEnabledTo(self)) for widget in widgets)
+            for widget, _was_enabled in states:
+                widget.setEnabled(False)
+            self._queue_configuration_widget_states = states
+            self._queue_configuration_locked = True
+            return
+
+        states = self._queue_configuration_widget_states
+        self._queue_configuration_widget_states = ()
+        self._queue_configuration_locked = False
+        for widget, was_enabled in states:
+            widget.setEnabled(was_enabled)
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
         base = self._next_unique_data_name()
@@ -692,7 +732,7 @@ class Scan(QtWidgets.QWidget):
         """Start a fresh scan using current self.info settings."""
         if self._shutdown_requested:
             self._start_new_scan_after_stop = False
-            return
+            return False
 
         self._acquire_runtime_activity_reservation()
         try:
@@ -716,6 +756,7 @@ class Scan(QtWidgets.QWidget):
             self.update_all_plots()
             self._outputs_finalized = False
             self.logic.start()
+            return True
         except Exception:
             self._outputs_finalized = True
             self._release_runtime_activity_reservation()
@@ -774,7 +815,7 @@ class Scan(QtWidgets.QWidget):
     def when_scan_clicked(self):
         if self._shutdown_requested:
             self._start_new_scan_after_stop = False
-            return
+            return False
 
         # If a scan is already running (paused or not), stop it first.
         # scan_finished() will save current data, then we start a fresh scan.
@@ -787,10 +828,10 @@ class Scan(QtWidgets.QWidget):
                 self._stop_intent_logged = True
             self._request_logic_stop()
             self._start_new_scan_after_stop = True
-            return
+            return False
 
         self._start_new_scan_after_stop = False
-        self._start_scan_now()
+        return self._start_scan_now()
 
     def when_pause_clicked(self):
         """Pause the running scan thread (no-op if not running)."""

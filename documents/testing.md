@@ -60,6 +60,21 @@ device-button reconciliation, router publication, range-limit visibility, and
 the available/queue/manual/past/template scan consumers without loading a real
 driver.
 
+### Queue model and manual-item tests
+
+```powershell
+python -B -m unittest tests.test_queue_model -v
+python -B -m unittest -v tests.test_manual_set_item tests.test_scan_queue_configuration_lock tests.test_scanlist_live_queue tests.test_scan_regression tests.test_scanlist_shutdown tests.test_scan_catalog_consumers tests.test_runtime_device_ui
+```
+
+These hardware-independent tests use deterministic barriers, fake setters, and
+offscreen Qt. They cover stable IDs and state invariants, live pending
+add/remove/reorder, the atomic final-add boundary, current-item locking,
+preserved pending work after Stop, per-item manual-set thread affinity and GUI
+responsiveness, sequential completion, and the single outer queue activity
+lease. They must not import OptiCool or another vendor runtime, invent a device
+timeout, or hard-terminate a `QThread`.
+
 Phase 6 manager/UI coverage is available independently with:
 
 ```powershell
@@ -68,7 +83,8 @@ python -B -m unittest tests.test_runtime_device_ui -v
 ```
 
 These suites use fakes and the in-process mock only. They cover generation-bound
-call rejection, whole-router-request and scan/queue/manual activity leases,
+call rejection, whole-router-request and scan/queue activity leases (including
+queued manual work under the outer queue lease),
 idle/busy refusal, session-only add/disconnect/remove, slow lifecycle worker UI
 responsiveness and thread affinity, exact reference refusal, two-phase catalog
 acknowledgement/reconciliation, cleanup quarantine and delete retry, injected

@@ -291,14 +291,28 @@ class DriverAdapter:
 class DriverRegistry:
     def __init__(self, registrations=()) -> None:
         self._registrations: dict[str, DriverRegistration] = {}
+        self._driver_lookup: dict[str, str] = {}
         for registration in registrations:
             self.register(registration)
 
     def register(self, registration: DriverRegistration) -> None:
         driver_id = registration.driver_id
-        if driver_id in self._registrations:
-            raise DuplicateDriverError(f"driver '{driver_id}' is already registered")
+        names = (driver_id, *registration.config_spec.aliases)
+        normalized_names = {
+            name.strip().casefold(): name
+            for name in names
+        }
+        for normalized, name in normalized_names.items():
+            existing_id = self._driver_lookup.get(normalized)
+            if existing_id is not None:
+                raise DuplicateDriverError(
+                    f"driver name '{name}' conflicts with registered driver "
+                    f"'{existing_id}'"
+                )
+
         self._registrations[driver_id] = registration
+        for normalized in normalized_names:
+            self._driver_lookup[normalized] = driver_id
 
     @property
     def driver_ids(self) -> tuple[str, ...]:
@@ -314,8 +328,10 @@ class DriverRegistry:
         )
 
     def registration(self, driver_id: str) -> DriverRegistration:
+        normalized = driver_id.strip().casefold() if isinstance(driver_id, str) else ""
         try:
-            return self._registrations[driver_id]
+            canonical_id = self._driver_lookup[normalized]
+            return self._registrations[canonical_id]
         except KeyError:
             raise UnknownDriverError(
                 f"driver '{driver_id}' is not registered"
@@ -446,6 +462,7 @@ def mock_device_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="mock_device",
+            aliases=("mockDevice",),
             connection_fields={
                 "address": ConnectionFieldSpec((str,)),
             },

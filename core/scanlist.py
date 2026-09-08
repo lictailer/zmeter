@@ -1,6 +1,7 @@
 import sys
 import copy
 import time
+import math
 import datetime as _dt
 import traceback
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ import PyQt6.QtGui as QtGui
 from PyQt6 import uic
 from .scan import Scan
 from .nested_menu import NestedMenu
+from .queue_model import LiveQueueModel, QueueItemState
 
 
 class ScanListShutdownTimeoutError(TimeoutError):
@@ -100,6 +102,12 @@ class ScanItem(QtWidgets.QLabel):
         super().__init__()
         self.name = copy.deepcopy(name)
         self.main_window = main_window
+        self.queue_entry_id = None
+        self._queue_model = None
+        self._queue_state = None
+        self._queue_stop_requested = False
+        self._scan_start_accepted = False
+        self._scan_start_error = None
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("border: 5px solid black;")
         self.info = copy.deepcopy(info)
@@ -120,9 +128,48 @@ class ScanItem(QtWidgets.QLabel):
         self.setText(info["name"])
         self.info = info
         self.name = info["name"]
-        
+
+    def bind_queue_entry(self, queue_model, entry_id):
+        self._queue_model = queue_model
+        self.queue_entry_id = int(entry_id)
+        self._queue_stop_requested = False
+        self.set_queue_state(QueueItemState.PENDING)
+
+    def queue_editable(self):
+        if self._queue_model is None or self.queue_entry_id is None:
+            return True
+        return self._queue_model.can_edit(self.queue_entry_id)
+
+    def queue_cloneable(self):
+        """Allow copy/replay from templates, pending work, and Past."""
+
+        if self._queue_model is None or self.queue_entry_id is None:
+            return True
+        entry = self._queue_model.entry_for_item(self)
+        return entry is not None and entry.state in {
+            QueueItemState.PENDING,
+            QueueItemState.COMPLETED,
+            QueueItemState.FAILED,
+        }
+
+    def set_queue_state(self, state):
+        previous_state = self._queue_state
+        self._queue_state = state
+        is_current = state is QueueItemState.CURRENT
+        if is_current or previous_state is QueueItemState.CURRENT:
+            set_locked = getattr(self.scan, "set_queue_configuration_locked", None)
+            if callable(set_locked):
+                set_locked(is_current)
+        self.setProperty(
+            "queueState",
+            state.name.lower() if isinstance(state, QueueItemState) else "",
+        )
+
     def mouseMoveEvent(self, e):
-        if e.buttons() == QtCore.Qt.MouseButton.LeftButton:
+        if (
+            self.queue_cloneable()
+            and e.buttons() == QtCore.Qt.MouseButton.LeftButton
+        ):
             drag = QtGui.QDrag(self)
             mime = QtCore.QMimeData()
             drag.setMimeData(mime)
@@ -168,11 +215,17 @@ class ScanItem(QtWidgets.QLabel):
     def start_queue(self):
         # Use the same flow as pressing the Scan button, then block until done
         # so queue execution remains strictly sequential.
+        self._scan_start_accepted = False
+        self._scan_start_error = None
         QtCore.QMetaObject.invokeMethod(
             self,
             "_start_scan_from_queue",
             QtCore.Qt.ConnectionType.BlockingQueuedConnection,
         )
+        if self._scan_start_error is not None:
+            raise self._scan_start_error
+        if not self._scan_start_accepted:
+            raise RuntimeError("queued scan was not accepted for startup")
 
         # Wait briefly for the scan thread to transition to running.
         # If it never starts, continue to next queue item instead of hanging.
@@ -184,18 +237,90 @@ class ScanItem(QtWidgets.QLabel):
         while self.scan.logic.isRunning():
             QtCore.QThread.sleep(1)
 
+        # Scan output save/export is finalized on the GUI thread after the
+        # worker stops.  Keep this queue entry current until that delivery is
+        # complete so an existing or newly started scan cannot overlap the
+        # next queued item.
+        while not bool(getattr(self.scan, "outputs_finalized", True)):
+            QtCore.QThread.msleep(50)
+
     @QtCore.pyqtSlot()
     def _start_scan_from_queue(self):
-        self.scan.showMaximized()
-        if hasattr(self.scan, "_focus_plot_tab_1_for_scan_start"):
-            self.scan._focus_plot_tab_1_for_scan_start(maximize=True)
-        self.scan.raise_()
-        self.scan.activateWindow()
-        self.scan.when_scan_clicked()
+        self.set_queue_state(QueueItemState.CURRENT)
+        scan_list = getattr(getattr(self, "main_window", None), "scanlist", None)
+        if bool(getattr(scan_list, "_shutdown_sealed", False)) or bool(
+            getattr(self.scan, "_shutdown_requested", False)
+        ):
+            self._scan_start_error = ScanListShutdownInProgressError(
+                "scan start refused because scan-list shutdown is in progress"
+            )
+            return
+        if bool(getattr(scan_list, "runtime_mutation_sealed", False)):
+            self._scan_start_error = RuntimeError(
+                "scan start refused while a runtime device mutation is pending"
+            )
+            return
+        if (
+            self._queue_model is not None
+            and self._queue_model.stop_now_requested
+        ):
+            self._queue_stop_requested = True
+        try:
+            self.scan.showMaximized()
+            if hasattr(self.scan, "_focus_plot_tab_1_for_scan_start"):
+                self.scan._focus_plot_tab_1_for_scan_start(maximize=True)
+            self.scan.raise_()
+            self.scan.activateWindow()
+            if self.scan.logic.isRunning() or not bool(
+                getattr(self.scan, "outputs_finalized", True)
+            ):
+                # A pending card may have been started manually before the
+                # queue claimed it.  Adopt that lifecycle instead of asking
+                # when_scan_clicked() to stop-and-restart it; the latter can
+                # race queue completion and overlap the next entry.
+                if hasattr(self.scan, "_start_new_scan_after_stop"):
+                    self.scan._start_new_scan_after_stop = False
+                self._scan_start_accepted = True
+                self._apply_queue_stop_if_requested()
+                return
+            accepted = self.scan.when_scan_clicked()
+            if accepted is False:
+                if bool(getattr(self.scan, "_shutdown_requested", False)):
+                    self._scan_start_error = ScanListShutdownInProgressError(
+                        "scan start refused because scan-list shutdown is in progress"
+                    )
+                else:
+                    self._scan_start_error = RuntimeError(
+                        "queued scan was not accepted for startup"
+                    )
+                return
+            self._scan_start_accepted = True
+            self._apply_queue_stop_if_requested()
+        except Exception as exc:
+            self._scan_start_error = exc
 
     @QtCore.pyqtSlot()
     def _request_stop_from_queue(self):
-        self.scan.when_stop_clicked()
+        self._queue_stop_requested = True
+        self._apply_queue_stop_if_requested()
+
+    @QtCore.pyqtSlot()
+    def _apply_queue_stop_if_requested(self):
+        if not self._queue_stop_requested:
+            return
+        if self.scan.logic.isRunning():
+            self._queue_stop_requested = False
+            self.scan.when_stop_clicked()
+            return
+        current_entry = (
+            None if self._queue_model is None else self._queue_model.current_entry
+        )
+        if (
+            self.queue_entry_id is not None
+            and current_entry is not None
+            and current_entry.entry_id == self.queue_entry_id
+        ):
+            QtCore.QTimer.singleShot(10, self._apply_queue_stop_if_requested)
 
 
 class DeleteItem(QtWidgets.QLabel):
@@ -232,12 +357,137 @@ class DeleteItem(QtWidgets.QLabel):
         e.accept()
 
 
+@dataclass(frozen=True)
+class ManualSetCommand:
+    channel_name: str
+    value: float
+
+
+@dataclass(frozen=True)
+class ManualSetResult:
+    command: ManualSetCommand
+    error: Exception | None = None
+
+    @property
+    def succeeded(self):
+        return self.error is None
+
+
+class ManualSetLogic(QtCore.QThread):
+    """Run one committed manual write without occupying the GUI thread."""
+
+    sig_result = QtCore.pyqtSignal(object)
+
+    def __init__(self, main_window=None):
+        super().__init__()
+        self.main_window = main_window
+        self._command = None
+        self._result = None
+
+    def configure(self, command):
+        if self.isRunning():
+            raise RuntimeError("manual-set worker is already running")
+        if not isinstance(command, ManualSetCommand):
+            raise TypeError("command must be a ManualSetCommand")
+        self._command = command
+        self._result = None
+
+    @property
+    def result(self):
+        return self._result
+
+    def run(self):
+        command = self._command
+        if command is None:
+            self._result = ManualSetResult(
+                ManualSetCommand("", 0.0),
+                RuntimeError("manual-set worker started without a command"),
+            )
+            self.sig_result.emit(self._result)
+            return
+        try:
+            self.main_window.write_info(command.value, command.channel_name)
+        except Exception as exc:
+            self._result = ManualSetResult(command, exc)
+        else:
+            self._result = ManualSetResult(command)
+        self.sig_result.emit(self._result)
+
+
+class ManualValueDialog(QtWidgets.QDialog):
+    """Value-only editor that accepts one finite Python float."""
+
+    def __init__(self, value, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Set manual value")
+        self.setModal(True)
+        self._value = float(value)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        self.value_edit = QtWidgets.QLineEdit(repr(self._value), self)
+        self.value_edit.selectAll()
+        self.validation_label = QtWidgets.QLabel("", self)
+        self.validation_label.setStyleSheet("color: #b00020;")
+        self.button_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        layout.addWidget(self.value_edit)
+        layout.addWidget(self.validation_label)
+        layout.addWidget(self.button_box)
+
+        self.button_box.accepted.connect(self._accept_if_valid)
+        self.button_box.rejected.connect(self.reject)
+        self.value_edit.textChanged.connect(self._validate)
+        self._validate(self.value_edit.text())
+
+    @staticmethod
+    def _parse_finite(text):
+        try:
+            value = float(str(text).strip())
+        except (TypeError, ValueError):
+            return None
+        return value if math.isfinite(value) else None
+
+    @property
+    def committed_value(self):
+        return self._value
+
+    def _validate(self, text):
+        valid = self._parse_finite(text) is not None
+        ok_button = self.button_box.button(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+        )
+        ok_button.setEnabled(valid)
+        self.validation_label.setText("" if valid else "Enter one finite number.")
+
+    def _accept_if_valid(self):
+        value = self._parse_finite(self.value_edit.text())
+        if value is None:
+            self._validate(self.value_edit.text())
+            return
+        self._value = value
+        self.accept()
+
+
 class ManualSetItem(QtWidgets.QFrame):
     def __init__(self, channel_name, value, main_window=None):
         super().__init__()
+        numeric_value = float(value)
+        if not math.isfinite(numeric_value):
+            raise ValueError("manual-set value must be finite")
+
         self.main_window = main_window
         self.channel_name = str(channel_name).strip()
+        self._value = numeric_value
         self._drag_start_pos = None
+        self.queue_entry_id = None
+        self._queue_model = None
+        self._queue_state = None
+        self._manual_operation_registered = False
+        self._manual_start_error = None
+        self.logic = ManualSetLogic(main_window=main_window)
 
         self.setObjectName("manualSetItemWidget")
         self.setFrameShape(QtWidgets.QFrame.Shape.Box)
@@ -246,47 +496,109 @@ class ManualSetItem(QtWidgets.QFrame):
         self.setStyleSheet(
             "#manualSetItemWidget { border: 5px solid black; border-radius: 0px; }"
             "#manualSetItemWidget QLabel { border: none; }"
-            "#manualSetItemWidget QLineEdit { border: none; background: transparent; }"
         )
         self.setMinimumHeight(84)
         self.setFixedHeight(self.minimumHeight())
-        layout = QtWidgets.QGridLayout(self)
+        layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 6)
-        layout.setHorizontalSpacing(6)
-        layout.setVerticalSpacing(4)
+        layout.setSpacing(4)
 
-        self.channel_label = QtWidgets.QLabel(self.channel_name)
+        self.channel_label = QtWidgets.QLabel(self.channel_name, self)
         self.channel_label.setWordWrap(True)
         self.channel_label.setMinimumWidth(0)
-
         self.channel_label.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Ignored,
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
         self.channel_label.setToolTip(self.channel_name)
-        layout.addWidget(self.channel_label, 0, 0, 1, 2)
-
-        value_title = QtWidgets.QLabel("Value:")
-        value_title.setMinimumWidth(55)
-        self.value_edit = QtWidgets.QLineEdit(str(value))
-        self.value_edit.setFixedWidth(110)
-        layout.addWidget(value_title, 1, 0)
-        layout.addWidget(self.value_edit, 1, 1, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.value_label = QtWidgets.QLabel(self.value_text(), self)
+        self.value_label.setToolTip("Double-click to edit the committed value")
+        layout.addWidget(self.channel_label)
+        layout.addWidget(self.value_label)
 
         self.installEventFilter(self)
         self.channel_label.installEventFilter(self)
-        self.value_edit.installEventFilter(self)
+        self.value_label.installEventFilter(self)
+
+    def bind_queue_entry(self, queue_model, entry_id):
+        self._queue_model = queue_model
+        self.queue_entry_id = int(entry_id)
+        self.set_queue_state(QueueItemState.PENDING)
+
+    def queue_editable(self):
+        if self._queue_model is None or self.queue_entry_id is None:
+            return self._queue_state not in {
+                QueueItemState.CURRENT,
+                QueueItemState.COMPLETED,
+                QueueItemState.FAILED,
+                QueueItemState.CANCELLED,
+            }
+        return self._queue_model.can_edit(self.queue_entry_id)
+
+    def queue_cloneable(self):
+        """Allow immutable terminal cards to be copied back into Queue."""
+
+        if self._queue_model is None or self.queue_entry_id is None:
+            return True
+        entry = self._queue_model.entry_for_item(self)
+        return entry is not None and entry.state in {
+            QueueItemState.PENDING,
+            QueueItemState.COMPLETED,
+            QueueItemState.FAILED,
+        }
+
+    def set_queue_state(self, state):
+        self._queue_state = state
+        self.setProperty(
+            "queueState",
+            state.name.lower() if isinstance(state, QueueItemState) else "",
+        )
 
     def text(self):
         return f"{self.channel_name}->{self.value_text()}"
 
     def value_text(self):
-        return self.value_edit.text().strip()
+        return repr(self._value)
 
     def parsed_value(self):
-        return float(self.value_text())
+        return self._value
+
+    def commit_value(self, value):
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(numeric_value):
+            return False
+
+        if self._queue_model is not None and self.queue_entry_id is not None:
+            committed = self._queue_model.apply_if_pending(
+                self.queue_entry_id,
+                lambda _entry: setattr(self, "_value", numeric_value),
+            )
+            if not committed:
+                return False
+        else:
+            if not self.queue_editable():
+                return False
+            self._value = numeric_value
+        self.value_label.setText(self.value_text())
+        return True
+
+    def _open_value_dialog(self):
+        if not self.queue_editable():
+            return
+        dialog = ManualValueDialog(self._value, parent=self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            self.commit_value(dialog.committed_value)
+
+    def mouseDoubleClickEvent(self, event):
+        self._open_value_dialog()
+        event.accept()
 
     def _start_drag(self):
+        if not self.queue_cloneable():
+            return
         drag = QtGui.QDrag(self)
         mime = QtCore.QMimeData()
         drag.setMimeData(mime)
@@ -296,71 +608,102 @@ class ManualSetItem(QtWidgets.QFrame):
         drag.exec()
 
     def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.Type.MouseButtonDblClick:
+            self._open_value_dialog()
+            return True
+
         if event.type() == QtCore.QEvent.Type.MouseButtonPress:
-            if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            if (
+                self.queue_cloneable()
+                and event.button() == QtCore.Qt.MouseButton.LeftButton
+            ):
                 self._drag_start_pos = event.globalPosition().toPoint()
+            else:
+                self._drag_start_pos = None
             return False
 
         if event.type() == QtCore.QEvent.Type.MouseMove:
-            if event.buttons() & QtCore.Qt.MouseButton.LeftButton:
-                if self._drag_start_pos is not None:
-                    current_pos = event.globalPosition().toPoint()
-                    if (
-                        current_pos - self._drag_start_pos
-                    ).manhattanLength() >= QtWidgets.QApplication.startDragDistance():
-                        self._drag_start_pos = None
-                        self._start_drag()
-                        return True
+            if (
+                self.queue_cloneable()
+                and event.buttons() & QtCore.Qt.MouseButton.LeftButton
+                and self._drag_start_pos is not None
+            ):
+                current_pos = event.globalPosition().toPoint()
+                if (
+                    current_pos - self._drag_start_pos
+                ).manhattanLength() >= QtWidgets.QApplication.startDragDistance():
+                    self._drag_start_pos = None
+                    self._start_drag()
+                    return True
             return False
 
         return super().eventFilter(obj, event)
 
     def start_queue(self):
-        scan_list = getattr(self.main_window, "scanlist", None)
-        if bool(getattr(scan_list, "_shutdown_sealed", False)):
-            scan_list._log_warning(
-                "Manual operation ignored: scan list is shutting down."
-            )
-            return
-        if bool(getattr(scan_list, "runtime_mutation_sealed", False)):
-            raise RuntimeError(
-                "manual operation refused while a runtime device mutation is pending"
-            )
+        self._manual_start_error = None
         QtCore.QMetaObject.invokeMethod(
             self,
-            "_run_manual_set_from_queue",
+            "_start_manual_set_from_queue",
             QtCore.Qt.ConnectionType.BlockingQueuedConnection,
         )
+        if self._manual_start_error is not None:
+            raise self._manual_start_error
+
+        result = None
+        try:
+            self.logic.wait()
+            result = self.logic.result
+        finally:
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_finish_manual_set_from_queue",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        if result is None:
+            raise RuntimeError("manual-set worker stopped without a result")
+        if result.error is not None:
+            raise result.error
 
     @QtCore.pyqtSlot()
-    def _run_manual_set_from_queue(self):
+    def _start_manual_set_from_queue(self):
         scan_list = getattr(self.main_window, "scanlist", None)
         if bool(getattr(scan_list, "_shutdown_sealed", False)):
             scan_list._log_warning(
                 "Manual operation ignored: scan list is shutting down."
             )
-            return
-        if bool(getattr(scan_list, "runtime_mutation_sealed", False)):
-            scan_list._log_warning(
-                "Manual operation ignored: a runtime device mutation is pending."
+            self._manual_start_error = ScanListShutdownInProgressError(
+                "manual operation refused because scan-list shutdown is in progress"
             )
             return
-        reservation = None
-        reserve = getattr(self.main_window, "reserve_runtime_activity", None)
-        if callable(reserve):
-            reservation = reserve("manual", self.text())
-        manual_started = False
+        if bool(getattr(scan_list, "runtime_mutation_sealed", False)):
+            self._manual_start_error = RuntimeError(
+                "manual operation refused while a runtime device mutation is pending"
+            )
+            return
+
         try:
             if scan_list is not None:
                 scan_list._begin_manual_operation(self)
-                manual_started = True
-            value = self.parsed_value()
-            self.main_window.write_info(value, self.channel_name)
-        finally:
-            if manual_started:
+                self._manual_operation_registered = True
+            self.set_queue_state(QueueItemState.CURRENT)
+            self.logic.configure(
+                ManualSetCommand(self.channel_name, self.parsed_value())
+            )
+            self.logic.start()
+        except Exception as exc:
+            self._manual_start_error = exc
+            self._finish_manual_set_from_queue()
+
+    @QtCore.pyqtSlot()
+    def _finish_manual_set_from_queue(self):
+        if not self._manual_operation_registered:
+            return
+        scan_list = getattr(self.main_window, "scanlist", None)
+        try:
+            if scan_list is not None:
                 scan_list._end_manual_operation(self)
-            if reservation is not None:
-                reservation.release()
+        finally:
+            self._manual_operation_registered = False
 
 
 class ScanListWidget(QtWidgets.QWidget):
@@ -374,6 +717,7 @@ class ScanListWidget(QtWidgets.QWidget):
         getter_equipment_info=None,
         on_item_cloned=None,
         accept_scan_items=True,
+        queue_owner=None,
     ):
         super().__init__()
         self.setAcceptDrops(True)
@@ -385,6 +729,7 @@ class ScanListWidget(QtWidgets.QWidget):
         self.getter_equipment_info = copy.deepcopy(getter_equipment_info or {})
         self.on_item_cloned = on_item_cloned
         self.accept_scan_items = accept_scan_items
+        self.queue_owner = queue_owner
 
     def setter_equipment_info_updated(self, info):
         self.refresh_catalog(info, self.getter_equipment_info)
@@ -445,6 +790,33 @@ class ScanListWidget(QtWidgets.QWidget):
                     return i + 1
 
         i = find_index(pos.y(), seperates)
+        if self.queue_owner is not None:
+            if self_swap:
+                accepted = self.queue_owner.reorder_queue_item(
+                    widget,
+                    origin_index=swap_originID,
+                    drop_index=i,
+                )
+            else:
+                if not self.allow_add:
+                    return
+                if isinstance(widget, ScanItem) and (not self.accept_scan_items):
+                    return
+                new_item = self.clone_supported_item(widget)
+                if new_item is None:
+                    return
+                accepted = self.queue_owner.insert_queue_item(
+                    new_item,
+                    visual_index=i,
+                )
+                if not accepted:
+                    new_item.deleteLater()
+            if accepted:
+                e.accept()
+            else:
+                e.ignore()
+            return
+
         if self_swap:
             if swap_originID < i:
                 self.layout.insertWidget(i - 1, widget)
@@ -464,14 +836,18 @@ class ScanListWidget(QtWidgets.QWidget):
                 if callable(self.on_item_cloned):
                     self.on_item_cloned(new_item, self)
             elif type(widget) == ManualSetItem:
-                main_window = widget.main_window
-                new_item = ManualSetItem(
-                    widget.channel_name, widget.value_text(), main_window=main_window
-                )
+                new_item = self.clone_manual_item(widget)
                 self.layout.insertWidget(i, new_item)
                 if callable(self.on_item_cloned):
                     self.on_item_cloned(new_item, self)
         e.accept()
+
+    def clone_supported_item(self, widget):
+        if type(widget) == ScanItem:
+            return self.clone_scan_item(widget)
+        if type(widget) == ManualSetItem:
+            return self.clone_manual_item(widget)
+        return None
 
     def clone_scan_item(self, widget):
         """Clone a scan using this list's latest catalog publication."""
@@ -483,6 +859,14 @@ class ScanListWidget(QtWidgets.QWidget):
             getter_equipment_info=self.getter_equipment_info,
         )
 
+    @staticmethod
+    def clone_manual_item(widget):
+        return ManualSetItem(
+            widget.channel_name,
+            widget.parsed_value(),
+            main_window=widget.main_window,
+        )
+
     def get_widgets(self):
         ans = []
         for i in range(self.layout.count()):
@@ -490,7 +874,10 @@ class ScanListWidget(QtWidgets.QWidget):
         return ans
 
     def add_item(self, item):
+        if self.queue_owner is not None:
+            return self.queue_owner.insert_queue_item(item)
         self.layout.addWidget(item)
+        return True
 
     def get_item_names(self):
         names = []
@@ -506,34 +893,44 @@ class ScanListLogic(QtCore.QThread):
     sig_item_finished = QtCore.pyqtSignal(object)
     sig_queue_stopped = QtCore.pyqtSignal(str)
 
-    def __init__(self):
+    def __init__(self, queue_model=None):
         super().__init__()
-        self.workers = []
-        self.current_worker = None
-        self.stop_after_current = False
-        self.stop_now_requested = False
+        self.queue_model = queue_model or LiveQueueModel()
+
+    @property
+    def current_worker(self):
+        entry = self.queue_model.current_entry
+        return None if entry is None else entry.item
+
+    @property
+    def workers(self):
+        """Read-only compatibility view of the authoritative pending model."""
+        return [entry.item for entry in self.queue_model.pending_entries()]
+
+    @property
+    def stop_after_current(self):
+        return self.queue_model.stop_after_current_requested
+
+    @property
+    def stop_now_requested(self):
+        return self.queue_model.stop_now_requested
 
     def reset_control_flags(self):
-        self.current_worker = None
-        self.stop_after_current = False
-        self.stop_now_requested = False
+        if self.isRunning() or self.queue_model.is_run_active:
+            raise RuntimeError("cannot reset a running queue")
 
     def request_stop_after_current(self):
-        self.stop_after_current = True
+        self.queue_model.request_stop_after_current()
 
     def request_stop_now(self):
-        self.stop_now_requested = True
+        self.queue_model.request_stop_now()
 
     def run(self):
-        stop_reason = ""
-        while len(self.workers):
-            if self.stop_now_requested:
-                stop_reason = "stop_requested"
+        while True:
+            entry = self.queue_model.claim_next()
+            if entry is None:
                 break
-
-            w = self.workers[0]
-            self.workers.remove(w)
-            self.current_worker = w
+            w = entry.item
 
             start_ts = time.perf_counter()
             failed = False
@@ -556,6 +953,11 @@ class ScanListLogic(QtCore.QThread):
                         failed = True
                         if error_message == "":
                             error_message = str(run_error)
+                self.queue_model.finish_current(
+                    entry.entry_id,
+                    failed=failed,
+                    error_message=error_message,
+                )
                 # Keep existing behavior: completed/processed item moves to past.
                 self.sig_scan_done.emit(w)
                 elapsed_seconds = max(0.0, time.perf_counter() - start_ts)
@@ -567,18 +969,14 @@ class ScanListLogic(QtCore.QThread):
                         "error_message": error_message,
                     }
                 )
-                self.current_worker = None
 
             if self.stop_now_requested:
-                stop_reason = "stop_requested"
-                break
+                continue
             if self.stop_after_current:
-                stop_reason = "stop_after_current"
-                break
+                continue
             QtCore.QThread.sleep(2)
 
-        if stop_reason == "":
-            stop_reason = "completed"
+        stop_reason = self.queue_model.run_stop_reason or "completed"
         self.sig_queue_stopped.emit(stop_reason)
 
 
@@ -613,7 +1011,8 @@ class ScanList(QtWidgets.QWidget):
             self.setter_equipment_info,
             self.getter_equipment_info,
         )
-        self.logic = ScanListLogic()
+        self.queue_model = LiveQueueModel()
+        self.logic = ScanListLogic(self.queue_model)
         self.main_window = main_window
         self._log_ready = False
         self._shutdown_complete = False
@@ -658,6 +1057,7 @@ class ScanList(QtWidgets.QWidget):
             setter_equipment_info=self.setter_equipment_info,
             getter_equipment_info=self.getter_equipment_info,
             on_item_cloned=self.on_item_cloned_between_lists,
+            queue_owner=self,
         )
         self.list_manual = ScanListWidget(
             on_item_cloned=self.on_item_cloned_between_lists,
@@ -684,6 +1084,91 @@ class ScanList(QtWidgets.QWidget):
         self.pb_new_scan.clicked.connect(self.add_empty_scan_item)
         self.manual_add_item_pushButton.clicked.connect(self.add_manual_set_item_from_ui)
         self._log_ready = True
+
+    def _bind_queue_entry(self, item, entry):
+        item.bind_queue_entry(self.queue_model, entry.entry_id)
+        item.destroyed.connect(
+            lambda _object=None, entry_id=entry.entry_id: (
+                self._on_queue_item_destroyed(entry_id)
+            )
+        )
+
+    def _on_queue_item_destroyed(self, entry_id):
+        # Pending deletion is normally committed before deleteLater().  This
+        # fallback also keeps the model coherent if a parent Qt widget tears a
+        # pending card down during application destruction.
+        self.queue_model.cancel_pending(entry_id)
+        self.queue_model.forget_terminal(entry_id)
+
+    def _sync_queue_layout(self):
+        desired = [
+            entry.item for entry in self.queue_model.ordered_queue_entries()
+        ]
+        desired_ids = {id(widget) for widget in desired}
+        for widget in self.list_queue.get_widgets():
+            if id(widget) not in desired_ids:
+                self.list_queue.layout.removeWidget(widget)
+        for index, widget in enumerate(desired):
+            self.list_queue.layout.insertWidget(index, widget)
+
+    def insert_queue_item(self, item, visual_index=None):
+        """Commit a fresh pending item to the model, then mirror it in Qt."""
+
+        if not isinstance(item, (ScanItem, ManualSetItem)):
+            return False
+        if bool(getattr(self, "_shutdown_sealed", False)):
+            self._log_warning("Queue add ignored: scan list is shutting down.")
+            return False
+        if bool(getattr(self, "_runtime_mutation_sealed", False)):
+            self._log_warning(
+                "Queue add ignored: a runtime device mutation is pending."
+            )
+            return False
+
+        entry = None
+        try:
+            if visual_index is None:
+                entry = self.queue_model.add_pending(item)
+            else:
+                entry = self.queue_model.add_pending_at_queue_index(
+                    item,
+                    visual_index,
+                )
+            self._bind_queue_entry(item, entry)
+        except Exception:
+            if entry is not None:
+                self.queue_model.cancel_pending(entry.entry_id)
+                self.queue_model.forget_terminal(entry.entry_id)
+            raise
+        self._sync_queue_layout()
+        return True
+
+    def reorder_queue_item(self, item, *, origin_index=None, drop_index=None):
+        """Apply one pending reorder to the model before changing the layout."""
+
+        entry = self.queue_model.entry_for_item(item)
+        if entry is None or entry.state is not QueueItemState.PENDING:
+            self._log_warning("Current or completed queue items cannot be reordered.")
+            self._sync_queue_layout()
+            return False
+
+        actual_origin = self.list_queue.layout.indexOf(item)
+        if actual_origin < 0:
+            return False
+        if origin_index is None:
+            origin_index = actual_origin
+        if drop_index is None:
+            drop_index = actual_origin
+
+        if not self.queue_model.reorder_pending_at_queue_indices(
+            entry.entry_id,
+            origin_index,
+            drop_index,
+        ):
+            self._sync_queue_layout()
+            return False
+        self._sync_queue_layout()
+        return True
 
     def start_scan(self, info):
         if bool(getattr(self, "_shutdown_sealed", False)) or bool(
@@ -815,36 +1300,48 @@ class ScanList(QtWidgets.QWidget):
                 "Queue start ignored: a runtime device mutation is pending."
             )
             return
-        if self.logic.isRunning():
+        if self.logic.isRunning() or self.queue_model.is_run_active:
             self._log_warning("Queue start ignored: queue is already running.")
             return
-        queues = self.list_queue.get_widgets()
-        if len(queues) == 0:
+        if self._queue_run_started and not self._queue_completion_delivered:
+            self._log_warning(
+                "Queue start ignored: the prior queue completion is still being delivered."
+            )
+            return
+        pending_count = self.queue_model.pending_count
+        if pending_count == 0:
             self._log_warning("Queue start ignored: queue is empty.")
             return
 
         reservation = None
         reserve = getattr(self.main_window, "reserve_runtime_activity", None)
         if callable(reserve):
-            reservation = reserve("queue", f"{len(queues)} queued item(s)")
+            reservation = reserve("queue", f"{pending_count} queued item(s)")
         self._queue_activity_reservation = reservation
         try:
             self.logic.reset_control_flags()
-            self.logic.workers = queues
+            if not self.queue_model.begin_run():
+                raise RuntimeError("queue became empty before the run began")
             self._queue_run_started = True
             self._queue_completion_delivered = False
             self.logic.start()
         except Exception:
+            if (
+                self.queue_model.is_run_active
+                and self.queue_model.current_entry is None
+            ):
+                self.queue_model.request_stop_now()
+                self.queue_model.claim_next()
             self._queue_run_started = False
             self._queue_completion_delivered = True
             self._queue_activity_reservation = None
             if reservation is not None:
                 reservation.release()
             raise
-        self._log_info(f"Queue started with {len(queues)} item(s).")
+        self._log_info(f"Queue started with {pending_count} item(s).")
 
     def stop_current_scan(self):
-        if not self.logic.isRunning():
+        if not self.logic.isRunning() and not self.queue_model.is_run_active:
             self._log_warning("Stop ignored: queue is not running.")
             return
 
@@ -859,15 +1356,22 @@ class ScanList(QtWidgets.QWidget):
             self._log_warning(
                 f"Stop requested for current scan item '{current_worker.name}'."
             )
+        elif isinstance(current_worker, ManualSetItem):
+            self._log_warning(
+                "Stop requested during the current manual operation. The setter "
+                "will finish cooperatively; no pending item will start. Use the "
+                "device's existing Abort control when one is available."
+            )
         elif current_worker is not None:
             self._log_warning(
-                f"Stop requested during current item '{self.worker_display_name(current_worker)}'."
+                f"Stop requested during current item "
+                f"'{self.worker_display_name(current_worker)}'."
             )
         else:
             self._log_warning("Stop requested: queue will stop before next item.")
 
     def stop_after_current_scan(self):
-        if not self.logic.isRunning():
+        if not self.logic.isRunning() and not self.queue_model.is_run_active:
             self._log_warning("Stop-after ignored: queue is not running.")
             return
         self.logic.request_stop_after_current()
@@ -878,9 +1382,28 @@ class ScanList(QtWidgets.QWidget):
             print(i, hex(id(w)), w.scan.info, hex(id(w.scan)), w.text())
 
     def add_to_past_scans(self, w):
+        if self.list_past.layout.indexOf(w) >= 0:
+            return
+        entry = self.queue_model.entry_for_item(w)
+        if entry is None or entry.state not in {
+            QueueItemState.COMPLETED,
+            QueueItemState.FAILED,
+        }:
+            self._log_error(
+                "Queue item could not be moved to Past because its terminal "
+                "model state is missing."
+            )
+            return
+        w.set_queue_state(entry.state)
+        self.list_queue.layout.removeWidget(w)
         self.list_past.layout.addWidget(w)
+        self._sync_queue_layout()
 
     def on_queue_item_started(self, worker):
+        entry = self.queue_model.entry_for_item(worker)
+        if entry is not None and entry.state is QueueItemState.CURRENT:
+            worker.set_queue_state(QueueItemState.CURRENT)
+            self._sync_queue_layout()
         self._log_info(f"Queue item started: {self.worker_display_name(worker)}")
 
     def on_queue_item_finished(self, payload):
@@ -925,14 +1448,39 @@ class ScanList(QtWidgets.QWidget):
             reservation.release()
 
     def handle_delete_request(self, widget):
-        if isinstance(widget, ScanItem):
-            if widget.scan.logic.isRunning():
-                QtWidgets.QMessageBox.warning(
-                    self,
-                    "Scan Running",
-                    "This scan is currently running and cannot be deleted.",
-                )
+        if isinstance(widget, ScanItem) and widget.scan.logic.isRunning():
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Scan Running",
+                "This scan is currently running and cannot be deleted.",
+            )
+            return
+
+        entry = self.queue_model.entry_for_item(widget)
+        if entry is not None:
+            if entry.state is QueueItemState.CURRENT:
+                self._log_warning("The current queue item cannot be deleted.")
+                self._sync_queue_layout()
                 return
+            if entry.state is QueueItemState.PENDING:
+                cancelled = self.queue_model.cancel_pending(entry.entry_id)
+                if cancelled is None:
+                    # The queue thread may have claimed it between the lookup
+                    # and cancellation attempt.
+                    self._log_warning("The current queue item cannot be deleted.")
+                    self._sync_queue_layout()
+                    return
+                widget.set_queue_state(QueueItemState.CANCELLED)
+                self.list_queue.layout.removeWidget(widget)
+                self._sync_queue_layout()
+                widget.deleteLater()
+                return
+
+            self._remove_widget_from_parent_layout(widget)
+            widget.deleteLater()
+            return
+
+        if isinstance(widget, ScanItem):
             self._remove_widget_from_parent_layout(widget)
             widget.deleteLater()
             return
@@ -961,13 +1509,13 @@ class ScanList(QtWidgets.QWidget):
             )
             return
         if bool(getattr(self, "_shutdown_sealed", False)):
-            item.scan._shutdown_requested = True
-            item.scan._start_new_scan_after_stop = False
+            if isinstance(item, ScanItem):
+                item.scan._shutdown_requested = True
+                item.scan._start_new_scan_after_stop = False
 
     def clear_past(self):
-        for i, w in enumerate(self.list_past.get_widgets()):
-            self.list_past.layout.removeWidget(w)
-            w.deleteLater()
+        for w in self.list_past.get_widgets():
+            self.handle_delete_request(w)
 
     def add_empty_scan_item(self):
         if bool(getattr(self, "_shutdown_sealed", False)) or bool(
@@ -1090,8 +1638,22 @@ class ScanList(QtWidgets.QWidget):
                 seen.add(id(widget))
                 located_items.append((collection, widget))
 
+        for collection, attribute_name in (("available", "list_available"),):
+            container = getattr(self, attribute_name, None)
+            if container is None:
+                continue
+            try:
+                append_items(collection, container.get_widgets())
+            except RuntimeError:
+                continue
+
+        for entry in self.queue_model.ordered_queue_entries():
+            collection = (
+                "active" if entry.state is QueueItemState.CURRENT else "queue"
+            )
+            append_items(collection, (entry.item,))
+
         for collection, attribute_name in (
-            ("available", "list_available"),
             ("queue", "list_queue"),
             ("past", "list_past"),
             ("manual", "list_manual"),
@@ -1103,16 +1665,10 @@ class ScanList(QtWidgets.QWidget):
                 append_items(collection, container.get_widgets())
             except RuntimeError:
                 continue
-
-        append_items("active", (getattr(self.logic, "current_worker", None),))
-        try:
-            append_items("queue_worker", tuple(getattr(self.logic, "workers", ())))
-        except RuntimeError:
-            pass
         return tuple(located_items)
 
     def iter_scan_items(self):
-        """Iterate every live scan item once, including detached queue workers."""
+        """Iterate every live scan item once, including model-owned queue work."""
         return iter(
             tuple(
                 item
@@ -1122,7 +1678,7 @@ class ScanList(QtWidgets.QWidget):
         )
 
     def iter_manual_set_items(self):
-        """Iterate manual items in manual/queue/past and detached worker state."""
+        """Iterate manual items in templates, the live queue model, and Past."""
         return iter(
             tuple(
                 item
@@ -1277,7 +1833,7 @@ class ScanList(QtWidgets.QWidget):
             getattr(self, "_shutdown_complete", False)
         ):
             blockers.append("scan-list shutdown retry pending")
-        if self.logic.isRunning():
+        if self.logic.isRunning() or self.queue_model.is_run_active:
             blockers.append("queue thread")
         if (
             self._queue_run_started
@@ -1436,7 +1992,7 @@ class ScanList(QtWidgets.QWidget):
 
     def _shutdown_pending(self, scan_items):
         pending = []
-        if self.logic.isRunning():
+        if self.logic.isRunning() or self.queue_model.is_run_active:
             pending.append("queue thread")
         if (
             getattr(self, "_queue_run_started", False)

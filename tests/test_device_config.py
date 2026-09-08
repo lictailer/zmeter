@@ -27,6 +27,7 @@ class DeviceProfileConfigTests(unittest.TestCase):
             "mock_device": DriverConfigSpec(
                 driver_id="mock_device",
                 connection_fields={"address": ConnectionFieldSpec((str,))},
+                aliases=("mockDevice",),
             ),
             "unavailable_driver": DriverConfigSpec(
                 driver_id="unavailable_driver",
@@ -128,8 +129,11 @@ class DeviceProfileConfigTests(unittest.TestCase):
 
         self.assertEqual(profile.source_path, path)
 
-    def test_loading_in_fresh_process_does_not_import_device_or_vendor_modules(self):
-        path = self.write_workbook()
+    def test_loading_alias_in_fresh_process_does_not_import_device_or_vendor_modules(self):
+        path = self.write_workbook(
+            [self.valid_row(driver="mockDevice")],
+            name="mock-alias.xlsx",
+        )
         repository_root = Path(__file__).resolve().parents[1]
         script = """
 import sys
@@ -141,9 +145,15 @@ specs = {
     "mock_device": DriverConfigSpec(
         driver_id="mock_device",
         connection_fields={"address": ConnectionFieldSpec((str,))},
+        aliases=("mockDevice",),
     )
 }
-load_profile(Path(sys.argv[1]), driver_specs=specs, repository_root=Path(sys.argv[2]))
+profile = load_profile(
+    Path(sys.argv[1]),
+    driver_specs=specs,
+    repository_root=Path(sys.argv[2]),
+)
+assert profile.devices[0].driver == "mock_device"
 watched = ("mockDevice", "devices", "pyvisa", "clr")
 loaded = sorted(
     name for name in sys.modules
@@ -191,7 +201,7 @@ print("profile load remained device/vendor-import free")
         with self.assertRaisesRegex(ProfileValidationError, "headers A1:H1 must be exactly"):
             self.load(path)
 
-    def test_driver_names_are_case_insensitive_and_unknown_drivers_are_fatal(self):
+    def test_driver_names_and_explicit_aliases_normalize_to_canonical_ids(self):
         casefolded = self.load(
             self.write_workbook(
                 [self.valid_row(driver="  MoCk_DeViCe  ")],
@@ -200,12 +210,51 @@ print("profile load remained device/vendor-import free")
         )
         self.assertEqual(casefolded.devices[0].driver, "mock_device")
 
-        unknown = self.write_workbook(
-            [self.valid_row(driver="MISSING_DRIVER", enabled=False)],
-            name="unknown.xlsx",
+        aliased = self.load(
+            self.write_workbook(
+                [self.valid_row(driver="mockDevice")],
+                name="explicit-alias.xlsx",
+            )
         )
-        with self.assertRaisesRegex(ProfileValidationError, "is not registered"):
+        self.assertEqual(aliased.devices[0].driver, "mock_device")
+
+    def test_unknown_driver_lookalikes_remain_fatal(self):
+        unknown = self.write_workbook(
+            [self.valid_row(driver="mock-device", enabled=False)],
+            name="unknown-lookalike.xlsx",
+        )
+        with self.assertRaisesRegex(
+            ProfileValidationError,
+            r"'mock-device' is not registered",
+        ):
             self.load(unknown)
+
+    def test_driver_alias_collisions_fail_independently_of_mapping_order(self):
+        mock_spec = self.driver_specs["mock_device"]
+        conflicting_spec = DriverConfigSpec(
+            driver_id="other_driver",
+            connection_fields={},
+            aliases=("mockDevice",),
+        )
+        path = self.write_workbook(name="ambiguous-alias.xlsx")
+
+        for driver_specs in (
+            {
+                "mock_device": mock_spec,
+                "other_driver": conflicting_spec,
+            },
+            {
+                "other_driver": conflicting_spec,
+                "mock_device": mock_spec,
+            },
+        ):
+            with self.subTest(order=tuple(driver_specs)):
+                with self.assertRaisesRegex(ValueError, "is ambiguous between"):
+                    load_profile(
+                        path,
+                        driver_specs=driver_specs,
+                        repository_root=self.root,
+                    )
 
     def test_known_unavailable_driver_does_not_block_profile_loading(self):
         profile = self.load(
