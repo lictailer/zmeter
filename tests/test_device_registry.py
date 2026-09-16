@@ -94,14 +94,14 @@ registry = build_default_registry()
 assert registry.driver_ids == (
     "mock_device", "ni6423", "nidaq", "pem100", "sp150",
     "hp34401a", "keithley24xx", "sr860", "sr830", "demo_device",
-    "bbd30x", "k10cr1", "four9", "montana2", "opticool", "tlpm",
+    "bbd30x", "k10cr1", "four9", "montana2", "opticool", "tlpm", "mfli",
 )
 assert "mock_device" in registry.config_specs
 assert "mockDevice" not in registry.config_specs
 assert registry.config_specs["mock_device"].aliases == ("mockDevice",)
 watched = (
     "devices", "pyvisa", "clr", "nidaqmx", "PyDAQmx",
-    "opticool", "sr830", "sr860", "tlpm",
+    "opticool", "sr830", "sr860", "tlpm", "zhinst",
 )
 loaded = sorted(
     name for name in sys.modules

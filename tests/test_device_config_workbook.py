@@ -14,6 +14,28 @@ WORKBOOK_PATH = REPOSITORY_ROOT / "device_config.xlsx"
 
 
 class DeviceConfigWorkbookTests(unittest.TestCase):
+    def test_mfli_row_and_table_coverage(self):
+        from core.device_management import build_default_registry
+        from core.device_management.config import load_profile
+
+        workbook = load_workbook(WORKBOOK_PATH, data_only=False)
+        self.addCleanup(workbook.close)
+        devices = workbook['Devices']
+        self.assertEqual([devices.cell(24, col).value for col in range(1, 8)],
+                         ['mfli_0', 'mfli', True, False,
+                          'DEV30037, 192.168.141.54', None, None])
+        self.assertEqual(devices['E24'].number_format, '@')
+        self.assertEqual(devices.tables['FlatDeviceConfigTable'].ref, 'A1:H24')
+        self.assertEqual(workbook['Guide']['D21'].value, 'mfli')
+        self.assertIn('$D$21', devices['H201'].value)
+        profile = load_profile(WORKBOOK_PATH, driver_specs=build_default_registry().config_specs)
+        config = next(device for device in profile.devices if device.id == 'mfli_0')
+        self.assertEqual(config.connection['address'], 'DEV30037, 192.168.141.54')
+        self.assertTrue(config.enabled)
+        self.assertFalse(config.connect_on_start)
+        self.assertIsNone(config.scan_channels.setters)
+        self.assertIsNone(config.scan_channels.getters)
+
     def test_checked_in_workbook_keeps_reviewed_device_values(self):
         workbook = load_workbook(WORKBOOK_PATH, data_only=False)
         self.addCleanup(workbook.close)
@@ -80,7 +102,7 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
         self.assertIn("NOW()>=0", formula)
         self.assertRegex(
             formula,
-            re.compile(r"(?:'Guide'|Guide)!\$D\$4:\$D\$20"),
+            re.compile(r"(?:'Guide'|Guide)!\$D\$4:\$D\$21"),
         )
         self.assertIn("UNKNOWN DRIVER", formula)
         self.assertIn("INVALID CONNECT FLAG", formula)
@@ -91,12 +113,13 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
 
         accepted = {
             formula_workbook["Guide"].cell(row=row, column=4).value
-            for row in range(4, 21)
+            for row in range(4, 22)
         }
         self.assertEqual(
             accepted,
             {
                 "mock_device",
+                "mfli",
                 "mockDevice",
                 "ni6423",
                 "nidaq",
