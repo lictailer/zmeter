@@ -42,15 +42,13 @@ defaults. To launch only the maintained device window:
 python -B devices/mfli/MFLI_main.py
 ```
 
-This standalone entry starts with blank serial/host fields. The old
-`devices/MFLI_temp/MFLI_main.py` launcher delegates here and retains the demo's
-editable bench defaults. Both standalone launches connect only on an explicit
-button press. Closing the standalone window performs cleanup; closing a managed
+This standalone entry starts with blank serial/host fields and connects only on
+an explicit button press. Closing the standalone window performs cleanup; closing a managed
 device panel hides it and retains its connection, plots, and log.
 
 ### Dependencies and LabOne prerequisites
 
-`zhinst-core==26.7.1.4` is pinned in `zmeter_Aug2026_environment.yml` and the local
+`zhinst-core==26.7.1.4` is pinned in `zmeter_Sept2026_environment.yml` and the local
 requirements file. Toolkit and Utils are unnecessary. No packages were installed
 during integration. Tested installed versions: Python 3.12.12, PyQt6 6.9.1,
 pyqtgraph 0.13.7, NumPy 2.4.1, Core 26.7.1.4.
@@ -145,22 +143,13 @@ The existing manager may refuse shutdown while a routed request or device call
 is active; finish/abort the operation and retry. Other LabOne clients can alter
 settings between calls, so coordinate simultaneous use.
 
-## Offline validation
+## Validation history
 
-From the repository root with `QT_QPA_PLATFORM=offscreen`, put `TEMP` and `TMP`
-under `devices/MFLI_temp/.scratch` when running in a restricted environment:
-
-```powershell
-python -B -m unittest tests.test_mfli_integration -v
-python -B -m unittest tests.test_mfli_ramping -v
-python -B -m unittest discover -s devices/MFLI_temp/tests -p 'test_*.py' -v
-python -B -m unittest discover -s tests -p 'test_*.py' -v
-```
-
-Integration tests cover lazy registration, address errors, all 25 channel names,
-filters, global limits, scalar scan reads, routing, abort, pause/resume, reconnect,
-panel hide/reopen, missing Core, late connections, blocked calls, and failed cleanup.
-See [development notes](../MFLI_temp/DEVELOPMENT_NOTES.md) for results and provenance.
+Before release cleanup, the development branch passed 24 fake/offscreen ramp and
+integration tests and 60 device/demo regressions. The development demos, tests,
+and detailed notes are retained on `MFLI_dev2.0` and excluded from this release
+branch. This cleanup does not alter the hardware, logic, or main implementation.
+Integrated hardware and ramp timing acceptance remain user-executed below.
 
 ## User-executed hardware acceptance
 

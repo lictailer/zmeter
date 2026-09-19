@@ -4,7 +4,7 @@
 
 This package controls a Quantum Design OptiCool through the vendor .NET `QDInstrument.dll`. It provides temperature and magnetic-field set/read operations plus optional waits for stable/holding status. It is a startup-only registered real-hardware integration with no production simulator or fake .NET backend.
 
-Importing or constructing the panel does not load the vendor runtime. Each Connect attempt loads the DLL from the retained fixed path `C:\QdOptiCool\LabVIEW\QDInstrument.dll`, waits the established one second, and then creates the vendor objects. A failed attempt clears partial state, remains disconnected, and can be retried from the panel. The Python environment must supply pythonnet/.NET modules (`clr`, `System`, and `QuantumDesign`); these are not fully represented by the maintained Conda file.
+Importing or constructing the panel does not load the vendor runtime. Each Connect attempt loads the DLL from the retained fixed path `C:\QdOptiCool\LabVIEW\QDInstrument.dll`, waits the established one second, and then creates the vendor objects. A failed attempt clears partial state, remains disconnected, and can be retried from the panel. The September environment file includes Python.NET for `clr` and .NET interoperation. The Windows .NET runtime and the vendor DLL providing `QuantumDesign` must still be supplied separately.
 
 ## Scan channels
 

@@ -81,7 +81,7 @@ dependencies:
   - nitypes=1.0.1=pyhcf101f3_0
   - numpy=2.4.1=py312h050da96_0
   - numpy-base=2.4.1=py312h1e017a8_0
-  - openpyxl=3.1.5=py312h827c3e9_1
+  - openpyxl=3.1.5=py312h827c3e9_1  # Required for device_config.xlsx loading.
   - openssl=3.5.7=hbb43b14_0
   - packaging=25.0=py312haa95532_1
   - paramiko=4.0.0=py312haa95532_0
@@ -141,5 +141,6 @@ dependencies:
   - zlib=1.3.1=h02ab6af_0
   - zstd=1.5.7=h56299aa_0
   - pip:
+      - pythonnet==3.0.5
       - zhinst-core==26.7.1.4
 prefix: C:\Users\Taylo\anaconda3\envs\zmeter_Aug2026

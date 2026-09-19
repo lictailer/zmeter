@@ -44,13 +44,12 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
 | `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
 | `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, global amplitude/DC ramping (10 V/s, 100 Hz), scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
-| `devices/MFLI_temp/` | Thin standalone launcher with demo defaults, original connection/write-read demos, offline regressions, development notes, and ignored development scratch files |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |
 | `scan_range_limits.json` | Default global scan-output limit configuration |
-| `zmeter_Aug2026_environment.yml` | Current Windows Conda environment, including the pinned optional MFLI Core dependency |
+| `zmeter_Sept2026_environment.yml` | Current Windows Conda environment, including openpyxl, Python.NET, and the pinned optional MFLI Core dependency |
 | `archive/` | Retired documentation/code evidence; not current authority |
 
 The standalone deployment installer is maintained in
@@ -78,7 +77,8 @@ Update this file when verified module ownership, import paths, entry points, or 
 
 MFLI uses its own single Core API worker rather than VISA. Its maintained package
 keeps address validation and connection helpers in `MFLI_hardware.py`, alongside
-`MFLI_logic.py` and `MFLI_main.py`, with no imports from `MFLI_temp`. The router
+`MFLI_logic.py` and `MFLI_main.py`. Development demos and dedicated MFLI tests
+remain on `MFLI_dev2.0` and are excluded from the release branch. The router
 runs requests for this opt-in device in the background while holding a manager
 session lease; the MFLI logic treats routed requests as manual panel work so the
 scan gate applies. Integrated scan storage uses the existing channel schema.

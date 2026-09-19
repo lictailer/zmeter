@@ -60,16 +60,16 @@ All launch and validation commands should be run from the repository root becaus
 ### 2. Create the maintained environment
 
 ```powershell
-conda env create -f zmeter_Aug2026_environment.yml
+conda env create -f zmeter_Sept2026_environment.yml
 conda activate zmeter_Aug2026
 ```
 
-The current August environment includes the optional MFLI dependency `zhinst-core==26.7.1.4`. Existing release-named environments can continue to be used when their dependencies match.
+The current September environment includes the optional MFLI dependency `zhinst-core==26.7.1.4`. Existing release-named environments can continue to be used when their dependencies match.
 
 For an existing environment after the YAML changes:
 
 ```powershell
-conda env update -f zmeter_Aug2026_environment.yml --prune
+conda env update -f zmeter_Sept2026_environment.yml --prune
 conda activate zmeter_Aug2026
 ```
 
@@ -242,7 +242,7 @@ devices/<device>/               Device-specific widget, logic, hardware, and UI 
 tests/                          Hardware-independent core regression tests
 data/                           Default local measurement output
 scan_range_limits.json          Configured scan-output limits
-zmeter_Aug2026_environment.yml  Maintained Conda environment
+zmeter_Sept2026_environment.yml  Maintained Conda environment
 project_structure.md            Authoritative maintained structure documentation
 AGENTS.md                       Coding-agent policy and safety instructions
 archive/                        Historical documentation and retired material
