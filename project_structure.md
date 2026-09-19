@@ -43,7 +43,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
 | `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
-| `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
+| `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, global amplitude/DC ramping (10 V/s, 100 Hz), scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
 | `devices/MFLI_temp/` | Thin standalone launcher with demo defaults, original connection/write-read demos, offline regressions, development notes, and ignored development scratch files |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |

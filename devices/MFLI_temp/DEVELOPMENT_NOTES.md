@@ -1,5 +1,69 @@
 # MFLI development notes
 
+## Global amplitude/DC ramping — 2026-09-19
+
+Updated on `MFLI_dev2.0`, starting at commit
+`d42aca7245d08e9f0bfaf817067384fc8a70d6e1`. The pre-existing modified
+`device_config.xlsx` was preserved without opening or changing it.
+
+The four amplitude setters and output DC setter now share `_ramp_voltage` in the
+maintained hardware layer. This makes panel, routed, standalone, and scan writes
+use the same behavior without new public channels or a direct-set alternative.
+The original experimental demos remain historical standalone examples. Phase
+writes, channel signatures, sample acquisition, and measurement formats are unchanged.
+
+Reference: `devices/keithley24xx/keithley24xx_logic.py::ramp_voltage_to` uses a
+fixed voltage increment and interval, clamps the final point, and checks stop
+requests. MFLI hardcodes `RAMP_RATE_V_PER_SECOND = 10.0` and
+`RAMP_UPDATES_PER_SECOND = 100.0`. Each update waits 10 ms and advances at most
+0.1 V; a fractional final step uses the exact target. API overhead slows the
+nominal cadence, without catch-up bursts. The ramp reads its initial value from
+the instrument and fails if that read fails; it never substitutes zero.
+
+The final target is range-checked before any write; each step re-reads current
+amplitudes, offset, and range before applying. Existing global scan target limits
+remain in place. The worker's cancellation event interrupts waits, checks again
+after settings reads and writes, and raises `InterruptedError` with the last
+acknowledged value. Force-stop, scan preparation, disconnect, and shutdown use
+this existing event. No reset, zeroing, rollback, or failed-write retry occurs.
+Native API calls cannot be interrupted. After a partial ramp, refresh settings
+to see the actual value. A successful setter returns the final acknowledgement.
+
+Validation (selected `zmeter-v1.0-beta.1` Python, `QT_QPA_PLATFORM=offscreen`,
+TEMP/TMP and compilation caches under ignored `.scratch`):
+
+- `python -B -m unittest tests.test_mfli_ramping tests.test_mfli_integration -v`:
+  **24 passed** (9 new ramp tests plus 15 integration tests).
+- `python -B -m unittest discover -s devices/MFLI_temp/tests -p 'test_*.py' -v`:
+  **60 passed**. Close-during-write tests now request a different amplitude,
+  since setting the current value correctly performs no write.
+- New tests cover all five channels, both directions/zero crossings, fixed waits
+  and step bounds, fractional targets/acknowledgements, no-op values, direct phase,
+  invalid targets/start reads, intermediate range changes, failed steps, shared
+  panel/scan behavior, and interruption of an active native write by force-stop.
+- `python -B -m py_compile devices/mfli/MFLI_hardware.py tests/test_mfli_ramping.py
+  devices/MFLI_temp/tests/test_mfli_layers.py` and `git diff --check`: passed.
+
+Final `git status --short --branch` (uncommitted; workbook modification pre-existed):
+
+```text
+## MFLI_dev2.0...origin/MFLI_dev2.0
+ M device_config.xlsx
+ M devices/MFLI_temp/DEVELOPMENT_NOTES.md
+ M devices/MFLI_temp/README.md
+ M devices/MFLI_temp/tests/test_mfli_layers.py
+ M devices/mfli/MFLI_hardware.py
+ M devices/mfli/README.md
+ M project_structure.md
+?? tests/test_mfli_ramping.py
+```
+
+All tests use guarded fake APIs. No packages were installed. Real ramp timing
+and user-executed ramp acceptance remain pending; prior standalone hardware
+success does not validate this new ramp behavior. See the maintained README's
+ramp acceptance checklist. Full repository/workbook tests were not rerun for
+this isolated hardware-layer change; the relevant MFLI suites passed.
+
 ## Address format simplification — 2026-09-16
 
 The current workbook address contract is plain `DEV30037, 192.168.141.54` or

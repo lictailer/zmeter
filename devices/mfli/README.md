@@ -83,6 +83,22 @@ Amplitude/DC writes re-read all four amplitudes, offset, and range and require
 `sum(abs(amplitudes)) + abs(offset) <= range`, including disabled tones. Existing
 ZMeter global scan limits are also enforced. No write is automatically retried.
 
+All four amplitude setters and the DC offset setter **always ramp**, including
+panel Set buttons, standalone use, routed commands, and scans. The hardcoded
+settings in `MFLI_hardware.py` are **10 V/s** and **100 updates/s**: steps are at
+most 0.1 V, with a 10 ms cancellable wait before each step. The starting value is
+read from the instrument; the final step lands on the requested target and returns
+its acknowledged value. An unchanged target requires no write. There is no
+separate direct-set channel or ramp setting. Phase setters remain direct.
+
+The final target is checked before starting and the current combined output
+range is checked before every intermediate write. Cancellation stops further
+steps and raises an error, leaving the last applied value in place; **Refresh
+settings** shows it after interruption. A failed step is not retried. API and
+range-read overhead can make the ramp slower than the nominal rate; it never
+speeds up to catch up. Native calls must finish before cancellation can take
+effect. Monitoring shares the worker and pauses its updates during each ramp.
+
 Each scalar getter waits for a newer timestamp than its own baseline. Separate
 quantities can have different timestamps; there is no averaging or shared scan
 sample cache. The default freshness timeout is 5 seconds, editable through
@@ -130,6 +146,7 @@ under `devices/MFLI_temp/.scratch` when running in a restricted environment:
 
 ```powershell
 python -B -m unittest tests.test_mfli_integration -v
+python -B -m unittest tests.test_mfli_ramping -v
 python -B -m unittest discover -s devices/MFLI_temp/tests -p 'test_*.py' -v
 python -B -m unittest discover -s tests -p 'test_*.py' -v
 ```
@@ -151,3 +168,11 @@ See [development notes](../MFLI_temp/DEVELOPMENT_NOTES.md) for results and prove
    messages for a disabled demodulator, then restore its LabOne setup.
 5. Close ZMeter while monitoring. Confirm client cleanup and that output settings
    remain applied. Integrated hardware acceptance is pending this user test.
+
+**User-executed ramp acceptance:** review safe targets and output range in LabOne,
+then exercise DC offset and all four amplitudes upward and downward using the
+panel and a small scan. Confirm intermediate steps and final readbacks, abort an
+active ramp and refresh its last applied value, and verify phase remains direct.
+Use suitable acquisition or external measurement to assess actual ramp timing;
+the 100 ms plot refresh cannot resolve every 10 ms step. This ramp change has
+only fake/offscreen validation so far.

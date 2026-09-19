@@ -72,8 +72,11 @@ its demodulator reference, so a same-channel loopback can retain the same theta.
 
 Amplitude and DC writes re-read all four amplitudes, offset, and output range.
 The conservative sum of absolute peaks (including disabled tones) plus absolute
-offset must fit the current range. The UI does not auto-range, enable outputs,
-ramp, or restore settings. Another LabOne client can still change settings
+offset must fit the current range. The maintained UI and scan channels always
+ramp amplitude/DC targets at a hardcoded 10 V/s and 100 updates/s; see the
+[maintained ramp contract](../mfli/README.md). Phase writes remain direct.
+The UI does not auto-range, enable outputs, or restore settings.
+Another LabOne client can still change settings
 between API calls; coordinate edits between clients. A failed write can already
 have applied and is never automatically retried.
 

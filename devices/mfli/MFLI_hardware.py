@@ -11,6 +11,9 @@ import threading
 import time
 from typing import Callable
 
+RAMP_RATE_V_PER_SECOND = 10.0
+RAMP_UPDATES_PER_SECOND = 100.0
+
 if __package__:
     from .connection import ensure_device_connected, validate_config
 else:
@@ -190,8 +193,7 @@ class MFLIHardware:
     def write_amplitude(self, channel: int, value: float) -> float:
         i = channel_index(channel)
         value = finite(value, "Amplitude")
-        self._check_headroom(channel, value)
-        return self._write(f"sigouts/0/amplitudes/{i}", value)
+        return self._ramp_voltage(f"sigouts/0/amplitudes/{i}", channel, value)
 
     def write_phase(self, channel: int, value: float) -> float:
         i = channel_index(channel)
@@ -202,8 +204,40 @@ class MFLIHardware:
 
     def write_offset(self, value: float) -> float:
         value = finite(value, "DC offset")
-        self._check_headroom(None, value)
-        return self._write("sigouts/0/offset", value)
+        return self._ramp_voltage("sigouts/0/offset", None, value)
+
+    def _ramp_voltage(self, node: str, channel: int | None, target: float) -> float:
+        """Ramp every amplitude/DC write on the owning worker, without catch-up bursts."""
+        if self.cancel.is_set():
+            raise InterruptedError(f"MFLI ramp cancelled before starting: {node}.")
+        start = self._double(node)  # Never assume zero or use an old UI value.
+        self._check_headroom(channel, target)  # Reject invalid targets before any write.
+        last_ack = start
+
+        def check_cancelled():
+            if self.cancel.is_set():
+                raise InterruptedError(
+                    f"MFLI ramp cancelled: {node}; last acknowledged value {last_ack:g} V. "
+                    "Refresh settings before continuing."
+                )
+
+        check_cancelled()
+        interval = 1.0 / RAMP_UPDATES_PER_SECOND
+        step = RAMP_RATE_V_PER_SECOND * interval
+        distance = abs(target - start)
+        direction = 1 if target > start else -1
+        count = math.ceil(distance / step)
+        for index in range(1, count + 1):
+            # Wait before every step, including the first and the final partial
+            # step. API overhead may slow the ramp; never compensate by jumping.
+            self.cancel.wait(interval)
+            check_cancelled()
+            next_value = target if index == count else start + direction * index * step
+            self._check_headroom(channel, next_value)
+            check_cancelled()  # Stop requests may arrive during the settings reads.
+            last_ack = self._write(node, next_value)
+            check_cancelled()  # A native write may finish after an abort request.
+        return last_ack
 
     def _write(self, node: str, value: float) -> float:
         try:

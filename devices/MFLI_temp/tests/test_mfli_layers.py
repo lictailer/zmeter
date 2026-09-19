@@ -465,6 +465,7 @@ class GuiTests(OfflineCase):
         window = self.make_window()
         self.connect_window(window)
         self.api.delay_write = True
+        window.amplitudes[0].setValue(.5)
         window.write_buttons[0].click()
         self.pump_until(self.api.delay_started.is_set)
         ticks = []
@@ -507,6 +508,7 @@ class GuiTests(OfflineCase):
         window = self.make_window()
         self.connect_window(window)
         self.api.delay_write = True
+        window.amplitudes[0].setValue(.5)
         window.write_buttons[0].click()
         self.pump_until(self.api.delay_started.is_set)
         window.disconnect_button.click()
