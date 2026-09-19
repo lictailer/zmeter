@@ -2,13 +2,13 @@
 
 ## Canonical environment
 
-ZMeter targets 64-bit Windows. The maintained environment is `zmeter_May2026_environment.yml`, which defines `zmeter_May2026` with Python 3.12.12. `zmeter_Mar2026_environment.yml` is an older snapshot and is not the default for a new setup.
+ZMeter targets 64-bit Windows. The maintained environment is `zmeter_Sept2026_environment.yml`, which defines `zmeter_Aug2026` with Python 3.12.12. It includes `zhinst-core==26.7.1.4` for the optional MFLI driver; Zurich Toolkit and Utils are not required.
 
 Create and activate from a Conda-enabled PowerShell or prompt:
 
 ```powershell
-conda env create -f zmeter_May2026_environment.yml
-conda activate zmeter_May2026
+conda env create -f zmeter_Sept2026_environment.yml
+conda activate zmeter_Aug2026
 python --version
 python -c "import sys; print(sys.executable)"
 ```
@@ -16,9 +16,54 @@ python -c "import sys; print(sys.executable)"
 Update an existing environment deliberately:
 
 ```powershell
-conda env update -f zmeter_May2026_environment.yml --prune
-conda activate zmeter_May2026
+conda env update -f zmeter_Sept2026_environment.yml --prune
+conda activate zmeter_Aug2026
 ```
+
+## Workbook and .NET dependencies
+
+The September YAML explicitly includes `openpyxl=3.1.5` (Conda) and
+`pythonnet==3.0.5` (pip). Openpyxl was already present; Python.NET was missing
+and is now added. Do not install a separate package named `clr`: Python.NET
+provides that import. Its `clr-loader` dependency is resolved by pip. The
+manifest retains its exported environment name `zmeter_Aug2026`; use an explicit
+`--name` when updating a release-named environment.
+
+[Python.NET 3.0.5](https://pypi.org/project/pythonnet/3.0.5/) declares Python 3.12
+support. [Openpyxl 3.1.5](https://pypi.org/project/openpyxl/3.1.5/) handles the
+Excel configuration. Python.NET does not supply the instrument vendor DLLs or
+Windows .NET runtime; those remain device-specific prerequisites.
+
+For a user whose existing environment lacks these packages, activate that
+ZMeter environment and apply the updated YAML to its actual name. Confirm the
+interpreter before checking the installed packages:
+
+```powershell
+python -c "import sys; from importlib.metadata import version; print(sys.executable); print('openpyxl', version('openpyxl')); print('pythonnet', version('pythonnet'))"
+```
+
+### Release cleanup validation (2026-09-19)
+
+On `MFLI_dev2.0_pr`, the MFLI development folder and its two dedicated root test
+files were removed from release paths. They remain on `MFLI_dev2.0`; an ignored
+local backup is under `.restructure_tmp/mfli_release_cleanup`. Documentation was
+updated to use the maintained standalone launcher and September YAML. All
+retained executable Python, routing/registration code, and `device_config.xlsx`
+were verified unchanged against the starting commit. This changes release
+contents and dependency declarations, not device behavior or measurement formats.
+
+The YAML parsed successfully with both dependencies present. The existing
+selected environment already has openpyxl 3.1.5 but lacks Python.NET.
+`pip install --dry-run --only-binary=:all: pythonnet==3.0.5 openpyxl==3.1.5`
+could not resolve Python.NET in this execution environment, including an
+isolated retry with an explicit PyPI index. No packages were installed and no
+fresh-environment installation is claimed; test the YAML on the target machine.
+
+Offline `python -B -m unittest discover -s tests -p 'test_*.py' -v` ran 326 tests:
+323 passed and three existing `test_device_config_workbook` checks failed on
+changed row order, flags, and cached status expectations. Those tests and the
+workbook were left untouched. No hardware was accessed. Logs and the dependency
+preview output are in the ignored cleanup directory.
 
 ## One-click release environments
 
@@ -88,7 +133,7 @@ JSON saving is separate. If PPT export fails, preserve and verify the JSON resul
 ### Python module missing
 
 ```powershell
-conda activate zmeter_May2026
+conda activate zmeter_Aug2026
 python -c "import sys; print(sys.executable)"
 python --version
 ```

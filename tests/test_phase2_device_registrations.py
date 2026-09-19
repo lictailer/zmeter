@@ -45,8 +45,8 @@ import sys
 from core.device_management.registry import build_default_registry
 
 registry = build_default_registry()
-assert registry.driver_ids[-4:] == ("four9", "montana2", "opticool", "tlpm")
-for driver_id in registry.driver_ids[-4:]:
+assert registry.driver_ids[-5:-1] == ("four9", "montana2", "opticool", "tlpm")
+for driver_id in registry.driver_ids[-5:-1]:
     assert driver_id in registry.config_specs
 loaded = sorted(
     name for name in sys.modules

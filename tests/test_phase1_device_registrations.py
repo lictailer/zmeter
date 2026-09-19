@@ -83,7 +83,7 @@ class Phase1RegistrationTests(unittest.TestCase):
 import sys
 from core.device_management.registry import build_default_registry
 
-expected = (*{PHASE1_DRIVER_IDS!r}, "four9", "montana2", "opticool", "tlpm")
+expected = (*{PHASE1_DRIVER_IDS!r}, "four9", "montana2", "opticool", "tlpm", "mfli")
 registry = build_default_registry()
 assert registry.driver_ids == expected
 watched = (

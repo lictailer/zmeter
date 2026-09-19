@@ -284,6 +284,33 @@ def sr860_registration() -> DriverRegistration:
     )
 
 
+def mfli_registration() -> DriverRegistration:
+    """Startup-only Zurich client with worker-owned I/O and scalar scan channels."""
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="mfli", connection_fields={"address": _address_spec()},
+        ),
+        factory=_widget_factory("devices.mfli.MFLI_main", "MFLI"),
+        configure_instance=lambda instance, connection: instance.configure_address(
+            _connection_address(connection)
+        ),
+        connect=lambda instance, connection, timeout: instance.connect(
+            _connection_address(connection), timeout
+        ),
+        startup_connect=lambda instance, connection, timeout: instance.startup_connect(
+            _connection_address(connection), timeout
+        ),
+        disconnect=lambda instance: instance.disconnect(),
+        start_scan=lambda instance: instance.start_scan(),
+        stop_scan=lambda instance: instance.stop_scan(),
+        force_stop=lambda instance: instance.force_stop(),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        close_widget=lambda instance: instance.close_managed(),
+        is_busy=lambda instance: instance.logic.lifecycle_busy(),
+        is_connected=lambda instance: instance.logic.connected,
+    )
+
+
 def sr830_registration() -> DriverRegistration:
     return DriverRegistration(
         config_spec=DriverConfigSpec(

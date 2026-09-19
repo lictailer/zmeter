@@ -60,17 +60,17 @@ All launch and validation commands should be run from the repository root becaus
 ### 2. Create the maintained environment
 
 ```powershell
-conda env create -f zmeter_May2026_environment.yml
-conda activate zmeter_May2026
+conda env create -f zmeter_Sept2026_environment.yml
+conda activate zmeter_Aug2026
 ```
 
-The older `zmeter_Mar2026_environment.yml` is retained as an earlier environment snapshot. Use the May file for a new setup unless the maintainers designate a newer canonical environment.
+The current September environment includes the optional MFLI dependency `zhinst-core==26.7.1.4`. Existing release-named environments can continue to be used when their dependencies match.
 
 For an existing environment after the YAML changes:
 
 ```powershell
-conda env update -f zmeter_May2026_environment.yml --prune
-conda activate zmeter_May2026
+conda env update -f zmeter_Sept2026_environment.yml --prune
+conda activate zmeter_Aug2026
 ```
 
 Confirm that the intended interpreter is active without importing device modules:
@@ -86,7 +86,7 @@ The expected Python series is 3.12; the current environment file pins Python 3.1
 
 The checked-in `device_config.xlsx` workbook is the default startup configuration. Review its `Devices` sheet before launching because enabled rows with `connect_on_start` set to `TRUE` request a connection.
 
-1. Activate `zmeter_May2026`.
+1. Activate `zmeter_Aug2026`.
 2. From the repository root, launch:
 
 ```powershell
@@ -242,7 +242,7 @@ devices/<device>/               Device-specific widget, logic, hardware, and UI 
 tests/                          Hardware-independent core regression tests
 data/                           Default local measurement output
 scan_range_limits.json          Configured scan-output limits
-zmeter_May2026_environment.yml  Maintained Conda environment
+zmeter_Sept2026_environment.yml  Maintained Conda environment
 project_structure.md            Authoritative maintained structure documentation
 AGENTS.md                       Coding-agent policy and safety instructions
 archive/                        Historical documentation and retired material
@@ -254,7 +254,7 @@ See `project_structure.md` for the maintained structural reference. Executable c
 
 ### `ModuleNotFoundError` for PyQt6, NumPy, PyVISA, or another dependency
 
-Confirm that `zmeter_May2026` is active and that `python -c "import sys; print(sys.executable)"` points into that environment. Update the environment from the YAML rather than installing isolated packages until the dependency difference is understood.
+Confirm that `zmeter_Aug2026` is active and that `python -c "import sys; print(sys.executable)"` points into that environment. Update the environment from the YAML rather than installing isolated packages until the dependency difference is understood.
 
 ### A `.ui` file cannot be found
 

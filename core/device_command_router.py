@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import nullcontext
+from threading import Thread
 import uuid
 
 from PyQt6 import QtCore
@@ -31,6 +33,32 @@ class DeviceCommandRouter(QtCore.QObject):
 
     @QtCore.pyqtSlot(object)
     def _handle_request(self, request: object) -> None:
+        target = (getattr(self.main_window, "equips", {}).get(request.get("target_device"))
+                  if isinstance(request, dict) else None)
+        if getattr(target, "route_commands_in_background", False):
+            request = deepcopy(request)
+            # Reserve before dispatch so shutdown cannot destroy the target
+            # between this Qt slot and admission on the background thread.
+            lease = self.main_window.device_request_session()
+            try:
+                lease.__enter__()
+            except Exception:
+                # The usual routing path constructs the structured refusal.
+                self.sig_command_responded.emit(self.route_command(request))
+                return
+
+            def route():
+                try:
+                    self.sig_command_responded.emit(self.route_command(request))
+                finally:
+                    lease.__exit__(None, None, None)
+
+            try:
+                Thread(target=route, name="DeviceCommandRouter", daemon=False).start()
+            except Exception:
+                lease.__exit__(None, None, None)
+                raise
+            return
         response = self.route_command(request)
         self.sig_command_responded.emit(response)
 
@@ -209,11 +237,14 @@ class DeviceCommandRouter(QtCore.QObject):
 
         full_channel_name = f"{target_device}_{channel}"
         try:
-            if action == "read":
-                result_value = self.main_window.read_info(full_channel_name)
-            else:
-                self.main_window.write_info(value, full_channel_name)
-                result_value = value
+            target = getattr(self.main_window, "equips", {}).get(target_device)
+            scope = getattr(getattr(target, "logic", None), "routed_request", None)
+            with scope() if callable(scope) else nullcontext():
+                if action == "read":
+                    result_value = self.main_window.read_info(full_channel_name)
+                else:
+                    self.main_window.write_info(value, full_channel_name)
+                    result_value = value
         except Exception as exc:
             return self._make_error_response(
                 request_id=request_id,

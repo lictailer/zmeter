@@ -485,6 +485,7 @@ def build_default_registry() -> DriverRegistry:
     """Return reviewed registrations without importing any device package."""
 
     from .registrations import (
+        mfli_registration,
         phase1_device_registrations,
         phase2_device_registrations,
     )
@@ -494,5 +495,6 @@ def build_default_registry() -> DriverRegistry:
             mock_device_registration(),
             *phase1_device_registrations(),
             *phase2_device_registrations(),
+            mfli_registration(),
         )
     )

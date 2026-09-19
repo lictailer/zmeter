@@ -43,12 +43,13 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
 | `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
+| `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, global amplitude/DC ramping (10 V/s, 100 Hz), scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |
 | `scan_range_limits.json` | Default global scan-output limit configuration |
-| `zmeter_May2026_environment.yml` | Maintained Windows Conda environment |
+| `zmeter_Sept2026_environment.yml` | Current Windows Conda environment, including openpyxl, Python.NET, and the pinned optional MFLI Core dependency |
 | `archive/` | Retired documentation/code evidence; not current authority |
 
 The standalone deployment installer is maintained in
@@ -58,7 +59,7 @@ packaging workflow and the maintained contract in
 
 ## Device integration inventory
 
-Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the current matrix in `documents/device_status.md` and the target package documentation before enabling it. The maintained replacement is the sole canonical `devices/sr830/` implementation. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
+Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `mfli`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the current matrix in `documents/device_status.md` and the target package documentation before enabling it. The maintained replacement is the sole canonical `devices/sr830/` implementation. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
 
 The Phase 2 startup-only registry entries are `four9`, `montana2`, `opticool`,
 and `tlpm`. They are lazy and selected only through the workbook; their device-local
@@ -73,3 +74,11 @@ manager and does not patch PyVISA globally.
 ## Maintenance rule
 
 Update this file when verified module ownership, import paths, entry points, or runtime relationships change. Keep behavioral details in the relevant canonical document and do not restore archived claims without code/test verification.
+
+MFLI uses its own single Core API worker rather than VISA. Its maintained package
+keeps address validation and connection helpers in `MFLI_hardware.py`, alongside
+`MFLI_logic.py` and `MFLI_main.py`. Development demos and dedicated MFLI tests
+remain on `MFLI_dev2.0` and are excluded from the release branch. The router
+runs requests for this opt-in device in the background while holding a manager
+session lease; the MFLI logic treats routed requests as manual panel work so the
+scan gate applies. Integrated scan storage uses the existing channel schema.
