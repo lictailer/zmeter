@@ -12,8 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from devices.MFLI_temp.tests.test_mfli_layers import OfflineCase
-from devices.mfli.connection import parse_address
-from devices.mfli.MFLI_hardware import MFLIHardware
+from devices.mfli.MFLI_hardware import MFLIHardware, parse_address
 from devices.mfli.MFLI_main import MFLI
 from core.device_management import DeviceManager, build_default_registry
 from core.device_management.models import ChannelFilters, DeviceConfig, ProfileConfig, ProfilePaths

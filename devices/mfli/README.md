@@ -6,6 +6,12 @@ acceptance below. Automated validation uses injected fake APIs only.
 
 ## Configuration and launch
 
+The maintained implementation uses three layers: `MFLI_hardware.py` owns address
+validation, connection/interface handling, and instrument I/O; `MFLI_logic.py`
+owns worker and scan coordination; `MFLI_main.py` owns the panel and standalone
+entry point. There is no separate connection module. Hardware-layer imports
+remain free of instrument access and defer the Zurich API import until connecting.
+
 The existing workbook address cell contains plain text, with no Python evaluation:
 
 | Address | Connection |

@@ -77,7 +77,8 @@ manager and does not patch PyVISA globally.
 Update this file when verified module ownership, import paths, entry points, or runtime relationships change. Keep behavioral details in the relevant canonical document and do not restore archived claims without code/test verification.
 
 MFLI uses its own single Core API worker rather than VISA. Its maintained package
-contains pure connection helpers and no imports from `MFLI_temp`. The router
+keeps address validation and connection helpers in `MFLI_hardware.py`, alongside
+`MFLI_logic.py` and `MFLI_main.py`, with no imports from `MFLI_temp`. The router
 runs requests for this opt-in device in the background while holding a manager
 session lease; the MFLI logic treats routed requests as manual panel work so the
 scan gate applies. Integrated scan storage uses the existing channel schema.

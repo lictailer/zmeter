@@ -14,13 +14,11 @@ from PyQt6 import QtCore, QtWidgets
 import pyqtgraph as pg
 
 if __package__:
-    from .MFLI_hardware import MFLIHardware
+    from .MFLI_hardware import MFLIHardware, parse_address, SERVER_PORT
     from .MFLI_logic import MFLILogic, Completion
-    from .connection import parse_address, SERVER_PORT
 else:
-    from MFLI_hardware import MFLIHardware
+    from MFLI_hardware import MFLIHardware, parse_address, SERVER_PORT
     from MFLI_logic import MFLILogic, Completion
-    from connection import parse_address, SERVER_PORT
 
 
 # Local launch configuration; the UI also allows editing connection settings.

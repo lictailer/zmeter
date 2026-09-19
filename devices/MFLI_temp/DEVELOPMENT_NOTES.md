@@ -1,5 +1,46 @@
 # MFLI development notes
 
+## Three-layer structure consolidation — 2026-09-19
+
+Moved `SERVER_PORT`, `parse_address`, `validate_config`, and
+`ensure_device_connected` from `devices/mfli/connection.py` into
+`MFLI_hardware.py`, retaining their implementation. Deleted `connection.py`
+without a compatibility shim. Updated the panel's package/direct-file imports
+and the integration tests to use the hardware layer. The maintained structure
+is hardware, logic, and main, plus package metadata/documentation.
+
+This is an internal module-path change only: address syntax, lazy Zurich imports,
+API/interface selection, ramping, scan channels, limits, cleanup, workbook schema,
+and measurement persistence retain their behavior. Historical references below
+to `connection.py` refer to its former location. No workbook or hardware access
+was needed for this refactor.
+
+Validation in `zmeter-v1.0-beta.1` with fake APIs and offscreen Qt:
+
+- `python -B -m unittest tests.test_mfli_integration tests.test_mfli_ramping -v`:
+  24 passed.
+- `python -B -m unittest discover -s devices/MFLI_temp/tests -p 'test_*.py' -v`:
+  60 passed, including package and both direct-file launcher imports.
+- `python -B -m py_compile devices/mfli/MFLI_hardware.py devices/mfli/MFLI_main.py
+  tests/test_mfli_integration.py`: passed; `git diff --check`: passed.
+- AST comparison confirmed the three moved functions are unchanged. No remaining
+  imports of the removed module exist in the maintained package or root tests.
+
+Full repository/workbook tests and hardware execution were not needed for the
+module-only refactor; prior hardware acceptance status is unchanged. Test logs
+and compilation caches remain in the ignored development scratch folder.
+Final working tree on `MFLI_dev2.0` (initially clean, no commit created):
+
+```text
+ M devices/MFLI_temp/DEVELOPMENT_NOTES.md
+ M devices/mfli/MFLI_hardware.py
+ M devices/mfli/MFLI_main.py
+ M devices/mfli/README.md
+ D devices/mfli/connection.py
+ M project_structure.md
+ M tests/test_mfli_integration.py
+```
+
 ## Global amplitude/DC ramping — 2026-09-19
 
 Updated on `MFLI_dev2.0`, starting at commit
