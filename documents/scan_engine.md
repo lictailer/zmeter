@@ -76,7 +76,7 @@ The UI removes stale averaged tokens when source getters change. Keep token pars
 
 Channels are split using the registered equipment labels, not a fixed underscore count. Reads and writes use a `ThreadPoolExecutor` with one task per device. This permits different devices to operate concurrently but deliberately keeps commands for one device sequential.
 
-Do not assume a vendor transport is thread-safe. If a device can also be used by monitoring or UI jobs, its integration must prevent contention. Before the worker starts, `Scan` captures the physical devices referenced by executable setters, getters, averaged-getter sources, and manual before/after writes. It stops monitors and calls `stop_scan()` only for that immutable participating set. Plot-only and default channels do not participate; an artificial write expands to both configured physical backing devices, while an artificial getter alone does not.
+Do not assume a vendor transport is thread-safe. If a device can also be used by monitoring or UI jobs, its integration must prevent contention. Before the scan worker starts, `Scan` seals editable settings and captures the physical devices referenced by executable setters, getters, averaged-getter sources, and manual before/after writes. It stops GUI-owned monitors on the Qt owner thread, then calls `stop_scan()` for that immutable participating set and initializes NumPy result arrays from a copied level model on the bounded scan-boundary worker. Only successful preparation returns to the GUI thread for plot setup and `ScanLogic.start()`; a failure restores the same set before releasing the runtime reservation. Plot-only and default channels do not participate; an artificial write expands to both configured physical backing devices, while an artificial getter alone does not.
 
 ## Limits and skipped points
 
@@ -90,9 +90,9 @@ Changing rejection or artificial-pair behavior requires focused tests for writes
 - Resume releases the wait condition.
 - Stop sets the worker stop flag, releases pause, sets the scan stop marker, and calls `force_stop()` only for the captured participating devices.
 - Pressing Scan during an active run requests stop, finalizes/saves that run, then starts a fresh run.
-- The worker always resets skip/control flags, restarts the same captured participating devices, and emits `sig_scan_finished`, including after error or stop. Equipment restart is an idempotent no-op after application-shutdown intent is reserved.
-- Finish status is logged as completed, stopped/restarted, or error. Finalization is deferred one GUI event-loop turn, exports PPT, writes JSON, and increments the serial.
-- Application shutdown seals new work, stops the active scan, waits for output finalization (including JSON recovery fallback), and only then starts device teardown.
+- The worker always resets skip/control flags and emits one terminal result, including after error or stop. It does not call device widgets. `Scan` then enters `finalizing` and restores the same captured participating devices on the scan-boundary worker; equipment restart remains an idempotent no-op after application-shutdown intent is reserved.
+- Finish status is logged as completed, stopped/restarted, or error. Finalization is deferred one GUI event-loop turn so Qt-owned widget captures can be encoded as PNG bytes. PowerPoint, JSON, recovery, and backup I/O then consume that immutable snapshot off-thread before the serial advances.
+- Application shutdown seals new work, stops or cancels the active scan boundary, waits for preparation/restore/output finalization (including JSON recovery fallback), and only then starts device teardown.
 
 ## Progress, logging, autosave, and output
 

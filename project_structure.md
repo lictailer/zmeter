@@ -32,8 +32,8 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queue/manual/past item widgets, queue orchestration, per-item manual-set workers, UI state transitions, and runtime-mutation seals |
 | `core/queue_model.py` | Thread-safe live queue entries with stable IDs, ordered pending mutations, current-item ownership, and atomic run completion |
-| `core/scan.py` | Scan editor/window, plot updates, run logging, primary/recovery JSON, save/load/PPT/autosave UI integration |
-| `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
+| `core/scan.py` | Scan editor/window, explicit prepare/run/finalize state, bounded lifecycle/output worker, GUI-owned image capture, plot updates, run logging, primary/recovery JSON, save/load/PPT/autosave UI integration |
+| `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, and terminal-result publication; it does not restore device widgets or persist final outputs |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing under whole-request manager leases |
 | `core/device_log.py` | Shared in-memory device-log presentation and formatting |
 | `core/shared_runtime/` | Lazy typed VISA/Kinesis ownership, leases, VISA discovery watchdog/retention, diagnostics, shutdown, fake injection, and local vendor manifests |

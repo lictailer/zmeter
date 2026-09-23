@@ -138,6 +138,18 @@ class ScanQueueConfigurationLockTests(unittest.TestCase):
         self.scan.setEnabled(True)
         self.assertTrue(all(widget.isEnabled() for widget in self._configuration_widgets()))
 
+    def test_scan_and_queue_locks_release_independently(self):
+        self.scan._set_scan_configuration_locked(True)
+        self.scan.set_queue_configuration_locked(True)
+
+        self.scan._set_scan_configuration_locked(False)
+        self.assertTrue(
+            all(not widget.isEnabled() for widget in self._configuration_widgets())
+        )
+
+        self.scan.set_queue_configuration_locked(False)
+        self.assertTrue(all(widget.isEnabled() for widget in self._configuration_widgets()))
+
 
 if __name__ == "__main__":
     unittest.main()

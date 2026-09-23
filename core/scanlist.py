@@ -227,20 +227,23 @@ class ScanItem(QtWidgets.QLabel):
         if not self._scan_start_accepted:
             raise RuntimeError("queued scan was not accepted for startup")
 
-        # Wait briefly for the scan thread to transition to running.
-        # If it never starts, continue to next queue item instead of hanging.
-        startup_wait_steps = 0
-        while (not self.scan.logic.isRunning()) and startup_wait_steps < 40:
+        # Preparation now runs on a bounded lifecycle worker. Keep this queue
+        # item current until preparation either starts ScanLogic or rolls back.
+        while (
+            not self.scan.logic.isRunning()
+            and getattr(self.scan, "scan_state", "idle") == "preparing"
+        ):
             QtCore.QThread.msleep(50)
-            startup_wait_steps += 1
+
+        start_error = getattr(self.scan, "_last_start_error", None)
+        if start_error is not None and not self.scan.logic.isRunning():
+            raise RuntimeError(f"queued scan preparation failed: {start_error}")
 
         while self.scan.logic.isRunning():
             QtCore.QThread.sleep(1)
 
-        # Scan output save/export is finalized on the GUI thread after the
-        # worker stops.  Keep this queue entry current until that delivery is
-        # complete so an existing or newly started scan cannot overlap the
-        # next queued item.
+        # Device restore and output persistence remain part of the same scan
+        # activity. Keep this entry current until finalization completes.
         while not bool(getattr(self.scan, "outputs_finalized", True)):
             QtCore.QThread.msleep(50)
 

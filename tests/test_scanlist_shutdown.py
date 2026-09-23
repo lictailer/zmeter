@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtCore, QtWidgets
 
-from core.scan import Scan
+from core.scan import Scan, _BoundaryOutcome, _OutputJobResult
 from core.scan_info import ScanInfo
 from core.scanlist import (
     ScanItem,
@@ -198,6 +198,16 @@ class ScanOutputFinalizationStateTests(unittest.TestCase):
         )
 
     def tearDown(self):
+        deadline = time.monotonic() + 2.0
+        while (
+            self.scan._boundary_thread is not None
+            and time.monotonic() < deadline
+        ):
+            self.app.processEvents()
+            time.sleep(0.002)
+        if self.scan._runtime_activity_reservation is not None:
+            self.scan._release_runtime_activity_reservation()
+        self.scan._set_scan_configuration_locked(False)
         self.scan.close()
         self.app.processEvents()
 
@@ -220,6 +230,11 @@ class ScanOutputFinalizationStateTests(unittest.TestCase):
 
         self.scan._start_scan_now()
 
+        deadline = time.monotonic() + 2.0
+        while probe.flag_seen_at_start is None and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(0.002)
+
         self.assertFalse(probe.flag_seen_at_start)
         self.assertFalse(self.scan._outputs_finalized)
 
@@ -238,9 +253,8 @@ class ScanOutputFinalizationStateTests(unittest.TestCase):
         observed = []
         self.scan._outputs_finalized = False
         self.scan._finalize_outputs_scheduled = True
+        self.scan._set_scan_state("finalizing")
         self.scan._start_new_scan_after_stop = True
-        self.scan.when_save_plots_clicked = lambda: None
-        self.scan.when_save_clicked = lambda: None
         serial = type(
             "_Serial",
             (),
@@ -257,26 +271,29 @@ class ScanOutputFinalizationStateTests(unittest.TestCase):
             self.scan._outputs_finalized = False
 
         self.scan._start_scan_now = restart
-        self.scan._finalize_scan_outputs()
+        self.scan._complete_scan_finalization(
+            _BoundaryOutcome(value=_OutputJobResult((), ())), object()
+        )
 
         self.assertEqual(observed, [True])
         self.assertFalse(self.scan._outputs_finalized)
         self.assertFalse(self.scan._finalize_outputs_scheduled)
 
-    def test_finalizer_marks_complete_when_output_save_raises(self):
+    def test_finalizer_marks_complete_when_output_worker_raises(self):
         self.scan._outputs_finalized = False
         self.scan._finalize_outputs_scheduled = True
+        self.scan._set_scan_state("finalizing")
 
-        def fail_save():
-            raise RuntimeError("save failed")
-
-        self.scan.when_save_plots_clicked = fail_save
-
-        with self.assertRaisesRegex(RuntimeError, "save failed"):
-            self.scan._finalize_scan_outputs()
+        self.scan._complete_scan_finalization(
+            _BoundaryOutcome(error=RuntimeError("save failed")), None
+        )
 
         self.assertTrue(self.scan._outputs_finalized)
         self.assertFalse(self.scan._finalize_outputs_scheduled)
+        self.assertEqual(self.scan.scan_state, "idle")
+        self.assertTrue(
+            any("save failed" in line for line in self.scan._current_scan_log)
+        )
 
 
 class ScanListShutdownTests(unittest.TestCase):

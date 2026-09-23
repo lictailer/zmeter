@@ -138,10 +138,32 @@ class SR830(QtWidgets.QWidget):
         self._append_log("SR830 monitor started.", level="INFO")
 
     def stop_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_stop_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+            return
+        self._stop_scan_on_owner()
+
+    @QtCore.pyqtSlot()
+    def _stop_scan_on_owner(self):
         self.scan_paused_monitor = self.monitor_enabled and self.timer.isActive()
         self.stop_timer()
 
     def start_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_start_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+            return
+        self._start_scan_on_owner()
+
+    @QtCore.pyqtSlot()
+    def _start_scan_on_owner(self):
         if self.scan_paused_monitor and self.logic.connected:
             self.start_timer()
         self.scan_paused_monitor = False

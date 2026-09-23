@@ -301,10 +301,32 @@ class NI6423(QtWidgets.QWidget):
 
     # ---------------------- scan lifecycle -----------------------
     def stop_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_stop_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+            return
+        self._stop_scan_on_owner()
+
+    @QtCore.pyqtSlot()
+    def _stop_scan_on_owner(self):
         self.scan_paused = True
         self.stop_timer()
 
     def start_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_start_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+            return
+        self._start_scan_on_owner()
+
+    @QtCore.pyqtSlot()
+    def _start_scan_on_owner(self):
         self.scan_paused = False
         if self.monitor_mode is not None and self.logic.is_initialized:
             self.start_timer()

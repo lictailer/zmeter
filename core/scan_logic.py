@@ -138,6 +138,7 @@ class ScanLogic(QtCore.QThread):
     sig_set_image_source = QtCore.pyqtSignal(object)        # Set data source for image plots
     sig_scan_finished = QtCore.pyqtSignal()                 # Scan completion notification
     sig_scan_error = QtCore.pyqtSignal(str)                 # Scan runtime error summary
+    sig_scan_terminal = QtCore.pyqtSignal(object)           # Immutable terminal result
     sig_update_remaining_time = QtCore.pyqtSignal(str)      # Time estimate updates
     sig_update_remaining_points = QtCore.pyqtSignal(str)    # Progress tracking updates
     sig_auto_backup = QtCore.pyqtSignal(bool)                   # Auto-backup trigger every hour
@@ -812,6 +813,7 @@ class ScanLogic(QtCore.QThread):
         This method starts the recursive scanning process and handles cleanup
         when the scan completes or is interrupted.
         """
+        terminal_error = None
         try:
             # Start recursive scanning from the outermost level
             self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
@@ -820,6 +822,7 @@ class ScanLogic(QtCore.QThread):
             self.looping(self.max_level)
         except Exception as exc:
             error_message = f"{type(exc).__name__}: {exc}"
+            terminal_error = error_message
             self.sig_scan_error.emit(error_message)
         finally:
             # Ensure proper cleanup regardless of how scan ends
@@ -828,16 +831,21 @@ class ScanLogic(QtCore.QThread):
             if hasattr(self.main_window, "reset_skip_next_scan_read_from_global_limit"):
                 self.main_window.reset_skip_next_scan_read_from_global_limit()
             
-            # Surface restart failures without suppressing GUI finalization.
-            try:
-                self.main_window.start_equipments(self.participating_device_ids)
-            except Exception as exc:
-                self.sig_scan_error.emit(
-                    "Equipment restart failed: "
-                    f"{type(exc).__name__}: {exc}"
+            terminal_signal = getattr(self, "sig_scan_terminal", None)
+            if terminal_signal is not None:
+                terminal_signal.emit(
+                    {
+                        "error": terminal_error,
+                        "participating_device_ids": tuple(
+                            self.participating_device_ids
+                        ),
+                        "completed_points": int(self.completed_points),
+                        "total_points": int(self.total_points),
+                    }
                 )
-            finally:
-                self.sig_scan_finished.emit()
+            # Retained for non-UI observers. Device restore and persistence
+            # are owned by the Scan terminal-result handler.
+            self.sig_scan_finished.emit()
 
     def run(self):
         """

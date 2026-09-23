@@ -1,6 +1,10 @@
 import datetime as _dt
+import copy
 from dataclasses import dataclass
+import json
 import re
+import time
+import traceback
 from .scan_info import *
 from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
@@ -10,7 +14,7 @@ from .construct_scan_coordinates import Construct
 from .all_plots import LinePlot
 from .all_plots import ImagePlot
 import os, shutil
-from .append_to_ppt import add_slide_with_qpixmap
+from .append_to_ppt import add_slide_with_png_bytes, add_slide_with_qpixmap
 
 
 _AVERAGE_GETTER_REFERENCE = re.compile(r"^level(\d+)_average_(.+)$")
@@ -26,6 +30,270 @@ class ScanChannelReference:
     level: str | None
     channel: str
     path: str
+
+
+@dataclass(frozen=True)
+class _CapturedImage:
+    png: bytes
+    width: int
+    height: int
+
+
+@dataclass(frozen=True)
+class _OutputSlide:
+    title: str
+    text: str
+    images: tuple[_CapturedImage, ...]
+    positions: tuple[tuple[int, int, int, int], ...] | None = None
+    comments: str = ""
+
+
+@dataclass(frozen=True)
+class _ScanOutputSnapshot:
+    ppt_path: str | None
+    slides: tuple[_OutputSlide, ...]
+    json_path: str | None
+    json_payload: dict
+    json_name: str
+    backup_dir: str
+    recovery_dir: str
+
+
+@dataclass(frozen=True)
+class _BoundaryOutcome:
+    value: object = None
+    error: Exception | None = None
+    traceback_text: str = ""
+
+
+@dataclass(frozen=True)
+class _OutputJobResult:
+    messages: tuple[tuple[str, str], ...]
+    timings: tuple[tuple[str, float], ...]
+    restore_error: Exception | None = None
+
+
+@dataclass(frozen=True)
+class _PrepareJobResult:
+    device_elapsed: float
+    data_elapsed: float = 0.0
+    error: Exception | None = None
+    restore_error: Exception | None = None
+
+
+class _ScanJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, float) and np.isnan(obj):
+            return "NaN"
+        return super().default(obj)
+
+
+class _BoundaryWorker(QtCore.QObject):
+    done = QtCore.pyqtSignal()
+
+    def __init__(self, operation):
+        super().__init__()
+        self._operation = operation
+        self.outcome = None
+
+    @QtCore.pyqtSlot()
+    def run(self):
+        try:
+            self.outcome = _BoundaryOutcome(value=self._operation())
+        except Exception as exc:
+            self.outcome = _BoundaryOutcome(
+                error=exc,
+                traceback_text=traceback.format_exc(),
+            )
+        finally:
+            self.done.emit()
+
+
+def _write_json_payload(path, payload):
+    with open(path, "w", encoding="utf-8") as json_file:
+        json.dump(payload, json_file, cls=_ScanJSONEncoder, indent=4)
+
+
+def _write_recovery_payload(snapshot, messages):
+    temporary_path = None
+    try:
+        os.makedirs(snapshot.recovery_dir, exist_ok=True)
+        safe_name = re.sub(
+            r"[^A-Za-z0-9._-]+", "_", str(snapshot.json_name or "scan.json")
+        ).strip("._") or "scan.json"
+        if not safe_name.lower().endswith(".json"):
+            safe_name = f"{safe_name}.json"
+        timestamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        stem = f"recovery_{timestamp}_{safe_name}"
+        recovery_path = os.path.join(snapshot.recovery_dir, stem)
+        count = 1
+        while os.path.exists(recovery_path):
+            name_part, extension = os.path.splitext(stem)
+            recovery_path = os.path.join(
+                snapshot.recovery_dir, f"{name_part}_{count}{extension}"
+            )
+            count += 1
+
+        temporary_path = f"{recovery_path}.{os.getpid()}.tmp"
+        _write_json_payload(temporary_path, snapshot.json_payload)
+        os.replace(temporary_path, recovery_path)
+        messages.append(("WARNING", f"Recovery JSON saved: {recovery_path}"))
+    except Exception as exc:
+        if temporary_path and os.path.exists(temporary_path):
+            try:
+                os.remove(temporary_path)
+            except OSError:
+                pass
+        messages.append(
+            (
+                "ERROR",
+                f"Recovery JSON save failed: {type(exc).__name__}: {exc}",
+            )
+        )
+
+
+def _persist_scan_outputs(snapshot):
+    """Persist one immutable completion snapshot without touching Qt widgets."""
+    messages = []
+    timings = []
+    json_path = snapshot.json_path
+    resolved_json_name = snapshot.json_name
+    if json_path is not None:
+        try:
+            folder, selected_name = os.path.split(json_path)
+            resolved_json_name = selected_name or snapshot.json_name
+            candidate = json_path
+            count = 1
+            while os.path.exists(candidate):
+                name_part, extension = os.path.splitext(resolved_json_name)
+                candidate = os.path.join(
+                    folder, f"{name_part}_{count}{extension}"
+                )
+                count += 1
+            json_path = candidate
+            resolved_json_name = os.path.basename(candidate)
+        except Exception as exc:
+            json_path = None
+            messages.append(
+                (
+                    "ERROR",
+                    "Primary JSON path preparation failed; writing recovery JSON: "
+                    f"{type(exc).__name__}: {exc}",
+                )
+            )
+
+    if snapshot.ppt_path:
+        ppt_written = False
+        started = time.perf_counter()
+        try:
+            ppt_folder = os.path.dirname(snapshot.ppt_path)
+            if ppt_folder:
+                os.makedirs(ppt_folder, exist_ok=True)
+            for slide in snapshot.slides:
+                slide_title = slide.title
+                if resolved_json_name != snapshot.json_name:
+                    slide_title = slide_title.replace(
+                        snapshot.json_name, resolved_json_name, 1
+                    )
+                add_slide_with_png_bytes(
+                    ppt_path=snapshot.ppt_path,
+                    slide_title=slide_title,
+                    slide_text=slide.text,
+                    png_images=tuple(image.png for image in slide.images),
+                    image_sizes=tuple(
+                        (image.width, image.height) for image in slide.images
+                    ),
+                    image_positions=slide.positions,
+                    comments_text=slide.comments,
+                )
+            messages.append(
+                (
+                    "INFO",
+                    f"PPT save succeeded: {snapshot.ppt_path} "
+                    f"({len(snapshot.slides)} slide(s))",
+                )
+            )
+            ppt_written = True
+        except Exception as exc:
+            messages.append(
+                ("ERROR", f"PPT save failed: {type(exc).__name__}: {exc}")
+            )
+        timings.append(("PPT write", time.perf_counter() - started))
+
+        started = time.perf_counter()
+        if not ppt_written:
+            pass
+        elif os.path.exists("Z:\\"):
+            if snapshot.backup_dir:
+                try:
+                    os.makedirs(snapshot.backup_dir, exist_ok=True)
+                    backup_target = os.path.join(
+                        snapshot.backup_dir, os.path.basename(snapshot.ppt_path)
+                    )
+                    shutil.copy2(snapshot.ppt_path, backup_target)
+                    messages.append(("INFO", f"PPT backup succeeded: {backup_target}"))
+                except Exception as exc:
+                    messages.append(
+                        (
+                            "WARNING",
+                            f"PPT backup failed: {type(exc).__name__}: {exc}",
+                        )
+                    )
+            else:
+                messages.append(("WARNING", "PPT backup skipped: backup path is empty."))
+        else:
+            messages.append(("WARNING", "PPT backup skipped: drive Z: not found."))
+        timings.append(("PPT backup copy", time.perf_counter() - started))
+
+    started = time.perf_counter()
+    json_written = False
+    if json_path is None:
+        messages.append(
+            ("WARNING", "Manual save canceled by user; writing recovery JSON.")
+        )
+        _write_recovery_payload(snapshot, messages)
+    else:
+        try:
+            json_folder = os.path.dirname(json_path)
+            if json_folder:
+                os.makedirs(json_folder, exist_ok=True)
+            _write_json_payload(json_path, snapshot.json_payload)
+            messages.append(("INFO", f"Manual save succeeded: {json_path}"))
+            json_written = True
+        except Exception as exc:
+            messages.append(
+                ("ERROR", f"Manual save failed: {type(exc).__name__}: {exc}")
+            )
+            _write_recovery_payload(snapshot, messages)
+    timings.append(("JSON write", time.perf_counter() - started))
+
+    if json_path is not None and json_written:
+        started = time.perf_counter()
+        if os.path.exists("Z:\\"):
+            if snapshot.backup_dir:
+                try:
+                    os.makedirs(snapshot.backup_dir, exist_ok=True)
+                    backup_target = os.path.join(
+                        snapshot.backup_dir, os.path.basename(json_path)
+                    )
+                    shutil.copy2(json_path, backup_target)
+                    messages.append(("INFO", f"JSON backup succeeded: {backup_target}"))
+                except Exception as exc:
+                    messages.append(
+                        (
+                            "WARNING",
+                            f"JSON backup failed: {type(exc).__name__}: {exc}",
+                        )
+                    )
+            else:
+                messages.append(("WARNING", "JSON backup skipped: backup path is empty."))
+        else:
+            messages.append(("WARNING", "JSON backup skipped: drive Z: not found."))
+        timings.append(("JSON backup copy", time.perf_counter() - started))
+
+    return _OutputJobResult(tuple(messages), tuple(timings))
 
 
 class Scan(QtWidgets.QWidget):
@@ -53,9 +321,13 @@ class Scan(QtWidgets.QWidget):
         self.getter_equipment_info = getter_equipment_info
 
         self._start_new_scan_after_stop = False
+        self._start_cancel_requested = False
         self._shutdown_requested = False
         self._queue_configuration_locked = False
         self._queue_configuration_widget_states = ()
+        self._scan_configuration_locked = False
+        self._scan_configuration_widget_states = ()
+        self._configuration_widget_locks = {}
 
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
@@ -119,6 +391,11 @@ class Scan(QtWidgets.QWidget):
         self._stop_intent_logged = False
         self._finalize_outputs_scheduled = False
         self._outputs_finalized = True
+        self._scan_state = "idle"
+        self._last_start_error = None
+        self._boundary_thread = None
+        self._boundary_worker = None
+        self._boundary_completion = None
         self._runtime_activity_reservation = None
         self._participating_device_ids = ()
         self.logStatus_textEdit.setReadOnly(True)
@@ -141,12 +418,64 @@ class Scan(QtWidgets.QWidget):
         plots_info = self.info.get("plots", None)
         if isinstance(plots_info, dict):
             self.all_plot_setting.update_ui(plots_info)
-        self.logic.sig_scan_finished.connect(self.scan_finished)
+        terminal_signal = getattr(self.logic, "sig_scan_terminal", None)
+        if terminal_signal is not None:
+            terminal_signal.connect(self.scan_finished)
+        else:
+            self.logic.sig_scan_finished.connect(self.scan_finished)
 
     @property
     def outputs_finalized(self) -> bool:
-        """Return whether GUI-thread output work for the last run is complete."""
+        """Return whether restore and output work for the last run is complete."""
         return bool(self._outputs_finalized and not self._finalize_outputs_scheduled)
+
+    @property
+    def scan_state(self) -> str:
+        """Return the explicit scan-boundary state used by queue/shutdown gates."""
+        return self._scan_state
+
+    def _set_scan_state(self, state):
+        if state not in {"idle", "preparing", "running", "finalizing"}:
+            raise ValueError(f"unknown scan state: {state}")
+        self._scan_state = state
+
+    def _log_stage_timing(self, stage, elapsed):
+        self._log_info(f"Scan boundary timing | stage={stage} | seconds={elapsed:.3f}")
+
+    def _start_boundary_job(self, operation, completion):
+        active = self._boundary_thread
+        if active is not None and active.isRunning():
+            raise RuntimeError("scan boundary worker is already running")
+
+        thread = QtCore.QThread(self)
+        worker = _BoundaryWorker(operation)
+        worker.moveToThread(thread)
+        self._boundary_thread = thread
+        self._boundary_worker = worker
+        self._boundary_completion = completion
+        thread.started.connect(worker.run)
+        worker.done.connect(thread.quit)
+        worker.done.connect(worker.deleteLater)
+        thread.finished.connect(self._boundary_job_finished)
+        thread.start()
+
+    @QtCore.pyqtSlot()
+    def _boundary_job_finished(self):
+        worker = self._boundary_worker
+        outcome = None if worker is None else worker.outcome
+        completion = self._boundary_completion
+        thread = self._boundary_thread
+        self._boundary_worker = None
+        self._boundary_thread = None
+        self._boundary_completion = None
+        if thread is not None:
+            thread.deleteLater()
+        if outcome is None:
+            outcome = _BoundaryOutcome(
+                error=RuntimeError("scan boundary worker returned no outcome")
+            )
+        if completion is not None:
+            completion(outcome)
 
     @QtCore.pyqtSlot(bool)
     def set_queue_configuration_locked(self, locked: bool) -> None:
@@ -155,36 +484,66 @@ class Scan(QtWidgets.QWidget):
         locked = bool(locked)
         if locked == self._queue_configuration_locked:
             return
+        widgets = self._configuration_widgets(include_scan_buttons=True)
+        self._apply_configuration_widget_lock("queue", widgets, locked)
+        self._queue_configuration_locked = locked
+        self._queue_configuration_widget_states = (
+            tuple((widget, False) for widget in widgets) if locked else ()
+        )
 
-        if locked:
-            widgets = (
-                self.lineEdit,
-                self.comments_textEdit,
-                self.PlotsPerPage,
-                self.all_level_setting,
-                self.all_plot_setting,
-                self.load_button,
-                self.save_button,
-                self.scan_button,
-                self.scan_button_1,
-                self.scan_button_2,
-                self.scan_button_3,
+    def _configuration_widgets(self, *, include_scan_buttons):
+        widgets = [
+            self.lineEdit,
+            self.comments_textEdit,
+            self.PlotsPerPage,
+            self.all_level_setting,
+            self.all_plot_setting,
+            self.load_button,
+            self.save_button,
+        ]
+        if include_scan_buttons:
+            widgets.extend(
+                (
+                    self.scan_button,
+                    self.scan_button_1,
+                    self.scan_button_2,
+                    self.scan_button_3,
+                )
             )
-            # Ignore an outer Scan/ScanList disable when capturing this layer.
-            # Otherwise unlocking the queue after that outer seal is lifted
-            # could leave configuration controls disabled permanently.
-            states = tuple((widget, widget.isEnabledTo(self)) for widget in widgets)
-            for widget, _was_enabled in states:
+        return tuple(widgets)
+
+    def _apply_configuration_widget_lock(self, reason, widgets, locked):
+        if locked:
+            for widget in widgets:
+                state = self._configuration_widget_locks.get(widget)
+                if state is None:
+                    state = [widget.isEnabledTo(self), set()]
+                    self._configuration_widget_locks[widget] = state
+                state[1].add(reason)
                 widget.setEnabled(False)
-            self._queue_configuration_widget_states = states
-            self._queue_configuration_locked = True
             return
 
-        states = self._queue_configuration_widget_states
-        self._queue_configuration_widget_states = ()
-        self._queue_configuration_locked = False
-        for widget, was_enabled in states:
-            widget.setEnabled(was_enabled)
+        for widget, state in tuple(self._configuration_widget_locks.items()):
+            reasons = state[1]
+            if reason not in reasons:
+                continue
+            reasons.remove(reason)
+            if reasons:
+                continue
+            widget.setEnabled(state[0])
+            del self._configuration_widget_locks[widget]
+
+    def _set_scan_configuration_locked(self, locked):
+        """Seal editable scan inputs across prepare, run, and finalization."""
+        locked = bool(locked)
+        if locked == self._scan_configuration_locked:
+            return
+        widgets = self._configuration_widgets(include_scan_buttons=False)
+        self._apply_configuration_widget_lock("scan", widgets, locked)
+        self._scan_configuration_locked = locked
+        self._scan_configuration_widget_states = (
+            tuple((widget, False) for widget in widgets) if locked else ()
+        )
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
         base = self._next_unique_data_name()
@@ -271,7 +630,7 @@ class Scan(QtWidgets.QWidget):
             self._log_warning("PPT backup skipped: drive Z: not found.")
 
 
-    def scan_finished(self):
+    def scan_finished(self, _terminal_result=None):
         status = self._get_finish_status()
         elapsed_seconds = self._get_elapsed_seconds()
         elapsed_str = str(_dt.timedelta(seconds=elapsed_seconds)) if elapsed_seconds is not None else "unknown"
@@ -295,28 +654,197 @@ class Scan(QtWidgets.QWidget):
             self._log_warning("Scan finalize already scheduled; skipping duplicate finish handling.")
             return
 
+        self._set_scan_state("finalizing")
         self._finalize_outputs_scheduled = True
         QtCore.QTimer.singleShot(0, self._finalize_scan_outputs)
 
+    @staticmethod
+    def _capture_png(widget):
+        pixmap = widget.grab()
+        payload = QtCore.QByteArray()
+        buffer = QtCore.QBuffer(payload)
+        if not buffer.open(QtCore.QIODevice.OpenModeFlag.WriteOnly):
+            raise RuntimeError("could not open PNG capture buffer")
+        try:
+            if not pixmap.save(buffer, "PNG"):
+                raise RuntimeError("failed to encode widget capture as PNG")
+        finally:
+            buffer.close()
+        return _CapturedImage(bytes(payload), pixmap.width(), pixmap.height())
+
+    def _build_output_snapshot(self):
+        started = time.perf_counter()
+        serial = f"{self.main_window.scanlist.serial.value():04d}"
+        base = f"{serial}_{self.info.get('name', 'scan')}"
+        comments_text = self.comments_textEdit.toPlainText().strip()
+        save_time = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        slides = []
+        ppt_path = None
+        try:
+            ppt_text = self.main_window.ppt_path.toPlainText().strip()
+            if ppt_text:
+                ppt_path = os.path.normpath(ppt_text.strip('"'))
+            else:
+                ppt_path, _ = QFileDialog.getSaveFileName(
+                    self, "Select PPT", f"{base}.pptx", "PPT Files (*.pptx)"
+                )
+                ppt_path = os.path.normpath(ppt_path) if ppt_path else None
+            if ppt_path and not ppt_path.lower().endswith(".pptx"):
+                ppt_path = f"{ppt_path}.pptx"
+
+            if ppt_path:
+                overview_images = (
+                    self._capture_png(self.settingTab),
+                    self._capture_png(self.main_window),
+                )
+                slides.append(
+                    _OutputSlide(
+                        title=f"{base}.json - Settings and Main Window",
+                        text=f"Saved: {save_time}",
+                        images=overview_images,
+                        positions=((20, 70, 450, 380), (490, 70, 450, 380)),
+                        comments=comments_text,
+                    )
+                )
+                for tab_index, tab in enumerate(
+                    (self.Plots1Tab, self.Plots2Tab, self.Plots3Tab), start=1
+                ):
+                    if not tab.findChildren((LinePlot, ImagePlot)):
+                        continue
+                    slides.append(
+                        _OutputSlide(
+                            title=f"{base}.json - Plots Tab {tab_index}",
+                            text=f"Saved: {save_time}",
+                            images=(self._capture_png(tab),),
+                            positions=((20, 70, 920, 450),),
+                        )
+                    )
+        except Exception as exc:
+            ppt_path = None
+            slides = []
+            self._log_error(
+                f"PPT capture failed: {type(exc).__name__}: {exc}"
+            )
+
+        self.update_alllevel_setting_array()
+        self.info["comments"] = self.comments_textEdit.toPlainText()
+        self.info["plots_per_page"] = self.PlotsPerPage.currentText()
+        self._sync_scan_log_to_info()
+        json_payload = copy.deepcopy(self.info)
+
+        json_name = f"{base}.json"
+        json_path = None
+        try:
+            save_text = self.main_window.save_info_path.toPlainText().strip()
+            if save_text:
+                json_folder = os.path.normpath(save_text.strip('"'))
+                json_path = os.path.join(json_folder, json_name)
+            else:
+                json_path, _ = QFileDialog.getSaveFileName(
+                    self, "Select File to Save", json_name
+                )
+                json_path = os.path.normpath(json_path) if json_path else None
+            if json_path:
+                _folder, selected_name = os.path.split(json_path)
+                json_name = selected_name or json_name
+        except Exception as exc:
+            json_path = None
+            self._log_error(
+                "Primary JSON path preparation failed; writing recovery JSON: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+        data_root = QtCore.QStandardPaths.writableLocation(
+            QtCore.QStandardPaths.StandardLocation.GenericDataLocation
+        )
+        recovery_dir = (
+            os.path.join(data_root, "ZMeter", "recovery") if data_root else ""
+        )
+        snapshot = _ScanOutputSnapshot(
+            ppt_path=ppt_path,
+            slides=tuple(slides),
+            json_path=json_path,
+            json_payload=json_payload,
+            json_name=json_name,
+            backup_dir=self._backup_subfolder(),
+            recovery_dir=recovery_dir,
+        )
+        self._log_stage_timing("UI capture", time.perf_counter() - started)
+        return snapshot
+
+    def _restore_and_persist(self, snapshot):
+        restore_error = None
+        messages = []
+        timings = []
+        started = time.perf_counter()
+        try:
+            self.main_window.start_equipments(self._participating_device_ids)
+        except Exception as exc:
+            restore_error = exc
+        timings.append(("device restore", time.perf_counter() - started))
+
+        if snapshot is not None:
+            output_result = _persist_scan_outputs(snapshot)
+            messages.extend(output_result.messages)
+            timings.extend(output_result.timings)
+        return _OutputJobResult(
+            tuple(messages), tuple(timings), restore_error=restore_error
+        )
+
     def _finalize_scan_outputs(self):
-        """
-        Defer heavyweight save/export work by one event-loop turn so the
-        last plot repaint can be processed before GUI-thread save operations.
-        """
+        """Capture Qt-owned pixels, then restore devices and persist off-thread."""
+        snapshot = None
+        try:
+            snapshot = self._build_output_snapshot()
+        except Exception as exc:
+            self._log_error(
+                f"Output snapshot failed: {type(exc).__name__}: {exc}"
+            )
+        self._start_boundary_job(
+            lambda: self._restore_and_persist(snapshot),
+            lambda outcome: self._complete_scan_finalization(outcome, snapshot),
+        )
+
+    def _complete_scan_finalization(self, outcome, snapshot):
         restart_after_finalize = False
         try:
-            self.when_save_plots_clicked()
-            self.when_save_clicked()
-            current_serial = self.main_window.scanlist.serial.value()
-            self.main_window.scanlist.serial.setValue(current_serial + 1)
+            if outcome.error is not None:
+                self._log_error(
+                    "Scan finalization worker failed: "
+                    f"{type(outcome.error).__name__}: {outcome.error}"
+                )
+            elif isinstance(outcome.value, _OutputJobResult):
+                result = outcome.value
+                for level, message in result.messages:
+                    if level == "ERROR":
+                        self._log_error(message)
+                    elif level == "WARNING":
+                        self._log_warning(message)
+                    else:
+                        self._log_info(message)
+                for stage, elapsed in result.timings:
+                    self._log_stage_timing(stage, elapsed)
+                if result.restore_error is not None:
+                    self.handle_scan_error(
+                        "Equipment restart failed: "
+                        f"{type(result.restore_error).__name__}: "
+                        f"{result.restore_error}"
+                    )
 
-            # If user clicked "Scan" while paused, we queued a fresh scan start
-            if getattr(self, "_start_new_scan_after_stop", False):
-                self._start_new_scan_after_stop = False
-                restart_after_finalize = True
+            if snapshot is not None:
+                current_serial = self.main_window.scanlist.serial.value()
+                self.main_window.scanlist.serial.setValue(current_serial + 1)
+
+            restart_after_finalize = bool(
+                self._start_new_scan_after_stop and not self._shutdown_requested
+            )
+            self._start_new_scan_after_stop = False
         finally:
             self._finalize_outputs_scheduled = False
             self._outputs_finalized = True
+            self._set_scan_state("idle")
+            self._set_scan_configuration_locked(False)
             self._release_runtime_activity_reservation()
 
         if restart_after_finalize:
@@ -729,13 +1257,20 @@ class Scan(QtWidgets.QWidget):
                 )
 
     def _start_scan_now(self):
-        """Start a fresh scan using current self.info settings."""
+        """Accept a fresh scan and prepare its devices without blocking Qt."""
         if self._shutdown_requested:
             self._start_new_scan_after_stop = False
+            return False
+        if self._scan_state != "idle":
             return False
 
         self._acquire_runtime_activity_reservation()
         try:
+            self._last_start_error = None
+            self._start_cancel_requested = False
+            self._set_scan_state("preparing")
+            self._outputs_finalized = False
+            self._set_scan_configuration_locked(True)
             if hasattr(self, "unique_data_name"):
                 del self.unique_data_name
 
@@ -743,24 +1278,145 @@ class Scan(QtWidgets.QWidget):
             self._start_new_scan_log_session()
 
             device_ids = self._capture_participating_device_ids()
-            self.main_window.stop_equipments_for_scanning(device_ids)
-            self._stop_all_equipment_monitors(device_ids)
-            self.logic.reset_flags()
-            self.logic.go_scan = True
-
+            started = time.perf_counter()
             self.update_alllevel_setting_array()
-            self.logic.initialize_scan_data(self.info)
-            self._log_info("Scan started.")
-            self._log_info(self._build_start_summary())
-
-            self.update_all_plots()
-            self._outputs_finalized = False
-            self.logic.start()
+            scan_config = {"levels": copy.deepcopy(self.info["levels"])}
+            self._log_stage_timing(
+                "model setting update", time.perf_counter() - started
+            )
+            started = time.perf_counter()
+            self._stop_all_equipment_monitors(device_ids)
+            self._log_stage_timing(
+                "device prepare UI", time.perf_counter() - started
+            )
+            self._start_boundary_job(
+                lambda: self._prepare_devices(device_ids, scan_config),
+                self._complete_scan_preparation,
+            )
             return True
         except Exception:
+            self._set_scan_state("idle")
             self._outputs_finalized = True
+            self._set_scan_configuration_locked(False)
             self._release_runtime_activity_reservation()
             raise
+
+    def _prepare_devices(self, device_ids, scan_config):
+        phase = "device"
+        device_elapsed = 0.0
+        data_elapsed = 0.0
+        started = time.perf_counter()
+        try:
+            self.main_window.stop_equipments_for_scanning(device_ids)
+            device_elapsed = time.perf_counter() - started
+            phase = "data"
+            started = time.perf_counter()
+            self.logic.initialize_scan_data(scan_config)
+            data_elapsed = time.perf_counter() - started
+            return _PrepareJobResult(
+                device_elapsed,
+                data_elapsed=data_elapsed,
+            )
+        except Exception as exc:
+            if phase == "device":
+                device_elapsed = time.perf_counter() - started
+            else:
+                data_elapsed = time.perf_counter() - started
+            restore_error = None
+            try:
+                self.main_window.start_equipments(device_ids)
+            except Exception as rollback_exc:
+                restore_error = rollback_exc
+            return _PrepareJobResult(
+                device_elapsed,
+                data_elapsed=data_elapsed,
+                error=exc,
+                restore_error=restore_error,
+            )
+
+    def _complete_scan_preparation(self, outcome):
+        if outcome.error is not None:
+            self._fail_preparation(outcome.error)
+            return
+        result = outcome.value
+        if not isinstance(result, _PrepareJobResult):
+            self._fail_preparation(
+                RuntimeError("device preparation returned an invalid result")
+            )
+            return
+        self._log_stage_timing("device prepare", result.device_elapsed)
+        self._log_stage_timing("model/data initialization", result.data_elapsed)
+        if result.error is not None:
+            if result.restore_error is not None:
+                self._log_error(
+                    "Preparation rollback failed: "
+                    f"{type(result.restore_error).__name__}: {result.restore_error}"
+                )
+            self._fail_preparation(result.error)
+            return
+        if self._shutdown_requested or self._start_cancel_requested:
+            self._begin_start_rollback(
+                RuntimeError(
+                    "scan start canceled before execution"
+                    if self._start_cancel_requested
+                    else "scan start canceled because shutdown is in progress"
+                )
+            )
+            return
+
+        try:
+            self.logic.reset_flags()
+            self.logic.go_scan = True
+            started = time.perf_counter()
+            self.update_all_plots()
+            self._log_stage_timing("plot setup", time.perf_counter() - started)
+            self._set_scan_state("running")
+            self.logic.start()
+            self._log_info("Scan started.")
+            self._log_info(self._build_start_summary())
+        except Exception as exc:
+            self._begin_start_rollback(exc)
+
+    def _fail_preparation(self, error):
+        self._last_start_error = error
+        self.handle_scan_error(
+            f"Scan preparation failed: {type(error).__name__}: {error}"
+        )
+        self._set_scan_state("idle")
+        self._outputs_finalized = True
+        self._set_scan_configuration_locked(False)
+        self._release_runtime_activity_reservation()
+
+    def _begin_start_rollback(self, error):
+        self._last_start_error = error
+        self.handle_scan_error(
+            f"Scan start failed: {type(error).__name__}: {error}"
+        )
+        self._set_scan_state("finalizing")
+        self._start_boundary_job(
+            lambda: self._restore_after_start_failure(),
+            self._complete_start_rollback,
+        )
+
+    def _restore_after_start_failure(self):
+        started = time.perf_counter()
+        self.main_window.start_equipments(self._participating_device_ids)
+        return time.perf_counter() - started
+
+    def _complete_start_rollback(self, outcome):
+        try:
+            if outcome.error is not None:
+                self._log_error(
+                    "Scan start rollback failed: "
+                    f"{type(outcome.error).__name__}: {outcome.error}"
+                )
+            else:
+                self._log_stage_timing("device restore", float(outcome.value))
+        finally:
+            self._set_scan_state("idle")
+            self._outputs_finalized = True
+            self._set_scan_configuration_locked(False)
+            self._release_runtime_activity_reservation()
 
     def _acquire_runtime_activity_reservation(self):
         if self._runtime_activity_reservation is not None:
@@ -802,6 +1458,12 @@ class Scan(QtWidgets.QWidget):
     def when_stop_clicked(self):
         self._start_new_scan_after_stop = False
 
+        if self._scan_state == "preparing":
+            self._start_cancel_requested = True
+            self._mark_stop_reason("user_stop")
+            self._log_warning("Stop requested while scan preparation is running.")
+            return
+
         # Do nothing when no scan thread is active; this avoids accidental save flows.
         if not self.logic.isRunning():
             return
@@ -815,6 +1477,18 @@ class Scan(QtWidgets.QWidget):
     def when_scan_clicked(self):
         if self._shutdown_requested:
             self._start_new_scan_after_stop = False
+            return False
+
+        if self._scan_state == "preparing":
+            self._log_warning("Scan start ignored: device preparation is still running.")
+            return False
+        if self._scan_state == "finalizing":
+            self._start_new_scan_after_stop = True
+            self._log_info("Scan restart queued until finalization completes.")
+            return False
+        if self._scan_state == "running" and not self.logic.isRunning():
+            self._start_new_scan_after_stop = True
+            self._log_info("Scan restart queued while completion is being delivered.")
             return False
 
         # If a scan is already running (paused or not), stop it first.
@@ -862,28 +1536,8 @@ class Scan(QtWidgets.QWidget):
             # but without that infrastructure, this fallback only works if your loop polls the flag.
 
     def start_scan(self):
-        if self._shutdown_requested:
-            self._start_new_scan_after_stop = False
-            return
-
-        self._acquire_runtime_activity_reservation()
-        try:
-            if hasattr(self, "unique_data_name"):
-                del self.unique_data_name
-            self.logic.reset_flags()
-            self.logic.go_scan = True
-            self.logic.initilize_data(self.info)
-            device_ids = self._capture_participating_device_ids()
-            self.main_window.stop_equipments_for_scanning(device_ids)
-            self._stop_all_equipment_monitors(device_ids)
-            self._outputs_finalized = False
-            self.logic.start()
-        except Exception:
-            self._outputs_finalized = True
-            self._release_runtime_activity_reservation()
-            raise
-        while self.logic.isRunning():
-            time.sleep(0.1)
+        """Compatibility entry point for the staged non-blocking start flow."""
+        return self._start_scan_now()
     
     def update_alllevel_setting_array(self):
         self.all_level_setting.update_all_setting_array()
