@@ -30,7 +30,7 @@ AI acquisition averages a configurable sample count, clamped to 1 through 2047. 
 - system: a compatible NI-DAQmx runtime and device driver;
 - configuration: exact NI device name and physical AO/AI/counter/clock terminal names.
 
-`terminate_dev` calls the logic close path, which closes the currently configured tasks. The widget has no standard `start_scan`, `stop_scan`, or `force_stop` hooks. Review monitor contention, task reuse, timeout, stop, and partial-initialization cleanup before enabling it.
+`stop_scan()` saves the 50 ms monitor's active state and selected AI/counter mode, closes UI-job admission, stops the Qt timer on its owner thread, and waits up to 11 seconds for the legacy QThread job to finish. `start_scan()` restores only a previously active monitor, and `force_stop()` requests cooperative cancellation without closing tasks or changing AO state. `terminate_dev` still closes the configured tasks. Keep this driver disabled until fake coverage is supplemented by bench evidence for DAQ timeout, task reuse, and partial-initialization cleanup.
 
 Agents must not initialize NI hardware, create tasks, write or read channels, route clocks/counters, or close real tasks. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md). Hardware validation is user-executed only.
 

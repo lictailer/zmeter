@@ -14,6 +14,7 @@ from .sr830_logic import SR830_Logic
 class SR830(QtWidgets.QWidget):
     stop_signal = QtCore.pyqtSignal()
     start_signal = QtCore.pyqtSignal()
+    SCAN_QUIESCE_TIMEOUT_MS = 2_000
 
     def __init__(self, visa_runtime: VisaRuntime | None = None):
         super().__init__()
@@ -38,6 +39,7 @@ class SR830(QtWidgets.QWidget):
         )
         self.monitor_enabled = False
         self.scan_paused_monitor = False
+        self._scan_active = False
 
         self.x_log = np.full(200, np.nan, dtype=float)
         self.y_log = np.full(200, np.nan, dtype=float)
@@ -114,9 +116,20 @@ class SR830(QtWidgets.QWidget):
         self.plot_t.plot(self.t_log, clear=True, pen=pen)
 
     def force_stop(self):
-        self.stop_monitor()
-        if self.logic.isRunning():
-            self.logic.stop()
+        self.logic.request_force_stop()
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_force_stop_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._force_stop_on_owner()
+        return True
+
+    @QtCore.pyqtSlot()
+    def _force_stop_on_owner(self):
+        self.stop_timer()
 
     def stop_timer(self):
         was_enabled = self.monitor_enabled
@@ -127,15 +140,18 @@ class SR830(QtWidgets.QWidget):
             self._append_log("SR830 monitor stopped.", level="INFO")
 
     def start_timer(self):
+        if self._scan_active:
+            return False
         if not self.logic.connected:
             self._append_log("Cannot start monitor: SR830 is not connected.", level="WARN")
-            return
+            return False
         if self.monitor_enabled:
-            return
+            return True
         self.monitor_enabled = True
         if not self.timer.isActive():
             self.timer.start(50)
         self._append_log("SR830 monitor started.", level="INFO")
+        return True
 
     def stop_scan(self):
         if QtCore.QThread.currentThread() != self.thread():
@@ -144,12 +160,17 @@ class SR830(QtWidgets.QWidget):
                 "_stop_scan_on_owner",
                 QtCore.Qt.ConnectionType.BlockingQueuedConnection,
             )
-            return
-        self._stop_scan_on_owner()
+        else:
+            self._stop_scan_on_owner()
+        return self.logic.prepare_scan(self.SCAN_QUIESCE_TIMEOUT_MS)
 
     @QtCore.pyqtSlot()
     def _stop_scan_on_owner(self):
+        if self._scan_active:
+            return
         self.scan_paused_monitor = self.monitor_enabled and self.timer.isActive()
+        self._scan_active = True
+        self.logic.scan_admission_closed = True
         self.stop_timer()
 
     def start_scan(self):
@@ -159,11 +180,15 @@ class SR830(QtWidgets.QWidget):
                 "_start_scan_on_owner",
                 QtCore.Qt.ConnectionType.BlockingQueuedConnection,
             )
-            return
-        self._start_scan_on_owner()
+        else:
+            self._start_scan_on_owner()
+        return self.logic.resume_scan() is not False
 
     @QtCore.pyqtSlot()
     def _start_scan_on_owner(self):
+        if not self._scan_active:
+            return
+        self._scan_active = False
         if self.scan_paused_monitor and self.logic.connected:
             self.start_timer()
         self.scan_paused_monitor = False
@@ -185,6 +210,8 @@ class SR830(QtWidgets.QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def connect_visa(self, addr=None):
+        if self._scan_active:
+            return False
         if addr is None or addr is False:
             addr = self.address_cb.currentText()
         if not addr:
@@ -519,7 +546,7 @@ class SR830(QtWidgets.QWidget):
         self.plot_t.plot(self.t_log, clear=True, pen=pen)
 
     def monitor(self):
-        if not self.monitor_enabled:
+        if self._scan_active or not self.monitor_enabled:
             return
         if not self.logic.connected:
             return
@@ -534,8 +561,11 @@ class SR830(QtWidgets.QWidget):
             self.logic.stop()
 
     def disconnect_device(self):
+        if self._scan_active:
+            return False
         self.stop_monitor()
         self.logic.disconnect()
+        return True
 
     def terminate_dev(self):
         self.stop_monitor()

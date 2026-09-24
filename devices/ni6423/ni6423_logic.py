@@ -1,6 +1,7 @@
 import argparse
 import math
 import threading
+import time
 from collections import deque
 from typing import Deque, Dict, Optional, Set
 
@@ -56,6 +57,7 @@ class NI6423Logic(QtCore.QThread):
         self.dev_name = ""
         self.daq: Optional[NI6423Hardware] = None
         self.is_initialized = False
+        self._scan_mode = False
 
         self.ao_integrating_time = 1e-3
         self.counter_integrating_time = 1e-3
@@ -128,6 +130,39 @@ class NI6423Logic(QtCore.QThread):
     def stop(self):
         if self.isRunning():
             self.wait()
+
+    def prepare_scan(self, timeout_ms: int) -> bool:
+        """Close UI-job admission and boundedly drain monitor work."""
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        self._scan_mode = True
+        self.job = ""
+        self._feedback_stop.set()
+        self._clear_feedback_queue_locked()
+
+        if self.isRunning() and not self.wait(timeout_ms):
+            return False
+
+        worker = self._feedback_worker
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=max(0.0, deadline - time.monotonic()))
+        return worker is None or not worker.is_alive()
+
+    def resume_scan(self) -> bool:
+        self._scan_mode = False
+        self._feedback_stop.clear()
+        return True
+
+    def force_stop(self) -> bool:
+        """Request cancellation without closing tasks or changing AO state."""
+        self.job = ""
+        self._feedback_stop.set()
+        self._clear_feedback_queue_locked()
+        self.requestInterruption()
+        return True
+
+    def lifecycle_busy(self) -> bool:
+        worker = self._feedback_worker
+        return self.isRunning() or (worker is not None and worker.is_alive())
 
     # --------------------- integration helpers ------------------
     def update_integrating_time(self, time_s: float) -> float:
@@ -291,7 +326,8 @@ class NI6423Logic(QtCore.QThread):
 
     # ----------------------- thread job ------------------------
     def run(self):
-        if not self.is_initialized:
+        if not self.is_initialized or self._scan_mode:
+            self.job = ""
             return
 
         try:
@@ -318,7 +354,7 @@ class NI6423Logic(QtCore.QThread):
     # ----------------- async feedback worker -------------------
     def _enqueue_feedback_channel(self, ao_channel: str) -> None:
         with self._feedback_lock:
-            if not self.is_initialized:
+            if not self.is_initialized or self._scan_mode:
                 return
             if ao_channel not in self._feedback_queued:
                 self._feedback_queue.append(ao_channel)
@@ -344,12 +380,15 @@ class NI6423Logic(QtCore.QThread):
                 ao_channel = self._feedback_queue.popleft()
                 self._feedback_queued.discard(ao_channel)
 
-            try:
-                self.read_ao_feedback_channel(ao_channel)
-            except Exception as exc:
-                self.sig_error.emit(
-                    f"AO feedback read failed ({ao_channel}): {exc}"
-                )
+            with self._lock:
+                if self._feedback_stop.is_set():
+                    break
+                try:
+                    self.read_ao_feedback_channel(ao_channel)
+                except Exception as exc:
+                    self.sig_error.emit(
+                        f"AO feedback read failed ({ao_channel}): {exc}"
+                    )
 
         with self._feedback_lock:
             self._feedback_worker = None

@@ -222,7 +222,12 @@ class DriverAdapter:
             self._require_active("start scan activity")
             action = self.registration.start_scan
             if action is not None:
-                return action(self.instance)
+                result = action(self.instance)
+                if result is False:
+                    raise RuntimeError(
+                        f"driver '{self.driver_id}' did not finish restoring after scan"
+                    )
+                return result
             return None
 
     def stop_scan(self):
@@ -230,7 +235,12 @@ class DriverAdapter:
             self._require_active("stop scan activity")
             action = self.registration.stop_scan
             if action is not None:
-                return action(self.instance)
+                result = action(self.instance)
+                if result is False:
+                    raise RuntimeError(
+                        f"driver '{self.driver_id}' did not finish preparing for scan"
+                    )
+                return result
             return None
 
     def force_stop(self):

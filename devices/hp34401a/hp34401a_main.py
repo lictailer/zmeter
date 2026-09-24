@@ -22,6 +22,7 @@ class HP34401A(QtWidgets.QWidget):
 
     stop_signal = QtCore.pyqtSignal()
     start_signal = QtCore.pyqtSignal()
+    SCAN_QUIESCE_TIMEOUT_MS = 6_000
 
     # -------------------------------------------------------------
     def __init__(self, visa_runtime: VisaRuntime | None = None) -> None:
@@ -42,6 +43,8 @@ class HP34401A(QtWidgets.QWidget):
         # ---------------- logic layer -------------
         self.visa_runtime = visa_runtime or VisaRuntime()
         self.logic = HP34401A_Logic(self.visa_runtime)
+        self._scan_active = False
+        self._scan_monitor_was_active = False
         self.visa_refresh = VisaResourceRefresh(
             self.visa_runtime, self.address_comboBox, self
         )
@@ -82,8 +85,67 @@ class HP34401A(QtWidgets.QWidget):
             self.timer.stop()
 
     def start_timer(self):
+        if self._scan_active:
+            return False
         if not self.timer.isActive():
             self.timer.start(50)
+        return True
+
+    def stop_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_stop_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._stop_scan_on_owner()
+        return self.logic.prepare_scan(self.SCAN_QUIESCE_TIMEOUT_MS)
+
+    @QtCore.pyqtSlot()
+    def _stop_scan_on_owner(self):
+        if self._scan_active:
+            return
+        self._scan_monitor_was_active = self.timer.isActive()
+        self._scan_active = True
+        self.logic.scan_admission_closed = True
+        self.stop_timer()
+
+    def start_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_start_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._start_scan_on_owner()
+        return self.logic.resume_scan() is not False
+
+    @QtCore.pyqtSlot()
+    def _start_scan_on_owner(self):
+        if not self._scan_active:
+            return
+        self._scan_active = False
+        if self._scan_monitor_was_active:
+            self.start_timer()
+        self._scan_monitor_was_active = False
+
+    def force_stop(self):
+        self.logic.request_force_stop()
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_force_stop_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._force_stop_on_owner()
+        return True
+
+    @QtCore.pyqtSlot()
+    def _force_stop_on_owner(self):
+        self.stop_timer()
 
     def update_status(self, txt):
         """Generic label updater for *sig_is_changing* & *sig_connected*."""
@@ -93,6 +155,8 @@ class HP34401A(QtWidgets.QWidget):
     # UI event handlers
     # -------------------------------------------------------------
     def _on_connect_clicked(self):
+        if self._scan_active:
+            return False
         address = self.address_comboBox.currentText()
         if not address:
             self._update_status("[ERR] No VISA address selected")
@@ -100,7 +164,10 @@ class HP34401A(QtWidgets.QWidget):
         self.logic.connect_visa(address)
 
     def _on_disconnect_clicked(self):
+        if self._scan_active:
+            return False
         self.logic.disconnect()
+        return True
 
         '''
     def _on_read_voltage_clicked(self):
@@ -139,6 +206,8 @@ class HP34401A(QtWidgets.QWidget):
     # VISA connection
     # ------------------------------------------------------------------
     def connect_visa(self, addr):
+        if self._scan_active:
+            return False
         if addr == None or addr == False:
             addr = self.address_comboBox.currentText()
         print(f"Connecting to {addr}")
@@ -170,7 +239,10 @@ class HP34401A(QtWidgets.QWidget):
         self.NPLC_comboBox.blockSignals(False)
 
     def disconnect_device(self):
+        if self._scan_active:
+            return False
         self.logic.disconnect()
+        return True
 
     def terminate_dev(self):
         self.logic.disconnect()
@@ -190,7 +262,7 @@ class HP34401A(QtWidgets.QWidget):
     # See sr860, sr830 or nidaq for examples
     # -------------------------------------------------------------
     def _monitor(self):
-        if not self.logic._connected:
+        if self._scan_active or not self.logic._connected:
             return
         if self.logic.isRunning():
             return

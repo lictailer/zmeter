@@ -1238,24 +1238,6 @@ class Scan(QtWidgets.QWidget):
         self.logic.participating_device_ids = device_ids
         return device_ids
 
-    def _stop_all_equipment_monitors(self, device_ids):
-        """Best-effort monitor shutdown before scan to avoid read-contention."""
-        if self.main_window is None or not hasattr(self.main_window, "equips"):
-            return
-
-        selected_ids = frozenset(device_ids)
-        for equipment_name, equipment in self.main_window.equips.items():
-            if equipment_name not in selected_ids:
-                continue
-            if not hasattr(equipment, "stop_monitor"):
-                continue
-            try:
-                equipment.stop_monitor()
-            except Exception as exc:
-                self._log_warning(
-                    f"stop_monitor failed for {equipment_name}: {type(exc).__name__}: {exc}"
-                )
-
     def _start_scan_now(self):
         """Accept a fresh scan and prepare its devices without blocking Qt."""
         if self._shutdown_requested:
@@ -1283,11 +1265,6 @@ class Scan(QtWidgets.QWidget):
             scan_config = {"levels": copy.deepcopy(self.info["levels"])}
             self._log_stage_timing(
                 "model setting update", time.perf_counter() - started
-            )
-            started = time.perf_counter()
-            self._stop_all_equipment_monitors(device_ids)
-            self._log_stage_timing(
-                "device prepare UI", time.perf_counter() - started
             )
             self._start_boundary_job(
                 lambda: self._prepare_devices(device_ids, scan_config),

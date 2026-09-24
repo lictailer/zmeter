@@ -22,9 +22,9 @@ The UI wavelength value is in nanometers. Indefinite display reads default to 20
 
 First-resource selection and reset are explicitly retained compatibility risks. Connect only the intended meter and verify its resource, model, serial, and sensor identity before proceeding.
 
-## Lifecycle and safety gaps
+## Lifecycle and safety
 
-Connection errors close partial discovery/device sessions, report failure, reset worker flags, and permit retry. `force_stop()` requests the indefinite-read loop to exit. `terminate_dev()` waits up to 10 seconds and disconnects only after the worker exits; if it cannot prove exit, it returns failure so the manager does not close beneath the worker. No `start_scan`/`stop_scan` hooks coordinate monitoring with scans, and a native driver call can still occupy the worker beyond the join deadline.
+Connection errors close partial discovery/device sessions, report failure, reset worker flags, and permit retry. `stop_scan()` saves indefinite-monitor intent and frequency, rejects new UI jobs, requests loop exit, and waits off the GUI thread for up to 10 seconds. `start_scan()` restores that frequency and restarts indefinite monitoring only when it was active before preparation. `force_stop()` requests exit without disconnecting or erasing the saved scan restoration state. `terminate_dev()` uses the same 10-second bound before disconnecting. A native driver call can still exceed the join deadline; that result fails scan preparation or teardown rather than claiming success.
 
 Agents must not load/run resource discovery, open/reset a meter, change wavelength, read power, or disconnect it. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md). Any bench procedure is a **User-executed hardware test**.
 

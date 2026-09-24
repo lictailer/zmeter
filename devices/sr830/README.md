@@ -34,7 +34,7 @@ Connection requires a nonempty `*IDN?` response containing `SR830`. VISA timeout
 
 ## Lifecycle and safety
 
-`stop_scan` records whether monitoring was active and stops it; `start_scan` resumes it only when appropriate. `force_stop` stops monitoring and waits for any current logic job to return; termination stops monitoring then disconnects. These methods stop software polling; they do not interrupt an in-flight VISA call or undo instrument settings or auxiliary outputs.
+`stop_scan` records monitor intent once, closes UI-job admission, stops the Qt timer on its owner thread, and waits off the GUI thread for at most 2 seconds. Repeated preparation cannot overwrite the saved state. `start_scan` resumes only a previously active monitor. `force_stop` promptly stops future polling and requests interruption without disconnecting, waiting on the GUI thread, or undoing instrument settings or auxiliary outputs. An in-flight VISA call remains bounded by the configured VISA timeout.
 
 Agents must not enumerate VISA resources, connect, configure, read, write, reset, or disconnect the SR830. Before production use, the user must verify channel filters, timeout/error recovery, aux-output limits, and final instrument state in a **User-executed hardware test**. See [hardware_safety.md](../../documents/hardware_safety.md).
 

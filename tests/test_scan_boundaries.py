@@ -55,14 +55,6 @@ class _ProbeLogic:
         return self.started
 
 
-class _Monitor:
-    def __init__(self):
-        self.stop_threads = []
-
-    def stop_monitor(self):
-        self.stop_threads.append(QtCore.QThread.currentThread())
-
-
 class _BoundaryMainWindow(QtWidgets.QWidget):
     def __init__(self, output_root):
         super().__init__()
@@ -146,9 +138,7 @@ class ScanBoundaryTests(unittest.TestCase):
 
         self.scan._capture_participating_device_ids = capture
 
-    def test_slow_prepare_keeps_gui_heartbeat_and_widget_callback_on_owner(self):
-        monitor = _Monitor()
-        self.main_window.equips = {"slow": monitor}
+    def test_slow_prepare_keeps_gui_heartbeat_and_runs_off_owner(self):
         self._participants(("slow",))
         worker_threads = []
         prepare_started = threading.Event()
@@ -172,7 +162,6 @@ class ScanBoundaryTests(unittest.TestCase):
 
         self.assertTrue(self._wait_until(lambda: self.logic.started))
         self.assertEqual(self.scan.scan_state, "running")
-        self.assertEqual(monitor.stop_threads, [self.scan.thread()])
         self.assertNotEqual(worker_threads, [self.scan.thread()])
 
     def test_prepare_failure_restores_same_devices_and_releases_reservation(self):

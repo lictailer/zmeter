@@ -483,6 +483,25 @@ print("manager import and registry lookup remained lazy")
         )
         self.assertEqual(manager.snapshot().records[0].state, DeviceState.ERROR)
 
+    def test_scan_false_is_failure_but_force_stop_false_is_valid(self):
+        registration = make_registration(
+            stop_scan=lambda _instance: False,
+            start_scan=lambda _instance: False,
+            force_stop=lambda _instance: False,
+        )
+        manager = DeviceManager(DriverRegistry((registration,)), SimpleNamespace())
+        manager.load_profile(make_profile(make_config("device")))
+
+        stop_report = manager.stop_for_scan(("device",))
+        start_report = manager.start_after_scan(("device",))
+        force_report = manager.force_stop_for_scan(("device",))
+
+        self.assertFalse(stop_report.succeeded)
+        self.assertIn("did not finish preparing", stop_report.failures[0].message)
+        self.assertFalse(start_report.succeeded)
+        self.assertIn("did not finish restoring", start_report.failures[0].message)
+        self.assertTrue(force_report.succeeded)
+
     def test_scan_lifecycle_targets_only_selected_devices_in_profile_order(self):
         events = []
         instances = iter(

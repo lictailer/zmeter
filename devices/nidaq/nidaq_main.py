@@ -12,11 +12,15 @@ except ImportError:
 
 class NIDAQ(QtWidgets.QWidget):
     AI = ["AI0", "AI1", "AI2", "AI3", "AI4", "AI5", "AI6", "AI7"]
+    SCAN_QUIESCE_TIMEOUT_MS = 11_000
 
     def __init__(self):
         super(NIDAQ, self).__init__()
         uic.loadUi(str(Path(__file__).with_name("nidaq.ui")), self)
         self.logic = NIDAQLogic()
+        self._scan_active = False
+        self._scan_monitor_was_active = False
+        self._scan_monitor_method = None
 
         self.connect_sig_slot()
         self.read_log = {
@@ -37,11 +41,14 @@ class NIDAQ(QtWidgets.QWidget):
         self.inputMethod_comboBox.addItem("Sample Counter")
 
     def connect(self, device=""):
+        if self._scan_active:
+            return False
         if device == "":
             device = self.dev_name_lineEdit.text()
         else:
             pass
         self.logic.initialize(device)
+        return True
 
     def connect_sig_slot(self):
         self.set_button.clicked.connect(self.when_set_button_clicked)
@@ -64,11 +71,17 @@ class NIDAQ(QtWidgets.QWidget):
         self.stop_pushButton.clicked.connect(self.stop_timer)
 
     def when_set_button_clicked(self):
+        if self._scan_active:
+            return False
         name = self.dev_name_lineEdit.text()
         self.logic.initialize(name)
+        return True
 
     def when_close_button_clicked(self):
+        if self._scan_active:
+            return False
         self.logic.close()
+        return True
 
     def setup_name_label(self, name):
         self.name_label.setText(f"using {name}")
@@ -103,6 +116,8 @@ class NIDAQ(QtWidgets.QWidget):
         labels[id].setText(f"last set to: {d:+.4f} V")
 
     def when_go_button_clicked(self, AO_index):
+        if self._scan_active:
+            return False
         self.logic.wait()
 
         val = [
@@ -114,8 +129,11 @@ class NIDAQ(QtWidgets.QWidget):
         self.logic.assign_AO_target(ch, val)
         self.logic.job = "write_AO"
         self.logic.start()
+        return True
 
     def when_pm_button_clicked(self, AO_index, fun):
+        if self._scan_active:
+            return False
         self.logic.wait()
 
         i = AO_index
@@ -136,19 +154,26 @@ class NIDAQ(QtWidgets.QWidget):
 
         self.logic.job = "write_AO"
         self.logic.start()
+        return True
 
     def set_AO0(self, val):
+        if self._scan_active:
+            return False
         self.logic.target_AO["AO0"] = val
         self.logic.job = "write_AO0"
         self.logic.start()
+        return True
 
     def set_AO1(self, val):
+        if self._scan_active:
+            return False
         self.logic.target_AO["AO1"] = val
         self.logic.job = "write_AO1"
         self.logic.start()
+        return True
 
     def monitor(self):
-        if not self.logic.is_initialized:
+        if self._scan_active or not self.logic.is_initialized:
             return
         if self.logic.isRunning():
             return
@@ -167,13 +192,76 @@ class NIDAQ(QtWidgets.QWidget):
             self.logic.start()
 
     def start_timer(self):
+        if self._scan_active:
+            return False
         if not self.timer.isActive():
             self.timer.start(50)
+        return True
 
     def stop_timer(self):
         if self.timer.isActive():
             self.timer.stop()
         # self.logic.receieved_stop = True
+
+    def stop_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_stop_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._stop_scan_on_owner()
+        return self.logic.prepare_scan(self.SCAN_QUIESCE_TIMEOUT_MS)
+
+    @QtCore.pyqtSlot()
+    def _stop_scan_on_owner(self):
+        if self._scan_active:
+            return
+        self._scan_monitor_was_active = self.timer.isActive()
+        self._scan_monitor_method = self.inputMethod_comboBox.currentText()
+        self._scan_active = True
+        self.logic.scan_admission_closed = True
+        self.stop_timer()
+
+    def start_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_start_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._start_scan_on_owner()
+        return self.logic.resume_scan() is not False
+
+    @QtCore.pyqtSlot()
+    def _start_scan_on_owner(self):
+        if not self._scan_active:
+            return
+        if self._scan_monitor_method is not None:
+            self.inputMethod_comboBox.setCurrentText(self._scan_monitor_method)
+        self._scan_active = False
+        if self._scan_monitor_was_active and self.logic.is_initialized:
+            self.start_timer()
+        self._scan_monitor_was_active = False
+        self._scan_monitor_method = None
+
+    def force_stop(self):
+        self.logic.force_stop()
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_force_stop_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._force_stop_on_owner()
+        return True
+
+    @QtCore.pyqtSlot()
+    def _force_stop_on_owner(self):
+        self.stop_timer()
 
     # def closeEvent(self, event: QCloseEvent):
     #     self.logic.close()

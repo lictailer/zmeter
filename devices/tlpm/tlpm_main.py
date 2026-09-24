@@ -9,11 +9,16 @@ import pyqtgraph as pg
 
 class TLPM(QtWidgets.QWidget):
     TERMINATION_TIMEOUT_MS = 10_000
+    SCAN_QUIESCE_TIMEOUT_MS = 10_000
 
     def __init__(self):
         super(TLPM, self).__init__()
         uic.loadUi(str(Path(__file__).with_name("tlpm.ui")), self)
         self.logic = TLPMLogic()
+        self._scan_active = False
+        self._monitor_requested = False
+        self._scan_monitor_was_active = False
+        self._scan_monitor_frequency = None
         self.connect_sig_slot()
         self.power_log = np.zeros(1000)
 
@@ -60,6 +65,9 @@ class TLPM(QtWidgets.QWidget):
 
     # actions
     def _start_logic_job(self, flag_name):
+        if getattr(self, "_scan_active", False):
+            self.update_info("TLPM UI jobs are paused while a scan owns the device.")
+            return False
         if self.logic.isRunning():
             self.update_info("TLPM is busy. Try again after the current job finishes.")
             return False
@@ -85,14 +93,72 @@ class TLPM(QtWidgets.QWidget):
 
     def read_indef(self):
         self.logic.freq = self.freq_doubleSpinBox.value()
-        return self._start_logic_job("do_read_indefinitely")
+        started = self._start_logic_job("do_read_indefinitely")
+        if started:
+            self._monitor_requested = True
+        return started
 
     def stop_indef(self):
+        self._monitor_requested = False
         self.logic.request_stop()
 
     def force_stop(self):
         self.logic.request_stop()
+        if not self._scan_active:
+            self._monitor_requested = False
         return True
+
+    def stop_scan(self):
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_stop_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._stop_scan_on_owner()
+        return self.logic.prepare_scan(self.SCAN_QUIESCE_TIMEOUT_MS)
+
+    @QtCore.pyqtSlot()
+    def _stop_scan_on_owner(self):
+        if self._scan_active:
+            return
+        self._scan_monitor_was_active = (
+            self._monitor_requested
+            and self.logic.isRunning()
+            and self.logic.do_read_indefinitely
+        )
+        self._scan_monitor_frequency = float(self.logic.freq)
+        self._scan_active = True
+        self.logic.scan_admission_closed = True
+        self.logic.request_stop()
+
+    def start_scan(self):
+        self.logic.resume_scan()
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_start_scan_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._start_scan_on_owner()
+        return True
+
+    @QtCore.pyqtSlot()
+    def _start_scan_on_owner(self):
+        if not self._scan_active:
+            return
+        should_resume = self._scan_monitor_was_active and self.logic.is_connected
+        resume_frequency = self._scan_monitor_frequency
+        self._scan_active = False
+        self._scan_monitor_was_active = False
+        self._scan_monitor_frequency = None
+        self._monitor_requested = False
+        if should_resume:
+            if resume_frequency is not None:
+                self.freq_doubleSpinBox.setValue(resume_frequency)
+            self.read_indef()
 
     def terminate_dev(self):
         print("TLPM terminated.")

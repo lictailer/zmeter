@@ -16,22 +16,22 @@ final result.
 | Driver ID | Package | Startup connection | Runtime mutation | Evidence and readiness | Primary future improvement |
 | --- | --- | --- | --- | --- | --- |
 | `mock_device` | [mockDevice](../devices/mockDevice/README.md) | Confirmed synchronous simulator | Approved | Unit, simulation, offscreen GUI; user reports successful manual mock operation | Add an operator device-management UI only if a maintained workflow requires it |
-| `ni6423` | [ni6423](../devices/ni6423/README.md) | Best-effort synchronous | Disabled | Stub/fake and offscreen registration only; hardware pending | Configurable routing, bounded task cleanup, complete busy/force-stop contract, fake NI backend |
-| `nidaq` | [nidaq](../devices/nidaq/README.md) | Best-effort synchronous | Disabled | Legacy fake coverage only; hardware pending | Migrate from PyDAQmx to NI-DAQmx and standardize lifecycle/task rollback |
+| `ni6423` | [ni6423](../devices/ni6423/README.md) | Best-effort synchronous | Disabled | Stub/fake registration and scan-lifecycle coverage; hardware pending | Configurable routing, fake NI backend, and bench lifecycle evidence |
+| `nidaq` | [nidaq](../devices/nidaq/README.md) | Best-effort synchronous | Disabled | Legacy fake plus scan-lifecycle coverage; hardware pending | Migrate from PyDAQmx to NI-DAQmx and prove task rollback on hardware |
 | `pem100` | [pem100](../devices/pem100/README.md) | Best-effort synchronous | Disabled | Fake VISA coverage; hardware pending | Fault matrix, explicit state reporting, bounded cleanup, busy probe |
 | `sp150` | [sp150](../devices/sp150/README.md) | Best-effort synchronous | Disabled | Fake VISA coverage; hardware pending | Fault matrix, interruption reporting, bounded cleanup, busy probe |
-| `hp34401a` | [hp34401a](../devices/hp34401a/README.md) | Best-effort synchronous | Disabled | Fake/shared-runtime coverage; hardware pending | Prove failed-close cleanup and standardize lifecycle/state reporting |
+| `hp34401a` | [hp34401a](../devices/hp34401a/README.md) | Best-effort synchronous | Disabled | Fake/shared-runtime and scan-lifecycle coverage; hardware pending | Prove failed-close cleanup and lifecycle timeouts on hardware |
 | `keithley24xx` | [keithley24xx](../devices/keithley24xx/README.md) | Asynchronous pending | Disabled | Fake/shared-runtime coverage; hardware pending | Bounded ramp/teardown, complete busy reporting, partial-connect faults |
-| `sr860` | [sr860](../devices/sr860/README.md) | Best-effort synchronous | Disabled | Fake/shared-runtime coverage; hardware pending | Restrict reviewed numeric scan filters and standardize lifecycle/fault handling |
+| `sr860` | [sr860](../devices/sr860/README.md) | Best-effort synchronous | Disabled | Fake/shared-runtime and scan-lifecycle coverage; hardware pending | Restrict reviewed numeric scan filters and validate lifecycle faults on hardware |
 | `mfli` | [mfli](../devices/mfli/README.md) | Asynchronous pending | Disabled | User reports standalone hardware success; fake scan/lifecycle and offscreen integration coverage; integrated hardware scan pending | Complete user-executed integrated scan, abort, and shutdown acceptance |
-| `sr830` | [sr830](../devices/sr830/README.md) | Best-effort synchronous | Disabled | Maintained former v2 implementation; fake/shared-runtime coverage; hardware pending | Restrict reviewed numeric scan filters and standardize lifecycle/fault handling |
+| `sr830` | [sr830](../devices/sr830/README.md) | Best-effort synchronous | Disabled | Maintained former v2 implementation; fake/shared-runtime and scan-lifecycle coverage; hardware pending | Restrict reviewed numeric scan filters and validate lifecycle faults on hardware |
 | `demo_device` | [demoDevice](../devices/demoDevice/README.md) | Confirmed synchronous simulator | Disabled | Dummy-runtime automated coverage | Keep as a legacy template; use `mock_device` for new integration work |
 | `bbd30x` | [BBD30X](../devices/BBD30X/README.md) | Asynchronous pending | Disabled | Fake Kinesis coverage; hardware pending | Complete motion busy/timeout/partial-connect and interrupted-position evidence |
 | `k10cr1` | [k10cr1](../devices/k10cr1/README.md) | Asynchronous pending | Disabled | Fake Kinesis coverage; hardware pending | Implement a bounded real force-stop path and software motion limits |
 | `four9` | [four9](../devices/four9/README.md) | Asynchronous pending | Disabled | Loopback/fake TCP coverage; environment bench pending | Connection-loss/shutdown races and installation/service manifest |
 | `montana2` | [montana2](../devices/montana2/README.md) | Asynchronous pending | Disabled | Intercepted registration behavior; no production REST fake; bench pending | REST timeouts, explicit signals/limits, proven shutdown, configurable remaining endpoint assumptions |
 | `opticool` | [opticool](../devices/opticool/README.md) | Asynchronous pending and retryable | Disabled | Intercepted vendor boundary; bench pending | Configurable DLL location, hard limits, bounded stability/termination, fake .NET backend |
-| `tlpm` | [tlpm](../devices/tlpm/readme.md) | Asynchronous pending and retryable | Disabled | Intercepted native boundary; bench pending | Explicit resource selection, bounded native calls, reviewed scan channels, production fake backend |
+| `tlpm` | [tlpm](../devices/tlpm/readme.md) | Asynchronous pending and retryable | Disabled | Intercepted native boundary and scan-lifecycle coverage; bench pending | Explicit resource selection, bounded native calls, reviewed scan channels, production fake backend |
 
 The tracked startup configuration is [device_config.xlsx](../device_config.xlsx).
 For first commissioning, review a workbook with exactly one real driver enabled

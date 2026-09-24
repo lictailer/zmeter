@@ -107,7 +107,9 @@ def ni6423_registration() -> DriverRegistration:
         disconnect=lambda instance: _call_logic(instance, "close"),
         start_scan=lambda instance: _call(instance, "start_scan"),
         stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
         terminate=lambda instance: _call_logic(instance, "close"),
+        is_busy=lambda instance: instance.logic.lifecycle_busy(),
         is_connected=_ni6423_connected,
     )
 
@@ -124,7 +126,11 @@ def nidaq_registration() -> DriverRegistration:
         ),
         startup_connect=_ni_startup_connect,
         disconnect=lambda instance: _call_logic(instance, "close"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
         terminate=lambda instance: _call_logic(instance, "close"),
+        is_busy=lambda instance: instance.logic.isRunning(),
         is_connected=lambda instance: _logic_flag(instance, "is_initialized"),
     )
 
@@ -218,7 +224,11 @@ def hp34401a_registration() -> DriverRegistration:
         connect=_visa_logic_connect,
         startup_connect=_visa_logic_connect,
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
         terminate=lambda instance: _call_logic(instance, "disconnect"),
+        is_busy=lambda instance: instance.logic.isRunning(),
         is_connected=lambda instance: bool(instance.logic._connected),
     )
 
@@ -279,7 +289,11 @@ def sr860_registration() -> DriverRegistration:
         connect=_visa_logic_connect,
         startup_connect=_visa_logic_connect,
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
         terminate=lambda instance: _call_logic(instance, "disconnect"),
+        is_busy=lambda instance: instance.logic.isRunning(),
         is_connected=lambda instance: bool(instance.logic.connected),
     )
 
@@ -334,6 +348,7 @@ def sr830_registration() -> DriverRegistration:
         stop_scan=lambda instance: _call(instance, "stop_scan"),
         force_stop=lambda instance: _call(instance, "force_stop"),
         terminate=lambda instance: _call_logic(instance, "disconnect"),
+        is_busy=lambda instance: instance.logic.isRunning(),
         is_connected=lambda instance: bool(instance.logic.connected),
     )
 
@@ -550,10 +565,13 @@ def tlpm_registration() -> DriverRegistration:
         factory=_widget_factory("devices.tlpm.tlpm_main", "TLPM"),
         startup_connect=_tlpm_startup_connect,
         disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
         force_stop=lambda instance: _call(instance, "force_stop"),
         terminate=lambda instance: _terminate_with_true_result(
             instance, "terminate_dev"
         ),
+        is_busy=lambda instance: instance.logic.lifecycle_busy(),
         is_connected=lambda instance: bool(instance.logic.is_connected),
     )
 

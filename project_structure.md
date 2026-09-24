@@ -27,7 +27,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | --- | --- |
 | `start_zmeter.py` | Thin command-line workbook selection and application/session orchestration |
 | `device_config.xlsx` | Default Excel-only device configuration beside the launcher |
-| `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, and lifecycle reports |
+| `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, truthful scan-lifecycle completion, and lifecycle reports |
 | `core/device_catalog.py` | Immutable rebuilt channel/catalog snapshots and typed refusal errors |
 | `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queue/manual/past item widgets, queue orchestration, per-item manual-set workers, UI state transitions, and runtime-mutation seals |
@@ -44,7 +44,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
 | `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
 | `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, global amplitude/DC ramping (10 V/s, 100 Hz), scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
-| `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
+| `devices/<device>/` | Device-specific widget/logic/hardware integrations, including driver-owned scan/monitor admission, and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |

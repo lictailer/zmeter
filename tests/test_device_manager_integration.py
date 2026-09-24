@@ -408,25 +408,8 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         )
         self.assertEqual(Scan._resolve_participating_device_ids(getter_only), ())
 
-    def test_monitor_stop_targets_only_scan_participants(self):
-        calls = []
-        scan = SimpleNamespace(
-            main_window=SimpleNamespace(
-                equips={
-                    "used": SimpleNamespace(
-                        stop_monitor=lambda: calls.append("used")
-                    ),
-                    "unused": SimpleNamespace(
-                        stop_monitor=lambda: calls.append("unused")
-                    ),
-                }
-            ),
-            _log_warning=lambda _message: None,
-        )
-
-        Scan._stop_all_equipment_monitors(scan, ("used",))
-
-        self.assertEqual(calls, ["used"])
+    def test_scan_has_no_generic_monitor_stop_path(self):
+        self.assertFalse(hasattr(Scan, "_stop_all_equipment_monitors"))
 
     def test_scan_stop_and_cleanup_reuse_captured_participants(self):
         force_stop_calls = []
@@ -483,6 +466,32 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         self.assertEqual(terminals[0]["participating_device_ids"], ("device_a",))
         self.assertEqual(terminals[0]["completed_points"], 2)
         self.assertEqual(finishes, [True])
+
+    def test_successful_scan_worker_emits_terminal_result(self):
+        terminals = []
+        logic = SimpleNamespace(
+            main_window=SimpleNamespace(
+                artificial_channel_logic=SimpleNamespace(
+                    reset_skip_next_scan_read=lambda: None
+                ),
+                reset_skip_next_scan_read_from_global_limit=lambda: None,
+            ),
+            max_level=0,
+            participating_device_ids=("device_a",),
+            looping=lambda _level: None,
+            reset_flags=lambda: None,
+            sig_scan_error=SimpleNamespace(emit=lambda _message: None),
+            sig_scan_terminal=SimpleNamespace(emit=terminals.append),
+            sig_scan_finished=SimpleNamespace(emit=lambda: None),
+            completed_points=3,
+            total_points=3,
+        )
+
+        ScanLogic.scan(logic)
+
+        self.assertIsNone(terminals[0]["error"])
+        self.assertEqual(terminals[0]["participating_device_ids"], ("device_a",))
+        self.assertEqual(terminals[0]["completed_points"], 3)
 
     def test_failed_stop_for_scan_is_surfaced_before_scan_logic_starts(self):
         failure = LifecycleFailure(

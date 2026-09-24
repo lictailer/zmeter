@@ -58,6 +58,7 @@ class SR830_Logic(QtCore.QThread):
 
         self.connected = False
         self.reject_signal = False
+        self.scan_admission_closed = False
         self.monitor_count = 10
 
         self.hardware: SR830_Hardware | None = None
@@ -410,7 +411,13 @@ class SR830_Logic(QtCore.QThread):
         self.reject_signal = False
 
     def run(self):
-        if self.reject_signal or not self.connected or self.hardware is None:
+        if (
+            self.reject_signal
+            or self.scan_admission_closed
+            or not self.connected
+            or self.hardware is None
+        ):
+            self.job = ""
             return
 
         if self.job:
@@ -425,7 +432,27 @@ class SR830_Logic(QtCore.QThread):
             self.job = ""
 
     def stop(self):
+        if self.scan_admission_closed:
+            self.job = ""
+            return
         self.reject_signal = True
         self.quit()
         self.wait()
         self.reject_signal = False
+
+    def prepare_scan(self, timeout_ms: int) -> bool:
+        self.scan_admission_closed = True
+        self.reject_signal = True
+        self.job = ""
+        return not self.isRunning() or self.wait(timeout_ms)
+
+    def resume_scan(self) -> bool:
+        self.scan_admission_closed = False
+        self.reject_signal = False
+        return True
+
+    def request_force_stop(self) -> bool:
+        self.reject_signal = True
+        self.job = ""
+        self.requestInterruption()
+        return True

@@ -87,8 +87,8 @@ An active device widget should provide the following where applicable:
 | --- | --- |
 | `connect(..., timeout_ms)` | Complete within the positive reviewed timeout and return literal `True` only after one connection succeeds |
 | `disconnect()` | Stop device activity as needed and release the connection idempotently |
-| `start_scan()` | Prepare for scan use and clear only stale stop state that is safe to clear |
-| `stop_scan()` | Stop monitoring/background activity that could contend with scanning; do not necessarily disconnect |
+| `stop_scan()` | Before a scan, idempotently close UI-job admission, save monitor intent, and boundedly quiesce conflicting activity without disconnecting |
+| `start_scan()` | After scan/error/cancel, idempotently reopen admission and restore only monitor state that was active before preparation |
 | `force_stop()` | Promptly request interruption of active ramp/write/operation and preserve the last confirmed state |
 | `terminate_dev()` | Final teardown: stop workers, release resources, and disconnect |
 | `close()` | Widget close may hide the window; application shutdown must still call final teardown |
@@ -101,7 +101,13 @@ shutdown continues to force-stop and tear down every device. Missing optional
 scan hooks are successful no-ops. Runtime connect, disconnect,
 force-stop, stop-scan, and termination callbacks run on manager lifecycle
 workers and must not mutate a `QWidget` directly; publish UI changes through
-signals. Final widget `close()` and `deleteLater()` remain on the manager's Qt
+signals or use a bounded owner-thread slot for Qt timer/widget state. Device I/O
+and worker waits remain off the UI thread. A registered `stop_scan`/`start_scan`
+pair is the sole owner of scan-time monitor preparation and restoration; core
+does not call `stop_monitor()` separately. An explicit `False` from either scan
+lifecycle callback is failure and prevents or fails the boundary transition;
+`force_stop(False)` may still mean that no interruptible work was active. Final
+widget `close()` and `deleteLater()` remain on the manager's Qt
 UI-owner thread. Methods should be safe when disconnected, partially
 initialized, already stopped, or called more than once. The manager preserves
 one-attempt termination/close errors and will not release shared runtimes after

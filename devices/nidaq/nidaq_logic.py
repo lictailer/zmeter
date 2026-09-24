@@ -20,11 +20,29 @@ class NIDAQLogic(QtCore.QThread):
         self.reset_flags()
         self.accumuate_time = 0.1
         self.is_initialized = False
+        self.scan_admission_closed = False
         self.AI_sample_rate = 35000
         self.set_accumulate_count_num()
 
     def reset_flags(self):
         self.receieved_stop = False
+
+    def prepare_scan(self, timeout_ms: int) -> bool:
+        self.scan_admission_closed = True
+        self.receieved_stop = True
+        self.job = ""
+        return not self.isRunning() or self.wait(timeout_ms)
+
+    def resume_scan(self) -> bool:
+        self.scan_admission_closed = False
+        self.reset_flags()
+        return True
+
+    def force_stop(self) -> bool:
+        self.receieved_stop = True
+        self.job = ""
+        self.requestInterruption()
+        return True
 
     def initialize(self, dev_name):
         if self.is_initialized:
@@ -145,6 +163,9 @@ class NIDAQLogic(QtCore.QThread):
 
     #####################################################
     def run(self):
+        if self.scan_admission_closed:
+            self.job = ""
+            return
         if self.job == "write_AO0":
             self.set_AO0(self.target_AO0)
 

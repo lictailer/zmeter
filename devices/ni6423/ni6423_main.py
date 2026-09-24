@@ -18,6 +18,7 @@ class NI6423(QtWidgets.QWidget):
     COUNTER_CHANNELS = ["counter0"]
     MONITOR_PERIOD_MS = 50
     LOG_LENGTH = 300
+    SCAN_QUIESCE_TIMEOUT_MS = 11_000
 
     def __init__(self):
         super().__init__()
@@ -28,6 +29,9 @@ class NI6423(QtWidgets.QWidget):
         self.monitor_mode: Optional[str] = None  # None, "ai", "counter"
         self.active_monitor_channel: Optional[str] = None
         self.scan_paused = False
+        self._scan_monitor_mode: Optional[str] = None
+        self._scan_monitor_channel: Optional[str] = None
+        self._scan_monitor_was_active = False
 
         self._pen = pg.mkPen((255, 255, 255), width=3)
         self.read_log: Dict[str, np.ndarray] = {}
@@ -105,24 +109,31 @@ class NI6423(QtWidgets.QWidget):
 
     # ------------------------ connection -------------------------
     def _connect_device(self, name: str):
+        if self.scan_paused:
+            return False
         if not name:
             self.status_label.setText("OFF (empty device name)")
-            return
+            return False
         try:
             self.logic.initialize(name)
             self.when_set_integrate_time_clicked()
             self.logic.request_all_ao_feedback_async()
             if self.monitor_mode is not None and not self.scan_paused:
                 self.start_timer()
+            return True
         except Exception as exc:
             self.status_label.setText(f"OFF ({exc})")
+            return False
 
     def when_set_button_clicked(self):
         self._connect_device(self.dev_name_lineEdit.text().strip())
 
     def when_close_button_clicked(self):
+        if self.scan_paused:
+            return False
         self.stop_monitor()
         self.logic.close()
+        return True
 
     def setup_name_label(self, name):
         if name == "None":
@@ -143,20 +154,22 @@ class NI6423(QtWidgets.QWidget):
 
     # ---------------------- integration time ---------------------
     def when_set_integrate_time_clicked(self):
-        if not self.logic.is_initialized:
-            return
+        if self.scan_paused or not self.logic.is_initialized:
+            return False
         try:
             ao_time = float(self.AOIntgratingTime_doubleSpinBox.value())
             counter_time = float(self.counterIntgratingTime_doubleSpinBox.value())
             self.logic.update_ao_integrating_time(ao_time)
             self.logic.update_counter_integrating_time(counter_time)
+            return True
         except Exception as exc:
             self.status_label.setText(f"ERR: {exc}")
+            return False
 
     # --------------------------- AO ------------------------------
     def _set_ao(self, ao_index: int, value: Optional[float] = None):
-        if not self.logic.is_initialized:
-            return
+        if self.scan_paused or not self.logic.is_initialized:
+            return False
 
         ao_channel = f"AO{ao_index}"
         if value is None:
@@ -172,26 +185,28 @@ class NI6423(QtWidgets.QWidget):
             self.logic.wait(1000)
         self.logic.job = "write_AO"
         self.logic.start()
+        return True
 
     def when_set_ao_clicked(self, ao_index: int):
         self._set_ao(ao_index)
 
     def when_get_ao_clicked(self, ao_index: int):
-        if not self.logic.is_initialized:
-            return
+        if self.scan_paused or not self.logic.is_initialized:
+            return False
 
         ao_channel = f"AO{ao_index}"
         if self.logic.isRunning():
             self.logic.request_ao_feedback_async(ao_channel)
-            return
+            return True
 
         self.logic.update_next_feedback_ao_channel(ao_channel)
         self.logic.job = "read_AO_feedback"
         self.logic.start()
+        return True
 
     def when_pm_button_clicked(self, ao_index: int, fun: str):
-        if not self.logic.is_initialized:
-            return
+        if self.scan_paused or not self.logic.is_initialized:
+            return False
 
         ao_channel = f"AO{ao_index}"
         step = float(self.ao_step_spinboxes[ao_index].value())
@@ -206,12 +221,12 @@ class NI6423(QtWidgets.QWidget):
         else:
             target = float(cached_val) - step
 
-        self._set_ao(ao_index, target)
+        return self._set_ao(ao_index, target)
 
     # ------------------------ monitoring -------------------------
     def start_ai_monitor(self):
-        if not self.logic.is_initialized:
-            return
+        if self.scan_paused or not self.logic.is_initialized:
+            return False
         ai_index = int(self.spinBox.value())
         channel = f"AI{ai_index}"
         self.logic.update_next_ai_channel(channel)
@@ -219,16 +234,18 @@ class NI6423(QtWidgets.QWidget):
         self.active_monitor_channel = channel
         self._plot_channel(channel)
         self.start_timer()
+        return True
 
     def start_counter_monitor(self):
-        if not self.logic.is_initialized:
-            return
+        if self.scan_paused or not self.logic.is_initialized:
+            return False
         channel = "counter0"
         self.logic.update_next_counter_channel("Ctr0")
         self.monitor_mode = "counter"
         self.active_monitor_channel = channel
         self._plot_channel(channel)
         self.start_timer()
+        return True
 
     def stop_monitor(self):
         self.monitor_mode = None
@@ -242,9 +259,10 @@ class NI6423(QtWidgets.QWidget):
 
     def start_timer(self):
         if self.scan_paused:
-            return
+            return False
         if not self.timer.isActive():
             self.timer.start()
+        return True
 
     def stop_timer(self):
         if self.timer.isActive():
@@ -301,18 +319,28 @@ class NI6423(QtWidgets.QWidget):
 
     # ---------------------- scan lifecycle -----------------------
     def stop_scan(self):
+        already_paused = self.scan_paused
         if QtCore.QThread.currentThread() != self.thread():
             QtCore.QMetaObject.invokeMethod(
                 self,
                 "_stop_scan_on_owner",
                 QtCore.Qt.ConnectionType.BlockingQueuedConnection,
             )
-            return
-        self._stop_scan_on_owner()
+        else:
+            self._stop_scan_on_owner()
+        if already_paused and not self.logic.lifecycle_busy():
+            return True
+        return self.logic.prepare_scan(self.SCAN_QUIESCE_TIMEOUT_MS)
 
     @QtCore.pyqtSlot()
     def _stop_scan_on_owner(self):
+        if self.scan_paused:
+            return
+        self._scan_monitor_mode = self.monitor_mode
+        self._scan_monitor_channel = self.active_monitor_channel
+        self._scan_monitor_was_active = self.timer.isActive()
         self.scan_paused = True
+        self.logic._scan_mode = True
         self.stop_timer()
 
     def start_scan(self):
@@ -322,14 +350,41 @@ class NI6423(QtWidgets.QWidget):
                 "_start_scan_on_owner",
                 QtCore.Qt.ConnectionType.BlockingQueuedConnection,
             )
-            return
-        self._start_scan_on_owner()
+        else:
+            self._start_scan_on_owner()
+        return self.logic.resume_scan() is not False
 
     @QtCore.pyqtSlot()
     def _start_scan_on_owner(self):
+        if not self.scan_paused:
+            return
+        self.monitor_mode = self._scan_monitor_mode
+        self.active_monitor_channel = self._scan_monitor_channel
         self.scan_paused = False
-        if self.monitor_mode is not None and self.logic.is_initialized:
+        if self._scan_monitor_was_active and self.logic.is_initialized:
             self.start_timer()
+        self._scan_monitor_mode = None
+        self._scan_monitor_channel = None
+        self._scan_monitor_was_active = False
+
+    def force_stop(self):
+        self.logic.force_stop()
+        if QtCore.QThread.currentThread() != self.thread():
+            QtCore.QMetaObject.invokeMethod(
+                self,
+                "_force_stop_on_owner",
+                QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+            )
+        else:
+            self._force_stop_on_owner()
+        return True
+
+    @QtCore.pyqtSlot()
+    def _force_stop_on_owner(self):
+        self.stop_timer()
+        if not self.scan_paused:
+            self.monitor_mode = None
+            self.active_monitor_channel = None
 
     def terminate_dev(self):
         self.stop_monitor()

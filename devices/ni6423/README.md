@@ -34,7 +34,7 @@ The hardware defaults to a `[-10, 10]` V AO/AI range unless constructed otherwis
 - system: NI-DAQmx driver compatible with the device and Python package;
 - configuration: NI device name, AO/AI ranges, feedback wiring, counter sources, gate/pulse counters, and PFI terminals.
 
-The widget pauses its monitor during a scan and `terminate_dev` stops monitoring and closes all tasks. There is no widget `force_stop`; review behavior for active writes, reads, counter gates, and pulse tasks before production use.
+The registered lifecycle is the sole owner of scan-time monitor coordination. `stop_scan()` preserves the exact AI/counter mode, channel, and active state, closes UI-job admission, stops the Qt timer on its owner thread, and waits up to 11 seconds for the UI QThread and asynchronous feedback worker to quiesce. `start_scan()` restores only a previously active monitor. `force_stop()` requests both workers to stop without closing tasks or changing AO targets. A timeout fails preparation; hardware behavior remains pending bench validation.
 
 Agents must not import/run commands that enumerate NI devices, initialize the device, create tasks, write/read channels, route counters, or generate pulses. The executable `__main__` blocks in the logic and hardware files are hardware bench tests and are user-only. See [hardware_safety.md](../../documents/hardware_safety.md).
 

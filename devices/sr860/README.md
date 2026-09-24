@@ -26,7 +26,7 @@ The hardware documents internal reference frequency as 1 mHz–500 kHz and sine 
 
 ## Lifecycle and safety
 
-Connection checks that identity contains `SR860`, and termination stops UI monitoring then disconnects. The widget does not implement standard `start_scan`, `stop_scan`, or `force_stop`, so automatic scan coordination is incomplete. A 50 ms monitor can otherwise compete with scan reads.
+Connection checks that identity contains `SR860`. The registered lifecycle saves the prior 50 ms monitor state, closes UI-job admission, stops/restores the Qt timer on its owner thread, and waits off the GUI thread for at most 2 seconds for an in-flight UI/monitor job. `force_stop()` requests interruption without disconnecting or altering source/input settings. Termination still stops monitoring and disconnects.
 
 Agents must not enumerate VISA resources, connect, configure, source, read, reset, or disconnect the SR860. The user must validate filters, units, timeouts, monitor coordination, auxiliary limits, and shutdown state. See [hardware_safety.md](../../documents/hardware_safety.md).
 
