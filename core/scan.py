@@ -439,9 +439,6 @@ class Scan(QtWidgets.QWidget):
             raise ValueError(f"unknown scan state: {state}")
         self._scan_state = state
 
-    def _log_stage_timing(self, stage, elapsed):
-        self._log_info(f"Scan boundary timing | stage={stage} | seconds={elapsed:.3f}")
-
     def _start_boundary_job(self, operation, completion):
         active = self._boundary_thread
         if active is not None and active.isRunning():
@@ -492,9 +489,10 @@ class Scan(QtWidgets.QWidget):
         )
 
     def _configuration_widgets(self, *, include_scan_buttons):
+        # The scan name and comments are completion metadata, not executable
+        # configuration.  Keep them editable so finalization can capture the
+        # operator's latest text, matching the legacy scan workflow.
         widgets = [
-            self.lineEdit,
-            self.comments_textEdit,
             self.PlotsPerPage,
             self.all_level_setting,
             self.all_plot_setting,
@@ -673,7 +671,6 @@ class Scan(QtWidgets.QWidget):
         return _CapturedImage(bytes(payload), pixmap.width(), pixmap.height())
 
     def _build_output_snapshot(self):
-        started = time.perf_counter()
         serial = f"{self.main_window.scanlist.serial.value():04d}"
         base = f"{serial}_{self.info.get('name', 'scan')}"
         comments_text = self.comments_textEdit.toPlainText().strip()
@@ -770,7 +767,6 @@ class Scan(QtWidgets.QWidget):
             backup_dir=self._backup_subfolder(),
             recovery_dir=recovery_dir,
         )
-        self._log_stage_timing("UI capture", time.perf_counter() - started)
         return snapshot
 
     def _restore_and_persist(self, snapshot):
@@ -823,8 +819,6 @@ class Scan(QtWidgets.QWidget):
                         self._log_warning(message)
                     else:
                         self._log_info(message)
-                for stage, elapsed in result.timings:
-                    self._log_stage_timing(stage, elapsed)
                 if result.restore_error is not None:
                     self.handle_scan_error(
                         "Equipment restart failed: "
@@ -1260,12 +1254,8 @@ class Scan(QtWidgets.QWidget):
             self._start_new_scan_log_session()
 
             device_ids = self._capture_participating_device_ids()
-            started = time.perf_counter()
             self.update_alllevel_setting_array()
             scan_config = {"levels": copy.deepcopy(self.info["levels"])}
-            self._log_stage_timing(
-                "model setting update", time.perf_counter() - started
-            )
             self._start_boundary_job(
                 lambda: self._prepare_devices(device_ids, scan_config),
                 self._complete_scan_preparation,
@@ -1321,8 +1311,6 @@ class Scan(QtWidgets.QWidget):
                 RuntimeError("device preparation returned an invalid result")
             )
             return
-        self._log_stage_timing("device prepare", result.device_elapsed)
-        self._log_stage_timing("model/data initialization", result.data_elapsed)
         if result.error is not None:
             if result.restore_error is not None:
                 self._log_error(
@@ -1344,9 +1332,7 @@ class Scan(QtWidgets.QWidget):
         try:
             self.logic.reset_flags()
             self.logic.go_scan = True
-            started = time.perf_counter()
             self.update_all_plots()
-            self._log_stage_timing("plot setup", time.perf_counter() - started)
             self._set_scan_state("running")
             self.logic.start()
             self._log_info("Scan started.")
@@ -1387,8 +1373,6 @@ class Scan(QtWidgets.QWidget):
                     "Scan start rollback failed: "
                     f"{type(outcome.error).__name__}: {outcome.error}"
                 )
-            else:
-                self._log_stage_timing("device restore", float(outcome.value))
         finally:
             self._set_scan_state("idle")
             self._outputs_finalized = True

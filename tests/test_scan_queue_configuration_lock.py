@@ -32,8 +32,6 @@ class ScanQueueConfigurationLockTests(unittest.TestCase):
 
     def _configuration_widgets(self):
         return (
-            self.scan.lineEdit,
-            self.scan.comments_textEdit,
             self.scan.PlotsPerPage,
             self.scan.all_level_setting,
             self.scan.all_plot_setting,
@@ -44,6 +42,9 @@ class ScanQueueConfigurationLockTests(unittest.TestCase):
             self.scan.scan_button_2,
             self.scan.scan_button_3,
         )
+
+    def _completion_metadata_widgets(self):
+        return (self.scan.lineEdit, self.scan.comments_textEdit)
 
     def _runtime_widgets(self):
         return (
@@ -146,9 +147,26 @@ class ScanQueueConfigurationLockTests(unittest.TestCase):
         self.assertTrue(
             all(not widget.isEnabled() for widget in self._configuration_widgets())
         )
+        self.assertTrue(
+            all(widget.isEnabled() for widget in self._completion_metadata_widgets())
+        )
 
         self.scan.set_queue_configuration_locked(False)
         self.assertTrue(all(widget.isEnabled() for widget in self._configuration_widgets()))
+
+    def test_name_and_comments_remain_editable_under_scan_and_queue_locks(self):
+        self.scan._set_scan_configuration_locked(True)
+        self.scan.set_queue_configuration_locked(True)
+
+        self.scan.lineEdit.setText("updated while running")
+        self.scan.comments_textEdit.setPlainText("completion note")
+
+        self.assertTrue(self.scan.lineEdit.isEnabled())
+        self.assertTrue(self.scan.comments_textEdit.isEnabled())
+        self.assertEqual(self.scan.info["name"], "updated while running")
+        self.assertEqual(
+            self.scan.comments_textEdit.toPlainText(), "completion note"
+        )
 
 
 if __name__ == "__main__":

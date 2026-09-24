@@ -223,6 +223,23 @@ class ScanBoundaryTests(unittest.TestCase):
         self.assertEqual(self.scan.scan_state, "idle")
         self.assertNotEqual(worker_threads, [self.scan.thread()])
         self.assertEqual(self.main_window.reservations[0].release_count, 1)
+        self.assertNotIn("Scan boundary timing", self.scan.logStatus_textEdit.toPlainText())
+
+    def test_completion_snapshot_uses_name_and_comments_edited_during_scan(self):
+        self.scan._set_scan_configuration_locked(True)
+
+        self.assertTrue(self.scan.lineEdit.isEnabled())
+        self.assertTrue(self.scan.comments_textEdit.isEnabled())
+        self.scan.lineEdit.setText("renamed at completion")
+        self.scan.comments_textEdit.setPlainText("latest operator comment")
+
+        snapshot = self.scan._build_output_snapshot()
+
+        self.assertEqual(snapshot.json_name, "0000_renamed at completion.json")
+        self.assertEqual(snapshot.json_payload["name"], "renamed at completion")
+        self.assertEqual(
+            snapshot.json_payload["comments"], "latest operator comment"
+        )
 
     def test_output_job_resolves_collision_and_keeps_schema_payload(self):
         original = self.output_root / "0000_boundary.json"
