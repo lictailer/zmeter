@@ -77,7 +77,7 @@ class TLPM(QtWidgets.QWidget):
 
     def set_wavelength(self):
         pos = self.nm_to_go_doubleSpinBox.value()
-        self.logic.set_wavelength_target(pos)
+        self.logic.queue_wavelength(pos)
         return self._start_logic_job("do_change_wavelength")
 
     def read_power(self):

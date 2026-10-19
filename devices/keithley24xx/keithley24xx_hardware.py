@@ -1,9 +1,13 @@
+import math
 import time
 
 from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
 
 
 class Keithly24xxHardware():
+    NPLC_MIN = 0.01
+    NPLC_MAX = 10.0
+
     def __init__(self, visa_runtime: VisaRuntime | None = None):
         self.visa_runtime = visa_runtime or VisaRuntime()
         self._visa_lease: VisaResourceLease | None = None
@@ -62,6 +66,46 @@ class Keithly24xxHardware():
         self.inst.write(f':SENS:CURR:PROT {compliance}')
         self.inst.write(':SENS:CURR:RANG:AUTO ON')
         self.inst.write(':FORM:ELEM CURR') #Current reading only.
+
+    @classmethod
+    def validate_nplc(cls, value):
+        """Return a finite NPLC value supported by both the 2400 and 2450."""
+        if isinstance(value, bool):
+            raise ValueError("NPLC must be a number, not a boolean")
+        try:
+            nplc = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid NPLC value: {value!r}") from exc
+        if not math.isfinite(nplc):
+            raise ValueError("NPLC must be finite")
+        if not cls.NPLC_MIN <= nplc <= cls.NPLC_MAX:
+            raise ValueError(
+                f"NPLC must be between {cls.NPLC_MIN:g} and {cls.NPLC_MAX:g}"
+            )
+        return nplc
+
+    def set_measurement_nplc(self, value):
+        """Set one integration time for voltage and current measurements.
+
+        The Keithley 2400 treats NPLC as a global setting. The 2450 can retain
+        a value per measurement function, so both functions are programmed to
+        keep behavior consistent when the UI switches between them.
+        """
+        nplc = self.validate_nplc(value)
+        command_value = f"{nplc:.9g}"
+        self.inst.write(f":SENS:VOLT:NPLC {command_value}")
+        self.inst.write(f":SENS:CURR:NPLC {command_value}")
+        return self.get_measurement_nplc()
+
+    def get_measurement_nplc(self):
+        """Return the voltage and current NPLC readbacks as a tuple."""
+        voltage_nplc = self.validate_nplc(
+            self.inst.query(":SENS:VOLT:NPLC?")
+        )
+        current_nplc = self.validate_nplc(
+            self.inst.query(":SENS:CURR:NPLC?")
+        )
+        return voltage_nplc, current_nplc
 
     def close(self):
         """Safely close the VISA connection"""
@@ -125,5 +169,4 @@ class Keithly24xxHardware():
 
         # Ensure we finish exactly at the target voltage
         self.set_sour_volt_to(target_voltage)
-
 

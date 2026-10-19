@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 
 from core.shared_runtime.visa import VisaResourceLease, VisaRuntime
@@ -11,6 +12,11 @@ class SR860_Hardware:
     """
 
     # ---------------- initialisation ----------------
+    AMPLITUDE_MIN_V = 0.0
+    AMPLITUDE_MAX_V = 2.0
+    DC_LEVEL_MIN_MV = -5000.0
+    DC_LEVEL_MAX_MV = 5000.0
+
     def __init__(self, address: str, visa_runtime: VisaRuntime | None = None):
         """
         address : VISA resource string, e.g. 'GPIB0::12::INSTR'
@@ -38,17 +44,44 @@ class SR860_Hardware:
 
     def _query(self, cmd: str) -> str:
         logging.debug(f"? {cmd}")
-
         last_error = None
         count = 0
         while count < 3:
             try:
                 return self._vi.query(cmd).strip()
-            except Exception as e:
-                last_error = e
+            except Exception as exc:
+                last_error = exc
                 count += 1
                 time.sleep(0.01)
-        raise RuntimeError(f"Error querying '{cmd}' after 3 retries: {last_error}")
+        raise RuntimeError(
+            f"Error querying '{cmd}' after 3 retries: {last_error}"
+        )
+
+    def _query_once(self, cmd: str, *, timeout_ms: int) -> str:
+        """Run one bounded query without risking a duplicate set command."""
+        logging.debug(f"? {cmd}")
+        previous_timeout = self._vi.timeout
+        self._vi.timeout = int(timeout_ms)
+        try:
+            return self._vi.query(cmd).strip()
+        except Exception as exc:
+            raise RuntimeError(f"Error querying '{cmd}': {exc}") from exc
+        finally:
+            self._vi.timeout = previous_timeout
+
+    @staticmethod
+    def _validate_output_value(name, value, low, high) -> float:
+        if isinstance(value, bool):
+            raise ValueError(f"{name} must be numeric")
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be numeric") from exc
+        if not math.isfinite(numeric_value):
+            raise ValueError(f"{name} must be finite")
+        if not low <= numeric_value <= high:
+            raise ValueError(f"{name} must be between {low} and {high}")
+        return numeric_value
 
     # -------------- identity / reset ----------------
     def idn(self) -> str:
@@ -66,8 +99,29 @@ class SR860_Hardware:
         return float(self._query("FREQ?"))
 
     def set_amplitude(self, v_rms: float):
-        """Sine-out amplitude (1 nV – 2 V rms)."""
-        self._write(f"SLVL {v_rms:.9g}")
+        """Set sine-out amplitude in V RMS within the panel's 0–2 V range."""
+        value = self._validate_output_value(
+            "amplitude (V RMS)",
+            v_rms,
+            self.AMPLITUDE_MIN_V,
+            self.AMPLITUDE_MAX_V,
+        )
+        self._write(f"SLVL {value:.9g}")
+
+    def program_amplitude_and_readback(self, v_rms: float) -> float:
+        """Set amplitude and query it in one SR860 command line."""
+        value = self._validate_output_value(
+            "amplitude (V RMS)",
+            v_rms,
+            self.AMPLITUDE_MIN_V,
+            self.AMPLITUDE_MAX_V,
+        )
+        return float(
+            self._query_once(
+                f"SLVL {value:.9g};SLVL?",
+                timeout_ms=1000,
+            )
+        )
 
     def get_amplitude(self) -> float:
         return float(self._query("SLVL?"))
@@ -419,12 +473,35 @@ class SR860_Hardware:
             raise ValueError("Either write or read must be True")
 
     def dc_level(self, value=None, write=False, read=False):
+        """Set the sine-output DC level in mV, or read it back in volts."""
         if write and value is not None:
-            self._write(f"SOFF {value}MV")
+            numeric_value = self._validate_output_value(
+                "DC level (mV)",
+                value,
+                self.DC_LEVEL_MIN_MV,
+                self.DC_LEVEL_MAX_MV,
+            )
+            self._write(f"SOFF {numeric_value:.9g} MV")
         elif read:
             return float(self._query("SOFF?"))
         else:
             raise ValueError("Either write or read must be True")
+
+    def program_dc_level_and_readback(self, value_mv: float) -> float:
+        """Set DC level and return its readback in mV atomically."""
+        value = self._validate_output_value(
+            "DC level (mV)",
+            value_mv,
+            self.DC_LEVEL_MIN_MV,
+            self.DC_LEVEL_MAX_MV,
+        )
+        response_v = float(
+            self._query_once(
+                f"SOFF {value:.9g} MV;SOFF?",
+                timeout_ms=1000,
+            )
+        )
+        return response_v * 1000.0
 
     _dc_level_mode_map = {
         "common": 0,
@@ -566,21 +643,14 @@ class SR860_Hardware:
 
     # -------------- connection teardown ---------------
     def disconnect(self):
-        """Safely close the VISA resource.
-
-        Before closing we attempt to clear the device buffer so that no
-        outstanding responses remain in the queue. Any exceptions during
-        cleanup are caught and ignored to ensure the application can
-        continue shutting down gracefully.
-        """
+        """Clear the SR860, release its lease, and close the VISA resource."""
         if getattr(self, "_vi", None) is None:
             return  # nothing to do
 
         try:
-            # IEEE-488.2 device clear: flush buffers on the instrument side
-            self._vi.clear()  # type: ignore[attr-defined]
+            self._vi.clear()
         except Exception:
-            pass  # ignore issues during buffer clear
+            pass
 
         if self._visa_lease is not None:
             self._visa_lease.close()

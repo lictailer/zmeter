@@ -20,6 +20,10 @@ class SP150ProtocolError(SP150Error):
     """Raised when the SP150 returns an invalid response."""
 
 
+class SP150EmptyResponseError(SP150ProtocolError):
+    """Raised when the SP150 terminates a reply without wavelength data."""
+
+
 class SP150Hardware:
     """Own one explicitly configured SP150 VISA session."""
 
@@ -112,8 +116,13 @@ class SP150Hardware:
             response = instrument.query("?NM", delay=self.query_delay_s)
         except Exception as exc:
             raise SP150ProtocolError(f"SP150 wavelength query failed: {exc}") from exc
+        response_text = str(response).strip()
+        if not response_text:
+            raise SP150EmptyResponseError(
+                "SP150 returned an empty wavelength response"
+            )
         try:
-            value = float(str(response).strip())
+            value = float(response_text)
         except (TypeError, ValueError) as exc:
             raise SP150ProtocolError(
                 f"Invalid SP150 wavelength response: {response!r}"

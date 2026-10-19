@@ -307,7 +307,7 @@
         <item row="3" column="7">
          <widget class="QLabel" name="label_6">
           <property name="text">
-           <string>Ampl</string>
+           <string>Ampl target</string>
           </property>
          </widget>
         </item>
@@ -548,32 +548,44 @@
          </widget>
         </item>
         <item row="3" column="8" colspan="2">
-         <widget class="QDoubleSpinBox" name="ampl_doubleSpinBox">
-          <property name="maximumSize">
-           <size>
-            <width>80</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="suffix">
-           <string> V</string>
-          </property>
-          <property name="decimals">
-           <number>3</number>
-          </property>
-          <property name="minimum">
-           <double>0.000000000000000</double>
-          </property>
-          <property name="maximum">
-           <double>5.000000000000000</double>
-          </property>
-          <property name="singleStep">
-           <double>0.010000000000000</double>
-          </property>
-          <property name="value">
-           <double>0.000000000000000</double>
-          </property>
-         </widget>
+         <layout class="QHBoxLayout" name="amplitude_output_layout">
+          <item>
+           <widget class="QDoubleSpinBox" name="ampl_doubleSpinBox">
+            <property name="suffix">
+             <string> V</string>
+            </property>
+            <property name="decimals">
+             <number>3</number>
+            </property>
+            <property name="minimum">
+             <double>0.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>2.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="amplitude_set_pushButton">
+            <property name="text">
+             <string>Set</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="amplitude_current_label">
+            <property name="text">
+             <string>Current: -- V</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </item>
         <item row="1" column="7">
          <widget class="QLabel" name="label_13">
@@ -903,20 +915,38 @@
          </widget>
         </item>
         <item row="3" column="11">
-         <widget class="QDoubleSpinBox" name="dclevel_doubleSpinBox">
-          <property name="suffix">
-           <string> mV</string>
-          </property>
-          <property name="decimals">
-           <number>1</number>
-          </property>
-          <property name="minimum">
-           <double>-5000.000000000000000</double>
-          </property>
-          <property name="maximum">
-           <double>5000.000000000000000</double>
-          </property>
-         </widget>
+         <layout class="QHBoxLayout" name="dc_level_output_layout">
+          <item>
+           <widget class="QDoubleSpinBox" name="dclevel_doubleSpinBox">
+            <property name="suffix">
+             <string> mV</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>-5000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>5000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="dc_level_set_pushButton">
+            <property name="text">
+             <string>Set</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="dc_level_current_label">
+            <property name="text">
+             <string>Current: -- mV</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </item>
         <item row="3" column="10" rowspan="2">
          <widget class="QLabel" name="label_5">
@@ -943,6 +973,71 @@
          <widget class="QLabel" name="label_9">
           <property name="text">
            <string>notch filter??</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="0">
+         <widget class="QLabel" name="amplitude_ramp_rate_label">
+          <property name="text">
+           <string>Amplitude ramp rate</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1" colspan="3">
+         <widget class="QDoubleSpinBox" name="amplitude_ramp_rate_doubleSpinBox">
+          <property name="suffix">
+           <string> V/s</string>
+          </property>
+          <property name="decimals">
+           <number>3</number>
+          </property>
+          <property name="minimum">
+           <double>0.001000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>2.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.050000000000000</double>
+          </property>
+          <property name="value">
+           <double>0.100000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="4" colspan="2">
+         <widget class="QLabel" name="dc_ramp_rate_label">
+          <property name="text">
+           <string>DC ramp rate</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="6" colspan="3">
+         <widget class="QDoubleSpinBox" name="dc_ramp_rate_doubleSpinBox">
+          <property name="suffix">
+           <string> mV/s</string>
+          </property>
+          <property name="decimals">
+           <number>1</number>
+          </property>
+          <property name="minimum">
+           <double>5.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>5000.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>50.000000000000000</double>
+          </property>
+          <property name="value">
+           <double>100.000000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="9" colspan="3">
+         <widget class="QPushButton" name="stop_ramp_pushButton">
+          <property name="text">
+           <string>Stop ramp</string>
           </property>
          </widget>
         </item>

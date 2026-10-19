@@ -1,8 +1,15 @@
-from PyQt6 import QtCore
+import math
+from threading import Event, Lock
 import time
+
+from PyQt6 import QtCore
 
 from .sr860_hardware import SR860_Hardware
 from core.shared_runtime.visa import VisaRuntime
+
+
+class SR860RampAbortedError(RuntimeError):
+    """Raised after a ramp stops at its last successfully written waypoint."""
 
 
 class SR860_Logic(QtCore.QThread):
@@ -58,6 +65,21 @@ class SR860_Logic(QtCore.QThread):
     sig_connected = QtCore.pyqtSignal(object)
     sig_log = QtCore.pyqtSignal(object)
 
+    AMPLITUDE_MIN_V = 0.0
+    AMPLITUDE_MAX_V = 2.0
+    DC_LEVEL_MIN_MV = -5000.0
+    DC_LEVEL_MAX_MV = 5000.0
+    COMBINED_OUTPUT_LIMIT_V = 6.0
+    AMPLITUDE_RAMP_RATE_MIN_V_PER_S = 0.001
+    AMPLITUDE_RAMP_RATE_MAX_V_PER_S = 2.0
+    DC_RAMP_RATE_MIN_MV_PER_S = 5.0
+    DC_RAMP_RATE_MAX_MV_PER_S = 5000.0
+    RAMP_UPDATE_HZ = 20.0
+    MAX_RAMP_DURATION_S = 3600.0
+    RAMP_TIMEOUT_MIN_MARGIN_S = 30.0
+    ENDPOINT_CONFIRM_TIMEOUT_S = 1.0
+    ENDPOINT_CONFIRM_POLL_S = 0.05
+
     # -------------------------------------------
     def __init__(self, visa_runtime: VisaRuntime | None = None):
         super().__init__()
@@ -98,6 +120,17 @@ class SR860_Logic(QtCore.QThread):
 
         self.monitor_count = 10
 
+        # Session-only ramp configuration. The amplitude channel uses V while
+        # the DC-level channel follows the panel convention and uses mV.
+        self.amplitude_ramp_rate_v_per_s = 0.1
+        self.dc_level_ramp_rate_mv_per_s = 100.0
+        self._ramp_stop_event = Event()
+        self._ramp_lock = Lock()
+        self._ramp_active = False
+        self._active_ramp_channel: str | None = None
+        self._ramp_stop_reason: str | None = None
+        self._monotonic = time.monotonic
+
         # runtime state
         self.connected = False
         self.reject_signal = False
@@ -107,6 +140,320 @@ class SR860_Logic(QtCore.QThread):
 
     def _emit_log(self, message: str, level: str = "INFO"):
         self.sig_log.emit((level, str(message)))
+
+    @staticmethod
+    def _validated_finite_value(name, value, low, high):
+        if isinstance(value, bool):
+            raise ValueError(f"{name} must be numeric")
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be numeric") from exc
+        if not math.isfinite(numeric_value):
+            raise ValueError(f"{name} must be finite")
+        if not low <= numeric_value <= high:
+            raise ValueError(f"{name} must be between {low} and {high}")
+        return numeric_value
+
+    def configure_amplitude_ramp_rate(self, value):
+        self.amplitude_ramp_rate_v_per_s = self._validated_finite_value(
+            "amplitude ramp rate (V/s)",
+            value,
+            self.AMPLITUDE_RAMP_RATE_MIN_V_PER_S,
+            self.AMPLITUDE_RAMP_RATE_MAX_V_PER_S,
+        )
+        return self.amplitude_ramp_rate_v_per_s
+
+    def configure_dc_ramp_rate(self, value):
+        self.dc_level_ramp_rate_mv_per_s = self._validated_finite_value(
+            "DC ramp rate (mV/s)",
+            value,
+            self.DC_RAMP_RATE_MIN_MV_PER_S,
+            self.DC_RAMP_RATE_MAX_MV_PER_S,
+        )
+        return self.dc_level_ramp_rate_mv_per_s
+
+    def _validate_combined_output(self, amplitude_v, dc_level_mv):
+        amplitude = self._validated_finite_value(
+            "amplitude", amplitude_v, self.AMPLITUDE_MIN_V, self.AMPLITUDE_MAX_V
+        )
+        dc_level = self._validated_finite_value(
+            "DC level", dc_level_mv, self.DC_LEVEL_MIN_MV, self.DC_LEVEL_MAX_MV
+        )
+        combined_peak_v = abs(dc_level) / 1000.0 + math.sqrt(2.0) * amplitude
+        if combined_peak_v > self.COMBINED_OUTPUT_LIMIT_V:
+            raise ValueError(
+                "SR860 output limit exceeded: |DC offset| + sqrt(2) * "
+                f"amplitude is {combined_peak_v:g} V; maximum is "
+                f"{self.COMBINED_OUTPUT_LIMIT_V:g} V"
+            )
+
+    @staticmethod
+    def _readback_matches_programmed_value(
+        requested_value,
+        actual_value,
+        minimum_resolution,
+    ):
+        """Match the SR860's documented three-significant-digit rounding."""
+        magnitude = abs(requested_value)
+        significant_resolution = 0.0
+        if magnitude > 0.0:
+            significant_resolution = 10.0 ** (
+                math.floor(math.log10(magnitude)) - 2
+            )
+        resolution = max(minimum_resolution, significant_resolution)
+        tolerance = resolution / 2.0 + 1e-12 * max(
+            1.0, magnitude, abs(actual_value)
+        )
+        return abs(actual_value - requested_value) <= tolerance
+
+    @property
+    def ramp_active(self):
+        return self._ramp_active
+
+    @property
+    def active_ramp_channel(self):
+        return self._active_ramp_channel
+
+    def request_force_stop(self, reason="external force-stop"):
+        self._ramp_stop_reason = str(reason)
+        self._ramp_stop_event.set()
+        if self._ramp_lock.locked() or self._ramp_active:
+            self._emit_log(
+                f"Stop requested for SR860 "
+                f"{self._active_ramp_channel or 'output'} ramp "
+                f"({self._ramp_stop_reason}).",
+                level="WARN",
+            )
+
+    def _ramp_abort_message(self, channel, current_value, unit):
+        reason = self._ramp_stop_reason or "unknown source"
+        return (
+            f"{channel} ramp stopped at {current_value:g} {unit} "
+            f"(requested by {reason})"
+        )
+
+    def prepare_for_scan(self):
+        if self._ramp_lock.locked() or self._ramp_active:
+            raise RuntimeError(
+                f"SR860 {self._active_ramp_channel or 'output'} ramp is already active"
+            )
+        self._ramp_stop_event.clear()
+        self._ramp_stop_reason = None
+
+    def prepare_for_manual_ramp(self):
+        self.prepare_for_scan()
+
+    def _ramp_output(
+        self,
+        *,
+        channel,
+        target,
+        rate,
+        rate_low,
+        rate_high,
+        low,
+        high,
+        unit,
+        minimum_readback_resolution,
+        read_current,
+        program_and_readback,
+        state_attribute,
+        signal,
+    ):
+        target_value = self._validated_finite_value(channel, target, low, high)
+        rate_value = self._validated_finite_value(
+            f"{channel} ramp rate ({unit}/s)",
+            rate,
+            rate_low,
+            rate_high,
+        )
+
+        with self._ramp_lock:
+            if self._ramp_stop_event.is_set():
+                raise SR860RampAbortedError(
+                    f"{channel} ramp refused because force-stop is set "
+                    f"({self._ramp_stop_reason or 'unknown source'})"
+                )
+
+            start_value = self._validated_finite_value(
+                f"current {channel}", read_current(), low, high
+            )
+            setattr(self, state_attribute, start_value)
+            signal.emit(start_value)
+
+            delta = target_value - start_value
+            if math.isclose(delta, 0.0, abs_tol=1e-12):
+                return start_value
+
+            planned_duration = abs(delta) / rate_value
+            if planned_duration > self.MAX_RAMP_DURATION_S:
+                raise ValueError(
+                    f"{channel} ramp would take {planned_duration:.1f} s; "
+                    f"maximum is {self.MAX_RAMP_DURATION_S:.0f} s"
+                )
+
+            direction = 1.0 if delta > 0.0 else -1.0
+            update_interval = 1.0 / self.RAMP_UPDATE_HZ
+            ramp_started_at = self._monotonic()
+            planned_end_at = ramp_started_at + planned_duration
+            timeout_margin = max(
+                self.RAMP_TIMEOUT_MIN_MARGIN_S, planned_duration
+            )
+            deadline = planned_end_at + timeout_margin
+            next_update_at = min(
+                ramp_started_at + update_interval, planned_end_at
+            )
+            current_value = start_value
+            last_known_output = start_value
+            last_programmed_readback = None
+            self._ramp_active = True
+            self._active_ramp_channel = channel
+            self._emit_log(
+                f"Starting {channel} ramp from {start_value:g} to "
+                f"{target_value:g} {unit} at {rate_value:g} {unit}/s.",
+                level="INFO",
+            )
+
+            try:
+                while not math.isclose(
+                    current_value, target_value, abs_tol=1e-12
+                ):
+                    if self._ramp_stop_event.is_set():
+                        raise SR860RampAbortedError(
+                            self._ramp_abort_message(
+                                channel, last_known_output, unit
+                            )
+                        )
+                    now = self._monotonic()
+                    if now >= deadline:
+                        raise TimeoutError(
+                            f"{channel} ramp timed out at "
+                            f"{current_value:g} {unit}"
+                        )
+
+                    wait_time = max(0.0, next_update_at - now)
+                    if self._ramp_stop_event.wait(wait_time):
+                        raise SR860RampAbortedError(
+                            self._ramp_abort_message(
+                                channel, last_known_output, unit
+                            )
+                        )
+                    now = self._monotonic()
+                    if now >= deadline:
+                        raise TimeoutError(
+                            f"{channel} ramp timed out at "
+                            f"{current_value:g} {unit}"
+                        )
+
+                    elapsed = min(
+                        max(0.0, now - ramp_started_at), planned_duration
+                    )
+                    travelled = min(abs(delta), rate_value * elapsed)
+                    next_value = start_value + direction * travelled
+                    if math.isclose(
+                        elapsed, planned_duration, abs_tol=1e-12
+                    ):
+                        next_value = target_value
+
+                    programmed_readback = self._validated_finite_value(
+                        f"programmed {channel}",
+                        program_and_readback(next_value),
+                        low,
+                        high,
+                    )
+                    current_value = next_value
+                    last_known_output = programmed_readback
+                    last_programmed_readback = programmed_readback
+                    setattr(self, state_attribute, programmed_readback)
+                    signal.emit(programmed_readback)
+
+                    is_final_waypoint = math.isclose(
+                        current_value, target_value, abs_tol=1e-12
+                    )
+                    if (
+                        not is_final_waypoint
+                        and not self._readback_matches_programmed_value(
+                            next_value,
+                            programmed_readback,
+                            minimum_readback_resolution,
+                        )
+                    ):
+                        raise RuntimeError(
+                            f"{channel} waypoint mismatch: requested "
+                            f"{next_value:g} {unit}, read back "
+                            f"{programmed_readback:g} {unit}"
+                        )
+
+                    if is_final_waypoint:
+                        break
+                    next_update_at = min(
+                        self._monotonic() + update_interval,
+                        planned_end_at,
+                    )
+
+                confirmation_deadline = (
+                    self._monotonic() + self.ENDPOINT_CONFIRM_TIMEOUT_S
+                )
+                confirmed_value = last_programmed_readback
+                while True:
+                    if confirmed_value is None:
+                        confirmed_value = self._validated_finite_value(
+                            f"confirmed {channel}", read_current(), low, high
+                        )
+                        last_known_output = confirmed_value
+                        setattr(self, state_attribute, confirmed_value)
+                        signal.emit(confirmed_value)
+                    if self._readback_matches_programmed_value(
+                        target_value,
+                        confirmed_value,
+                        minimum_readback_resolution,
+                    ):
+                        break
+
+                    confirmation_remaining = (
+                        confirmation_deadline - self._monotonic()
+                    )
+                    if confirmation_remaining <= 0.0:
+                        raise RuntimeError(
+                            f"{channel} endpoint mismatch after "
+                            f"{self.ENDPOINT_CONFIRM_TIMEOUT_S:g} s: requested "
+                            f"{target_value:g} {unit}, last readback "
+                            f"{confirmed_value:g} {unit}"
+                        )
+                    if self._ramp_stop_event.wait(
+                        min(
+                            self.ENDPOINT_CONFIRM_POLL_S,
+                            confirmation_remaining,
+                        )
+                    ):
+                        raise SR860RampAbortedError(
+                            self._ramp_abort_message(
+                                channel, last_known_output, unit
+                            )
+                        )
+                    confirmed_value = None
+
+                self._emit_log(
+                    f"Completed {channel} ramp at confirmed readback "
+                    f"{confirmed_value:g} {unit}.",
+                    level="INFO",
+                )
+                return confirmed_value
+            except Exception as exc:
+                self._emit_log(
+                    f"{channel} ramp ended with last known output "
+                    f"{last_known_output:g} {unit}: {exc}",
+                    level=(
+                        "WARN"
+                        if isinstance(exc, SR860RampAbortedError)
+                        else "ERROR"
+                    ),
+                )
+                raise
+            finally:
+                self._ramp_active = False
+                self._active_ramp_channel = None
 
     def _cleanup_connection(self):
         if self.hardware is None:
@@ -143,6 +490,8 @@ class SR860_Logic(QtCore.QThread):
 
             self.hardware = temp_hardware
             self.connected = True
+            self._ramp_stop_event.clear()
+            self._ramp_stop_reason = None
             self.sig_connected.emit(f"connected to {address}")
             self._emit_log(f"Connected to {address}: {idn}", level="INFO")
             return True
@@ -312,9 +661,15 @@ class SR860_Logic(QtCore.QThread):
     
     def get_dc_level(self):
         assert self.hardware is not None
-        val = self.hardware.dc_level(read=True)
+        # The SR860 query reports volts; ZMeter's DC-level channel and panel
+        # deliberately use millivolts for both reads and writes.
+        val = self.hardware.dc_level(read=True) * 1000.0
         self.sig_dc_level.emit(val)
         return val
+
+    def refresh_output_levels(self):
+        """Read both source outputs without exposing a compound scan channel."""
+        return self.get_amplitude(), self.get_dc_level()
     
     def get_dc_level_mode(self):   
         assert self.hardware is not None
@@ -362,11 +717,29 @@ class SR860_Logic(QtCore.QThread):
     # -------------- setters ---------------------
     def set_amplitude(self, val=None):
         assert self.hardware is not None
-        if val is not None:
-            self.setpoint_amplitude = val
-        self.hardware.set_amplitude(self.setpoint_amplitude)
-        self.sig_is_changing.emit(f"amplitude set to {self.setpoint_amplitude}")
-        self.sig_amplitude.emit(self.setpoint_amplitude)
+        target = self.setpoint_amplitude if val is None else val
+        target = self._validated_finite_value(
+            "amplitude", target, self.AMPLITUDE_MIN_V, self.AMPLITUDE_MAX_V
+        )
+        dc_level_mv = self.hardware.dc_level(read=True) * 1000.0
+        self._validate_combined_output(target, dc_level_mv)
+        completed_value = self._ramp_output(
+            channel="amplitude",
+            target=target,
+            rate=self.amplitude_ramp_rate_v_per_s,
+            rate_low=self.AMPLITUDE_RAMP_RATE_MIN_V_PER_S,
+            rate_high=self.AMPLITUDE_RAMP_RATE_MAX_V_PER_S,
+            low=self.AMPLITUDE_MIN_V,
+            high=self.AMPLITUDE_MAX_V,
+            unit="V",
+            minimum_readback_resolution=1e-9,
+            read_current=self.hardware.get_amplitude,
+            program_and_readback=self.hardware.program_amplitude_and_readback,
+            state_attribute="setpoint_amplitude",
+            signal=self.sig_amplitude,
+        )
+        self.sig_is_changing.emit(f"amplitude set to {completed_value}")
+        return completed_value
 
 
     # -------------- set wrappers ---------------------
@@ -475,11 +848,31 @@ class SR860_Logic(QtCore.QThread):
         self.sig_is_changing.emit(f"input_shield set to {self.setpoint_input_shield}")
         self.sig_input_shield.emit(self.setpoint_input_shield)
 
-    def set_dc_level(self):
+    def set_dc_level(self, val=None):
         assert self.hardware is not None
-        self.hardware.dc_level(self.setpoint_dc_level, write=True)
-        self.sig_is_changing.emit(f"dc_level set to {self.setpoint_dc_level}")
-        self.sig_dc_level.emit(self.setpoint_dc_level)
+        target = self.setpoint_dc_level if val is None else val
+        target = self._validated_finite_value(
+            "DC level", target, self.DC_LEVEL_MIN_MV, self.DC_LEVEL_MAX_MV
+        )
+        amplitude_v = self.hardware.get_amplitude()
+        self._validate_combined_output(amplitude_v, target)
+        completed_value = self._ramp_output(
+            channel="dc_level",
+            target=target,
+            rate=self.dc_level_ramp_rate_mv_per_s,
+            rate_low=self.DC_RAMP_RATE_MIN_MV_PER_S,
+            rate_high=self.DC_RAMP_RATE_MAX_MV_PER_S,
+            low=self.DC_LEVEL_MIN_MV,
+            high=self.DC_LEVEL_MAX_MV,
+            unit="mV",
+            minimum_readback_resolution=0.1,
+            read_current=lambda: self.hardware.dc_level(read=True) * 1000.0,
+            program_and_readback=self.hardware.program_dc_level_and_readback,
+            state_attribute="setpoint_dc_level",
+            signal=self.sig_dc_level,
+        )
+        self.sig_is_changing.emit(f"dc_level set to {completed_value}")
+        return completed_value
     
     def set_dc_level_mode(self):
         assert self.hardware is not None
@@ -547,6 +940,7 @@ class SR860_Logic(QtCore.QThread):
         if self.monitor_count >= 10:
             self.get_frequency()
             self.get_amplitude()
+            self.get_dc_level()
             self.get_time_constant()
             self.get_sensitivity()
             self.get_phase()
@@ -566,11 +960,12 @@ class SR860_Logic(QtCore.QThread):
     # -------------- disconnect helper ------------------
     def disconnect(self):
         """Safely stop the thread and close the VISA link."""
+        self.request_force_stop("device disconnect")
         self.reject_signal = True
         self.job = ""
 
-        if self.isRunning():
-            self.wait()
+        if self.isRunning() and not self.wait(5_000):
+            raise RuntimeError("SR860 operation did not stop within 5000 ms")
 
         self._cleanup_connection()
 
@@ -593,6 +988,8 @@ class SR860_Logic(QtCore.QThread):
             if callable(fn):
                 try:
                     fn()
+                except SR860RampAbortedError:
+                    pass
                 except Exception as exc:
                     self._emit_log(f"SR860_Logic job '{self.job}' error: {exc}", level="ERROR")
             else:
