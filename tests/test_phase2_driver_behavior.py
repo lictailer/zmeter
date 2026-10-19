@@ -45,7 +45,7 @@ class Phase2ConstructionTests(unittest.TestCase):
         ):
             widgets = [
                 registry.registration(driver_id).factory()
-                for driver_id in ("montana2", "opticool", "tlpm")
+                for driver_id in ("montana2", "opticool", "attodry", "tlpm")
             ]
 
         montana_get.assert_not_called()

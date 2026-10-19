@@ -37,8 +37,9 @@ remain authoritative; close an item only with the validation named here.
 
 ## Ongoing device packages are not production integrations
 
-- **Current behavior:** Autofocus XZ, `auto_focus`, `auto_position`, and ANC300
-  remain source packages but have no registry IDs.
+- **Current behavior:** ANC300 remains an unregistered source fragment. Legacy
+  autofocus XZ is archived, not a selectable device. Maintained `auto_focus` and
+  `auto_position` now have startup-only registrations, with separate bench gates.
 - **Impact:** They cannot be selected by a validated workbook and are not claimed
   safe for normal ZMeter startup or shutdown.
 - **Safe workaround:** Do not add ad hoc registry entries or import them from

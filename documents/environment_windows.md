@@ -77,6 +77,23 @@ Run ZMeter and validation from the repository root because several Qt Designer f
 
 ## Python packages versus system software
 
+The MS device integration adds `opencv-python-headless==4.13.0.92` for the
+autofocus camera source. The existing NumPy 2.4.1 pin and this package have
+compatible Windows CPython 3.12 wheels in a pip resolution preview. No camera
+was opened, and this is not a full Conda/Windows install result. Use one OpenCV
+variant per environment. The headless build is appropriate because PyQt6,
+not OpenCV's HighGUI, owns the application UI; see the
+[OpenCV package guidance](https://pypi.org/project/opencv-python-headless/4.13.0.92/).
+
+attoDRY additionally needs the vendor-provided `atto_device` 1.12.0 wheel.
+The companion installer branch `MS/optional-attodry-installation` offers this
+only for releases containing the driver and only after explicit opt-in. It
+accepts an adjacent/USB-tree wheel or asks for its path, verifies its fixed
+SHA-256, stages the canonical filename and installs it into the release-named
+environment. Skipping it does not block other devices. The API wheel is not
+redistributed; see [the device README](../devices/attodry/README.md). This does
+not install vendor OS drivers or validate the cryostat/magnet.
+
 The YAML supplies core Python dependencies such as PyQt6, NumPy, SciPy, PyVISA, NI-DAQmx Python bindings, PyDAQmx, PyQtGraph, `openpyxl`, `python-pptx`, Pillow, `pywin32`, serial, SSH, and scientific utilities. A Python package does not install or validate the corresponding instrument driver.
 
 System-installed components are lab/device specific:
@@ -159,4 +176,3 @@ Verify desktop PowerPoint, `pywin32`, write permission, existing file locks, and
 ## Environment-change policy
 
 Dependency and driver changes can destabilize multiple labs. Make the smallest justified change, explain why each new dependency is needed, verify mock-only startup and hardware-independent tests, and update the root README, this file, affected device README, and environment manifest together. Real-driver validation remains a user-executed hardware test.
-

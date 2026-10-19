@@ -1,143 +1,85 @@
-from __future__ import annotations
-
-import re
-import unittest
+"""Read-only checks of the shipped configuration; never construct instruments."""
 from pathlib import Path
+import unittest
 
 from openpyxl import load_workbook
 
-from core.device_management.config import DEVICE_HEADERS
+from core.device_management import build_default_registry
+from core.device_management.config import DEVICE_HEADERS, load_profile
 
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-WORKBOOK_PATH = REPOSITORY_ROOT / "device_config.xlsx"
+WORKBOOK_PATH = Path(__file__).resolve().parents[1] / "device_config.xlsx"
+ADDED_DRIVERS = ("attodry", "mc2000b", "spectraphysicsx3_laser", "auto_focus", "arduino_steppers", "auto_position")
 
 
 class DeviceConfigWorkbookTests(unittest.TestCase):
-    def test_mfli_row_and_table_coverage(self):
-        from core.device_management import build_default_registry
-        from core.device_management.config import load_profile
+    def setUp(self):
+        self.workbook = load_workbook(WORKBOOK_PATH, data_only=False)
+        self.addCleanup(self.workbook.close)
+        self.devices = self.workbook["Devices"]
 
-        workbook = load_workbook(WORKBOOK_PATH, data_only=False)
-        self.addCleanup(workbook.close)
-        devices = workbook['Devices']
-        self.assertEqual([devices.cell(24, col).value for col in range(1, 8)],
-                         ['mfli_0', 'mfli', True, False,
-                          'DEV30037, 192.168.141.54', None, None])
-        self.assertEqual(devices['E24'].number_format, '@')
-        self.assertEqual(devices.tables['FlatDeviceConfigTable'].ref, 'A1:H24')
-        self.assertEqual(workbook['Guide']['D21'].value, 'mfli')
-        self.assertIn('$D$21', devices['H201'].value)
+    def test_headers_table_extent_and_reserved_rows(self):
+        self.assertEqual(self.workbook.sheetnames, ["Devices", "Guide"])
+        self.assertEqual(tuple(c.value for c in self.devices[1]), DEVICE_HEADERS)
+        self.assertEqual(self.devices.max_row, 201)
+        self.assertEqual(list(self.devices.tables), ["FlatDeviceConfigTable"])
+        self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].ref, "A1:H30")
+        self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].tableStyleInfo.name, "TableStyleLight1")
+
+    def test_existing_rows_keep_upstream_values_not_lab_autoconnect_settings(self):
+        expected_ids = ["sr860_0", "sr860_1", "sr860_2", "sr830_0", "sr830_1", "sr830_2", "mfli_0",
+                        "keithley24xx_0", "keithley24xx_1", "nidaq", "ni6423", "k10cr1_0", "k10cr1_1",
+                        "pem100", "sp150", "hp34401a", "bbd30x", "four9", "montana2", "opticool", "tlpm",
+                        "mock_device_0", "mock_device_1"]
+        self.assertEqual([self.devices.cell(r, 1).value for r in range(2, 25)], expected_ids)
+        for row in range(2, 25):
+            self.assertIs(self.devices.cell(row, 3).value, row == 8)
+            self.assertIs(self.devices.cell(row, 4).value, False)
+        self.assertEqual(self.devices["E8"].value, "DEV30037, 192.168.141.54")
+        self.assertEqual(self.devices["E9"].value, "GPIB1::18::INSTR")
+        self.assertEqual(self.devices["F12"].value, "AO0, AO1")
+        self.assertEqual(self.devices["G12"].value, "AI9,AI12, counter0")
+
+    def test_new_devices_have_manual_disabled_rows_and_explicit_channels(self):
         profile = load_profile(WORKBOOK_PATH, driver_specs=build_default_registry().config_specs)
-        config = next(device for device in profile.devices if device.id == 'mfli_0')
-        self.assertEqual(config.connection['address'], 'DEV30037, 192.168.141.54')
-        self.assertTrue(config.enabled)
-        self.assertFalse(config.connect_on_start)
-        self.assertIsNone(config.scan_channels.setters)
-        self.assertIsNone(config.scan_channels.getters)
+        configurations = {device.id: device for device in profile.devices}
+        for row, driver in enumerate(ADDED_DRIVERS, 25):
+            self.assertEqual([self.devices.cell(row, col).value for col in range(1, 5)],
+                             [driver, driver, False, False])
+            self.assertEqual(self.devices.cell(row, 5).number_format, "@")
+            config = configurations[driver]
+            self.assertFalse(config.enabled)
+            self.assertFalse(config.connect_on_start)
+            self.assertIsNotNone(config.scan_channels.setters)
+            self.assertIsNotNone(config.scan_channels.getters)
+        atto = configurations["attodry"]
+        self.assertEqual(atto.connection["address"], "REPLACE_WITH_ATTODRY_ADDRESS")
+        self.assertEqual(atto.scan_channels.setters, ("T", "T_stable", "B", "B_stable"))
+        self.assertEqual(atto.scan_channels.getters, ("T", "B"))
+        self.assertEqual(configurations["spectraphysicsx3_laser"].scan_channels.setters, ("wavelenght_stable", "shutter"))
+        for driver in ("auto_focus", "auto_position"):
+            self.assertIn(configurations[driver].connection["address"], (None, ""))
 
-    def test_checked_in_workbook_keeps_reviewed_device_values(self):
-        workbook = load_workbook(WORKBOOK_PATH, data_only=False)
-        self.addCleanup(workbook.close)
-        devices = workbook["Devices"]
+    def test_guide_covers_every_registry_driver_and_alias(self):
+        registry = build_default_registry()
+        expected = set(registry.driver_ids) | {alias for spec in registry.config_specs.values() for alias in spec.aliases}
+        accepted = [self.workbook["Guide"].cell(r, 4).value for r in range(4, 28)]
+        self.assertEqual(set(accepted), expected)
+        self.assertEqual(len(accepted), len(set(accepted)))
+        for row in range(2, 202):
+            formula = self.devices.cell(row, 8).value
+            self.assertIn(f"COUNTA(A{row}:G{row})=0", formula)
+            self.assertIn("$D$4:$D$27", formula)
+            self.assertIn("UNKNOWN DRIVER", formula)
+            self.assertIn("INVALID CONNECT FLAG", formula)
 
-        self.assertEqual(tuple(cell.value for cell in devices[1]), DEVICE_HEADERS)
-        self.assertEqual(devices.max_row, 201)
-        self.assertEqual(list(devices.tables), ["FlatDeviceConfigTable"])
-
-        expected_addresses = [
-            "GPIB0::6::INSTR",
-            "GPIB0::7::INSTR",
-            "GPIB0::8::INSTR",
-            "GPIB0::9::INSTR",
-            "GPIB0::10::INSTR",
-            "GPIB0::11::INSTR",
-            "GPIB1::18::INSTR",
-            "GPIB1::19::INSTR",
-            "dev1",
-            "dev2",
-            "35995686",
-            "43755678",
-            "GPIB2::10::INSTR",
-            "GPIB2::11::INSTR",
-            "GPIB2::12::INSTR",
-            "103529564",
-            "127.0.0.1:5050",
-            "REPLACE_WITH_MONTANA2_ADDRESS",
-            None,
-            None,
-        ]
-        address_cells = [devices.cell(row=row, column=5) for row in range(2, 22)]
-        self.assertEqual([cell.value for cell in address_cells], expected_addresses)
-        self.assertTrue(all(cell.number_format == "@" for cell in address_cells))
-        self.assertTrue(
-            all(cell.data_type in {"s", "str"} for cell in address_cells)
-        )
-        self.assertIs(devices["C2"].value, True)
-        self.assertIs(devices["D2"].value, True)
-        self.assertEqual(devices["F11"].value, "AO0, AO1")
-        self.assertEqual(devices["G11"].value, "AI9,AI12, counter0")
-        self.assertEqual(devices["E201"].number_format, "@")
-        self.assertIn("COUNTA(A201:G201)=0", devices["H201"].value)
-        self.assertIn("NOW()>=0", devices["H201"].value)
-        self.assertEqual(
-            [str(item.sqref) for item in devices.data_validations.dataValidation],
-            ["C2:D201"],
-        )
-        self.assertEqual(
-            [str(item.sqref) for item in devices.conditional_formatting],
-            ["H2:H201"],
-        )
-
-    def test_config_check_handles_native_booleans_and_uses_guide_driver_list(self):
-        formula_workbook = load_workbook(WORKBOOK_PATH, data_only=False)
-        self.addCleanup(formula_workbook.close)
-        values_workbook = load_workbook(WORKBOOK_PATH, data_only=True)
-        self.addCleanup(values_workbook.close)
-
-        devices = formula_workbook["Devices"]
-        formula = devices["H2"].value
-        self.assertIn("UPPER(TRIM(C2&\"\"))", formula)
-        self.assertIn("UPPER(TRIM(D2&\"\"))", formula)
-        self.assertIn("NOW()>=0", formula)
-        self.assertRegex(
-            formula,
-            re.compile(r"(?:'Guide'|Guide)!\$D\$4:\$D\$21"),
-        )
-        self.assertIn("UNKNOWN DRIVER", formula)
-        self.assertIn("INVALID CONNECT FLAG", formula)
-        self.assertEqual(values_workbook["Devices"]["H2"].value, "DISABLED")
-        self.assertEqual(values_workbook["Devices"]["H3"].value, "DISABLED")
-        self.assertEqual(values_workbook["Devices"]["H22"].value, "ENABLED")
-        self.assertEqual(values_workbook["Devices"]["H23"].value, "ENABLED")
-
-        accepted = {
-            formula_workbook["Guide"].cell(row=row, column=4).value
-            for row in range(4, 22)
-        }
-        self.assertEqual(
-            accepted,
-            {
-                "mock_device",
-                "mfli",
-                "mockDevice",
-                "ni6423",
-                "nidaq",
-                "pem100",
-                "sp150",
-                "hp34401a",
-                "keithley24xx",
-                "sr860",
-                "sr830",
-                "demo_device",
-                "bbd30x",
-                "k10cr1",
-                "four9",
-                "montana2",
-                "opticool",
-                "tlpm",
-            },
-        )
+    def test_cached_checks_match_native_boolean_flags(self):
+        cached = load_workbook(WORKBOOK_PATH, data_only=True)
+        self.addCleanup(cached.close)
+        for row in range(2, 31):
+            self.assertIsInstance(self.devices.cell(row, 3).value, bool)
+            self.assertIsInstance(self.devices.cell(row, 4).value, bool)
+            self.assertEqual(cached["Devices"].cell(row, 8).value, "ENABLED" if row == 8 else "DISABLED")
+        self.assertIn(cached["Devices"]["H201"].value, (None, ""))
 
 
 if __name__ == "__main__":

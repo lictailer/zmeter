@@ -29,12 +29,11 @@ from core.device_management.registry import (
 
 DEFERRED_DRIVER_IDS = (
     "autofocus_xz",
-    "auto_focus",
-    "auto_position",
     "anc300",
 )
 
-PHASE2_DRIVER_IDS = ("four9", "montana2", "opticool", "tlpm")
+PHASE2_DRIVER_IDS = ("four9", "montana2", "opticool", "attodry", "tlpm", "mc2000b",
+                     "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers")
 
 
 class Phase2RegistrationTests(unittest.TestCase):
@@ -45,8 +44,9 @@ import sys
 from core.device_management.registry import build_default_registry
 
 registry = build_default_registry()
-assert registry.driver_ids[-5:-1] == ("four9", "montana2", "opticool", "tlpm")
-for driver_id in registry.driver_ids[-5:-1]:
+assert registry.driver_ids[12:-1] == ("four9", "montana2", "opticool", "attodry", "tlpm", "mc2000b",
+                                   "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers")
+for driver_id in registry.driver_ids[12:-1]:
     assert driver_id in registry.config_specs
 loaded = sorted(
     name for name in sys.modules
@@ -225,9 +225,9 @@ print("phase2 registry remained lazy")
         self.assertIsNone(montana_adapter.startup_connect())
         montana._on_connect_clicked.assert_called_once_with()
 
-        for driver_id in ("opticool", "tlpm"):
+        for driver_id in ("opticool", "attodry", "tlpm"):
             with self.subTest(driver_id=driver_id):
-                if driver_id == "opticool":
+                if driver_id in {"opticool", "attodry"}:
                     instance = SimpleNamespace(
                         logic=SimpleNamespace(is_connected=False),
                         _start_logic_job=mock.Mock(return_value=True),

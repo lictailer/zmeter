@@ -53,6 +53,14 @@ maintained release validation process.
 
 ## Remaining user validation
 
+The MS integration and companion installer change are documented in
+[ms_lab_integration.md](ms_lab_integration.md). A development branch is not a
+packaged release: no generated beta.4 manifest is copied into the branch and
+no release/tag is published by this contribution. The existing workflow must
+generate a fresh manifest bound to a reviewed release's actual commit/YAML.
+The optional attoDRY API prompt is separate from vendor OS-driver installation
+and can be skipped without preventing environment creation for other devices.
+
 The installer implementation exists, but disposable Windows smoke evidence
 remains environment-specific:
 

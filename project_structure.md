@@ -36,6 +36,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing under whole-request manager leases |
 | `core/device_log.py` | Shared in-memory device-log presentation and formatting |
+| `core/measurement_io.py`, `measurement_widgets.py`, `measurement_records.py` | Checked cross-device coordinator routing, channel selectors and unique atomic data/PNG bundles; no instrument ownership |
 | `core/shared_runtime/` | Lazy typed VISA/Kinesis ownership, leases, VISA discovery watchdog/retention, diagnostics, shutdown, fake injection, and local vendor manifests |
 | `core/shared_runtime/vendor/thorlabs_kinesis/` | Tracked, manifest-verified Kinesis 1.14.58.26351 runtime and setup instructions |
 | `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |
@@ -44,6 +45,9 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
 | `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
 | `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, global amplitude/DC ramping (10 V/s, 100 Hz), scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
+| `devices/auto_focus/`, `devices/auto_position/` | Routed focus search and fixed-reference map registration; separate worker/panels, settings contracts and optional/required run bundles |
+| `devices/arduino_steppers/` | Standalone three-motor serial controller and maintained Arduino sketch; routed Z is selected by autofocus |
+| `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
@@ -59,10 +63,11 @@ packaging workflow and the maintained contract in
 
 ## Device integration inventory
 
-Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `mfli`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `auto_focus`, `auto_position`, `autofocus_xuguo`, and `ANC300`. Presence in the tree does not assert readiness, compatibility, or hardware validation. Verify the current matrix in `documents/device_status.md` and the target package documentation before enabling it. The maintained replacement is the sole canonical `devices/sr830/` implementation. `BBD30X` is an optional, disabled-by-default Kinesis/pythonnet integration whose device README records known safety and lifecycle limitations pending remediation.
+Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `mfli`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `attodry`, `mc2000b`, `spectraphysicsx3_laser`, `arduino_steppers`, `auto_focus`, `auto_position`, and `ANC300`. Presence does not establish hardware readiness; see `documents/device_status.md` and device-local READMEs. Legacy autofocus XZ and superseded prototypes live only under `archive/legacy-autofocus/`. `BBD30X` retains its documented optional Kinesis lifecycle limitations.
 
 The Phase 2 startup-only registry entries are `four9`, `montana2`, `opticool`,
-and `tlpm`. They are lazy and selected only through the workbook; their device-local
+`attodry`, `tlpm`, `mc2000b`, `spectraphysicsx3_laser`, `auto_focus`,
+`auto_position` and `arduino_steppers`. They are lazy and selected only through the workbook; their device-local
 READMEs and `documents/device_status.md` record environment-specific accepted
 limitations.
 

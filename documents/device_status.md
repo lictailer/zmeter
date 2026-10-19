@@ -32,6 +32,12 @@ final result.
 | `montana2` | [montana2](../devices/montana2/README.md) | Asynchronous pending | Disabled | Intercepted registration behavior; no production REST fake; bench pending | REST timeouts, explicit signals/limits, proven shutdown, configurable remaining endpoint assumptions |
 | `opticool` | [opticool](../devices/opticool/README.md) | Asynchronous pending and retryable | Disabled | Intercepted vendor boundary; bench pending | Configurable DLL location, hard limits, bounded stability/termination, fake .NET backend |
 | `tlpm` | [tlpm](../devices/tlpm/readme.md) | Asynchronous pending and retryable | Disabled | Intercepted native boundary; bench pending | Explicit resource selection, bounded native calls, reviewed scan channels, production fake backend |
+| `attodry` | [attodry](../devices/attodry/README.md) | Asynchronous pending | Disabled | Injected vendor API and offscreen tests; bench pending | Verify exact controller, magnet limits, stable waits and shutdown with operator |
+| `mc2000b` | [mc2000b](../devices/mc2000b/README.md) | Asynchronous pending | Disabled | Fake serial/offscreen tests; basic operation reported by user | Commission native inner/outer modes, state and scan lifecycle on actual wheel |
+| `spectraphysicsx3_laser` | [InSight X3](../devices/spectraphysicsx3_laser/README.md) | Asynchronous pending | Disabled | Fake serial/offscreen tests; basic operation reported by user | Review open-shutter tuning, stabilization, interlocks and unchanged close state |
+| `arduino_steppers` | [arduino_steppers](../devices/arduino_steppers/README.md) | Asynchronous pending | Disabled | Fake protocol/offscreen and host-compiled sketch tests | Arduino IDE build/upload, pin wiring, travel/calibration and missed-step acceptance |
+| `auto_focus` | [auto_focus](../devices/auto_focus/README.md) | Explicit routed Z selection | Disabled | Synthetic source/actuator, persistence and offscreen tests | Setup-specific focus signal, backlash, native/distance units and limits |
+| `auto_position` | [auto_position](../devices/auto_position/README.md) | Explicit reference/router readiness | Disabled | Synthetic translations, persistence, nested scans and offscreen tests | Verify axis polarity, unique features and accepted shift/quality bounds on setup |
 
 The tracked startup configuration is [device_config.xlsx](../device_config.xlsx).
 For first commissioning, review a workbook with exactly one real driver enabled
@@ -41,9 +47,6 @@ and retain `connect_on_start=FALSE` until the connection is requested manually.
 
 | Package | Current availability | Blocking work before registration |
 | --- | --- | --- |
-| [autofocus_xuguo](../devices/autofocus_xuguo/README.md) | Source retained; not selectable by profile | Remove constructor COM discovery, move long work off the UI thread, stop active work before termination, define router/reference/busy contracts |
-| [auto_focus](../devices/auto_focus/README.md) | Prototype retained; not selectable by profile | Complete object wiring, remove direct NI coupling and embedded identifiers, define explicit resources and coherent lifecycle |
-| [auto_position](../devices/auto_position/README.md) | Prototype retained; not selectable by profile | Port to PyQt6, remove direct task construction, add logic boundary, explicit profile schema, limits, stop, and final cleanup |
 | [ANC300](../devices/ANC300/README.md) | Source fragment retained; not an importable ZMeter device | Build widget/logic/hardware package, explicit transport/axes/units/limits/channels, bounded lifecycle, and simulator |
 
 Selecting an unregistered ID must continue to produce a visible configuration

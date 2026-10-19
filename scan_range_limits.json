@@ -11,6 +11,30 @@
       "channel": "AO1",
       "low_limit": "-inf",
       "high_limit": "+inf"
+    },
+    {
+      "device_name": "attodry",
+      "channel": "T",
+      "low_limit": 1.8,
+      "high_limit": 300.0
+    },
+    {
+      "device_name": "attodry",
+      "channel": "T_stable",
+      "low_limit": 1.8,
+      "high_limit": 300.0
+    },
+    {
+      "device_name": "attodry",
+      "channel": "B",
+      "low_limit": -9.0,
+      "high_limit": 9.0
+    },
+    {
+      "device_name": "attodry",
+      "channel": "B_stable",
+      "low_limit": -9.0,
+      "high_limit": 9.0
     }
   ]
 }
