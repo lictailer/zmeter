@@ -1,5 +1,8 @@
 # Documentation Archive
 
+Retired autofocus XZ and superseded UI/position prototypes are indexed in
+[legacy-autofocus/README.md](legacy-autofocus/README.md), outside active devices.
+
 This directory contains material retained for project history and recovery. It is not the source of truth for current ZMeter behavior.
 
 ## 2026-08-21 reconstruction consolidation
