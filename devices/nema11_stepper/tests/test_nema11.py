@@ -1,7 +1,6 @@
 """Only fake serial/router objects, temporary files and offscreen widgets."""
-from dataclasses import asdict, replace
+from dataclasses import replace
 import json
-import math
 import os
 from pathlib import Path
 import threading
@@ -12,24 +11,23 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6 import QtCore, QtWidgets
-from devices.nema11_stepper.nema11_hardware import MotorLimits, MotorStopped, Nema11Hardware
+from devices.nema11_stepper.nema11_hardware import MotorStopped, Nema11Hardware
 from devices.nema11_stepper.nema11_logic import Nema11Logic
 from devices.nema11_stepper.nema11_main import Nema11Stepper
 
-ENCODER_DEG = 360 / 4000
 STEP_DEG = 360 / 6400
 
 
 class FakeSerial:
-    """Emulates the sketch: commanded microsteps, encoder-quantized readback."""
+    """Emulates the uploaded sketch with no encoder tap: the encoder always reads 0."""
 
     def __init__(self, **kwargs):
         self.commands, self.response, self.closed = [], b"", False
-        self.steps, self.shaft = 0, 0.0  # Board power-on state may be arbitrary.
-        self.ping, self.drop_move, self.stalled, self.on_move = "OK NEMA11 1", False, False, None
+        self.steps = 500  # Board power-on state may be arbitrary.
+        self.ping, self.drop_move, self.on_move, self.reply = "OK NEMA11 1", False, None, None
 
-    def encoder(self):
-        return math.floor(self.shaft / ENCODER_DEG) * ENCODER_DEG
+    def commanded(self):
+        return self.steps * STEP_DEG
 
     def reset_input_buffer(self): self.response = b""
     def flush(self): pass
@@ -45,17 +43,15 @@ class FakeSerial:
         if words == ["PING"]:
             response = self.ping
         elif words == ["ZERO"]:
-            self.steps, self.shaft = 0, 0.0
-            response = f"OK {self.encoder():.6f}"
+            self.steps = 0
+            response = "OK 0.000000"
         elif words == ["GET_POS"]:
-            response = f"POS {self.encoder():.6f}"
+            response = "POS 0.000000"
         elif words == ["GET_CMD"]:
-            response = f"CMD {self.steps * STEP_DEG:.6f}"
+            response = self.reply or f"CMD {self.commanded():.6f}"
         elif words[0] == "MOVE_ABS":
             self.steps = round(float(words[1]) / STEP_DEG)
-            if not self.stalled:
-                self.shaft = self.steps * STEP_DEG
-            response = f"OK {self.encoder():.6f}"
+            response = "OK 0.000000"
             if self.on_move: self.on_move()
             if self.drop_move:
                 return
@@ -71,12 +67,11 @@ def hardware():
 
 
 class Nema11Tests(unittest.TestCase):
-    def test_connect_zeroes_origin_and_refuses_old_sketch(self):
+    def test_connect_zeroes_origin_and_refuses_other_sketch(self):
         controller, port = hardware()
         self.assertEqual(port.commands, [])
-        port.steps, port.shaft = 500, 31.0
         controller.connect("FAKE", threading.Event())
-        self.assertEqual(port.commands, ["PING", "ZERO"])
+        self.assertEqual(port.commands, ["PING", "ZERO", "GET_CMD"])
         self.assertEqual(controller.read_angle(), 0)
         before = list(port.commands)
         controller.disconnect()
@@ -84,53 +79,48 @@ class Nema11Tests(unittest.TestCase):
         self.assertEqual(port.commands, before)
         controller, port = hardware()
         port.ping = "OK PONG"
-        with self.assertRaisesRegex(RuntimeError, "encoder sketch"):
+        with self.assertRaisesRegex(RuntimeError, "nema11_stepper sketch"):
             controller.connect("FAKE", threading.Event())
         self.assertEqual(port.commands, ["PING"])
         self.assertTrue(port.closed)
 
-    def test_z_angle_channel_returns_encoder_reading(self):
+    def test_z_angle_reports_commanded_position_without_encoder(self):
         controller, port = hardware()
         logic = Nema11Logic(controller)
         logic.connect("FAKE")
-        result = logic.set_z_angle(12.34)
-        self.assertAlmostEqual(result, 12.34, delta=MotorLimits().tolerance_deg)
-        self.assertEqual(result, port.encoder())
-        self.assertEqual(logic.get_z_angle(), port.encoder())
-        self.assertAlmostEqual(logic.set_z_angle(-7), -7, delta=MotorLimits().tolerance_deg)
+        self.assertAlmostEqual(logic.set_z_angle(45), 45)
+        self.assertEqual(port.commands[-2:], ["MOVE_ABS 45.000000", "GET_CMD"])
+        self.assertAlmostEqual(logic.get_z_angle(), 45)
+        self.assertAlmostEqual(logic.set_z_angle(12.34), round(12.34 / STEP_DEG) * STEP_DEG, places=5)
         self.assertEqual(sorted(n for n in dir(logic) if n.startswith(("set_", "get_"))),
                          ["get_z_angle", "set_z_angle"])
         self.assertTrue(logic.terminate_dev())
 
-    def test_limits_and_input_validation_fail_before_any_move(self):
+    def test_no_software_limits_only_finite_numbers(self):
         controller, port = hardware()
         controller.connect("FAKE", threading.Event())
-        for invalid in (50.1, -50.1, True, float("nan"), float("inf")):
+        self.assertAlmostEqual(controller.move_angle(-3600, threading.Event()), -3600)
+        self.assertEqual([c for c in port.commands if c.startswith("MOVE")], ["MOVE_ABS -3600.000000"])
+        for invalid in (True, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
                 controller.move_angle(invalid, threading.Event())
-        for bad in (dict(minimum_deg=1, maximum_deg=0), dict(segment_deg=0), dict(tolerance_deg=0)):
-            with self.assertRaises(ValueError):
-                controller.configure(replace(MotorLimits(), **bad), 1)
-        self.assertFalse(any(c.startswith("MOVE") for c in port.commands))
+        self.assertEqual(len([c for c in port.commands if c.startswith("MOVE")]), 1)
+        with self.assertRaises(ValueError):
+            controller.configure(0)
 
-    def test_moves_are_segmented_and_stop_waits_for_ack(self):
+    def test_stop_prevents_next_move(self):
         controller, port = hardware()
         stop = threading.Event()
         controller.connect("FAKE", stop)
-        controller.move_angle(25, stop)
-        self.assertEqual([c for c in port.commands if c.startswith("MOVE")],
-                         ["MOVE_ABS 10.000000", "MOVE_ABS 19.990000", "MOVE_ABS 25.000000"])
-        port.commands.clear()
-        port.on_move = stop.set
-        with self.assertRaises(MotorStopped): controller.move_angle(0, stop)
-        self.assertEqual([c for c in port.commands if c.startswith("MOVE")], ["MOVE_ABS 14.930000"])
+        stop.set()
+        with self.assertRaises(MotorStopped): controller.move_angle(10, stop)
+        self.assertFalse(any(c.startswith("MOVE") for c in port.commands))
 
-    def test_encoder_mismatch_marks_state_uncertain(self):
+    def test_malformed_reply_marks_state_uncertain(self):
         controller, port = hardware()
-        controller.configure(replace(MotorLimits(), settle_timeout_s=0.05), 1)
         controller.connect("FAKE", threading.Event())
-        port.stalled = True
-        with self.assertRaisesRegex(RuntimeError, "Encoder reads 0 deg, not 5 deg"):
+        port.reply = "POS 1"
+        with self.assertRaisesRegex(ValueError, "Unexpected"):
             controller.move_angle(5, threading.Event())
         before = list(port.commands)
         with self.assertRaisesRegex(RuntimeError, "uncertain"): controller.read_angle()
@@ -157,15 +147,15 @@ class QtTests(unittest.TestCase):
         panel = Nema11Stepper(controller)
         self.addCleanup(panel.close)
         panel.address_lineEdit.setText("COM7")
-        panel.limit_controls["maximum_deg"].setValue(40)
+        panel.timeout.setValue(30)
         saved = json.loads(json.dumps(panel.setup_dict()))
-        self.assertEqual(saved["limits"], asdict(replace(MotorLimits(), maximum_deg=40)))
-        panel.limit_controls["maximum_deg"].setValue(1)
+        self.assertEqual(saved, dict(schema_version=1, address="COM7", timeout_s=30))
+        panel.timeout.setValue(5)
         panel.load_setup(saved)
-        self.assertEqual(panel.limit_controls["maximum_deg"].value(), 40)
-        self.assertEqual(controller.limits.maximum_deg, 40)
+        self.assertEqual(panel.timeout.value(), 30)
+        self.assertEqual(controller.command_timeout_s, 30)
         with self.assertRaises(ValueError):
-            panel.load_setup(dict(saved, schema_version=2))
+            panel.load_setup(dict(saved, limits={}))
         self.assertEqual(port.commands, [])
         panel.logic.connect("COM7")
         panel.target.setValue(8)
@@ -225,7 +215,7 @@ class QtTests(unittest.TestCase):
                     return dict(ok=True, catalog={"nema11_stepper": {"readable": ["z_angle"], "writable": ["z_angle"]},
                                                   "nidaq": {"readable": ["AI0"], "writable": []}})
                 if request["target_device"] == "nidaq":
-                    value = 100 - (port.encoder() * um_per_deg - 2.3) ** 2
+                    value = 100 - (port.commanded() * um_per_deg - 2.3) ** 2
                 elif action == "write": value = getattr(motor, "set_" + channel)(request["value"])
                 else: value = getattr(motor, "get_" + channel)()
                 return dict(ok=True, value=value)

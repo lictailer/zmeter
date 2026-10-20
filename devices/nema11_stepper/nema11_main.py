@@ -1,17 +1,7 @@
 """Single-motor Z panel; hardware I/O runs in the device worker, never Qt UI slots."""
-from dataclasses import asdict, fields
 import json
 from PyQt6 import QtCore, QtWidgets
-from .nema11_hardware import MotorLimits
 from .nema11_logic import Nema11Logic
-
-LIMIT_LABELS = (
-    ("minimum_deg", "Minimum angle (deg)"),
-    ("maximum_deg", "Maximum angle (deg)"),
-    ("segment_deg", "Maximum degrees per stop-aware segment"),
-    ("tolerance_deg", "Encoder position tolerance (deg)"),
-    ("settle_timeout_s", "Encoder settle timeout (s)"),
-)
 
 
 class Nema11Stepper(QtWidgets.QWidget):
@@ -22,7 +12,7 @@ class Nema11Stepper(QtWidgets.QWidget):
         self.logic = Nema11Logic(hardware)
         self._busy = False
         self.setWindowTitle("NEMA 11 closed-loop Z stepper")
-        self.resize(560, 420)
+        self.resize(560, 260)
         outer = QtWidgets.QVBoxLayout(self)
         port = QtWidgets.QHBoxLayout()
         port.addWidget(QtWidgets.QLabel("COM port"))
@@ -38,7 +28,7 @@ class Nema11Stepper(QtWidgets.QWidget):
         self.motion = QtWidgets.QWidget()
         grid = QtWidgets.QGridLayout(self.motion)
         grid.addWidget(QtWidgets.QLabel("Absolute set target"), 0, 1)
-        grid.addWidget(QtWidgets.QLabel("Last encoder reading"), 0, 3)
+        grid.addWidget(QtWidgets.QLabel("Last read / acknowledged"), 0, 3)
         self.target = QtWidgets.QDoubleSpinBox()
         self.target.setDecimals(6)
         self.target.setRange(-1e8, 1e8)
@@ -49,35 +39,22 @@ class Nema11Stepper(QtWidgets.QWidget):
         for col, widget in enumerate((QtWidgets.QLabel("Z angle (deg)"), self.target,
                                       self.set_button, self.readback, self.get_button)):
             grid.addWidget(widget, 1, col)
-        grid.addWidget(QtWidgets.QLabel("Local motion limits (review for your mechanics)"), 2, 0, 1, 5)
-        self.limit_controls = {}
-        defaults = MotorLimits()
-        for row, (name, label) in enumerate(LIMIT_LABELS, 3):
-            widget = QtWidgets.QDoubleSpinBox()
-            widget.setDecimals(4)
-            widget.setRange(-1e8, 1e8)
-            widget.setValue(getattr(defaults, name))
-            self.limit_controls[name] = widget
-            grid.addWidget(QtWidgets.QLabel(label), row, 0, 1, 2)
-            grid.addWidget(widget, row, 2, 1, 3)
-        grid.addWidget(QtWidgets.QLabel("Command timeout (s)"), 8, 0, 1, 2)
+        grid.addWidget(QtWidgets.QLabel("Command timeout (s)"), 2, 0, 1, 2)
         self.timeout = QtWidgets.QDoubleSpinBox()
         self.timeout.setRange(0.1, 3600)
         self.timeout.setValue(self.logic.hardware.command_timeout_s)
-        grid.addWidget(self.timeout, 8, 2, 1, 3)
+        grid.addWidget(self.timeout, 2, 2, 1, 3)
         outer.addWidget(self.motion)
 
-        buttons = QtWidgets.QHBoxLayout()
-        self.apply_button = QtWidgets.QPushButton("Apply local limits")
-        self.stop_button = QtWidgets.QPushButton("Stop subsequent segments")
+        files = QtWidgets.QHBoxLayout()
         self.save_button, self.load_button = QtWidgets.QPushButton("Save setup"), QtWidgets.QPushButton("Load setup")
-        for button in (self.apply_button, self.stop_button, self.save_button, self.load_button):
-            buttons.addWidget(button)
-        outer.addLayout(buttons)
-        note = QtWidgets.QLabel("Positions are motor-shaft degrees read from the motor encoder. "
-                                "Connecting sets the current position to 0 deg. "
-                                "No home/zero/motion is sent on disconnect or exit. "
-                                "Apply local limits before using scan channels; panel commands also apply them.")
+        files.addWidget(self.save_button)
+        files.addWidget(self.load_button)
+        outer.addLayout(files)
+        note = QtWidgets.QLabel("Positions are commanded motor-shaft degrees; the closed-loop driver holds them. "
+                                "Connecting sets the current position to 0 deg. No software travel limits: "
+                                "every target is sent as entered. "
+                                "No home/zero/motion is sent on disconnect or exit.")
         note.setWordWrap(True)
         outer.addWidget(note)
         self.status_label = QtWidgets.QLabel("Disconnected")
@@ -88,8 +65,7 @@ class Nema11Stepper(QtWidgets.QWidget):
         self.disconnect_button.clicked.connect(lambda: self._submit(self.logic.disconnect))
         self.set_button.clicked.connect(lambda: self._submit(self.logic.move_angle, self.target.value()))
         self.get_button.clicked.connect(lambda: self._submit(self.logic.read_angle))
-        self.stop_button.clicked.connect(self.logic.force_stop)
-        self.apply_button.clicked.connect(self._apply_limits)
+        self.timeout.editingFinished.connect(self._apply_timeout)
         self.save_button.clicked.connect(self._save)
         self.load_button.clicked.connect(self._load)
         self.logic.sig_position.connect(lambda value: self.readback.setText(f"{value:.6g}"))
@@ -100,20 +76,16 @@ class Nema11Stepper(QtWidgets.QWidget):
         self.logic.sig_error.connect(lambda message: self.status_label.setText("Stepper error: " + message))
         self._update_controls()
 
-    def _limits(self):
-        return MotorLimits(**{name: widget.value() for name, widget in self.limit_controls.items()})
-
-    def _apply_limits(self):
+    def _apply_timeout(self):
         try:
-            self.logic.configure(self._limits(), self.timeout.value())
-            self.status_label.setText("Local limits applied; no hardware command sent")
+            self.logic.configure(self.timeout.value())
             return True
         except Exception as exc:
             self.status_label.setText(str(exc))
             return False
 
     def _submit(self, operation, *args):
-        return self._apply_limits() and self.logic.submit(operation, *args)
+        return self._apply_timeout() and self.logic.submit(operation, *args)
 
     def request_connect(self, address=None):
         if address is not None:
@@ -126,33 +98,25 @@ class Nema11Stepper(QtWidgets.QWidget):
 
     def _update_controls(self):
         connected = self.logic.connected
-        for widget in (self.motion, self.apply_button, self.save_button, self.load_button):
+        for widget in (self.motion, self.save_button, self.load_button):
             widget.setEnabled(not self._busy)
         self.address_lineEdit.setEnabled(not self._busy and not connected)
         self.connect_button.setEnabled(not self._busy and not connected)
         self.disconnect_button.setEnabled(not self._busy and connected)
-        self.stop_button.setEnabled(self._busy)
 
     def setup_dict(self):
-        limits = self._limits()
-        limits.validate()
-        return dict(schema_version=1, address=self.address_lineEdit.text(),
-                    timeout_s=self.timeout.value(), limits=asdict(limits))
+        return dict(schema_version=1, address=self.address_lineEdit.text(), timeout_s=self.timeout.value())
 
     def load_setup(self, data):
         if self.logic.is_busy() or self.logic.connected:
             raise RuntimeError("Disconnect and wait for idle before loading a controller setup")
-        if (set(data) != {"schema_version", "address", "timeout_s", "limits"}
+        if (set(data) != {"schema_version", "address", "timeout_s"}
                 or type(data["schema_version"]) is not int or data["schema_version"] != 1
-                or not isinstance(data["address"], str)
-                or set(data["limits"]) != {item.name for item in fields(MotorLimits)}):
+                or not isinstance(data["address"], str)):
             raise ValueError("Unsupported nema11_stepper setup schema")
-        limits = MotorLimits(**data["limits"])
-        self.logic.configure(limits, data["timeout_s"])
+        self.logic.configure(data["timeout_s"])
         self.address_lineEdit.setText(data["address"])
         self.timeout.setValue(float(data["timeout_s"]))
-        for name, value in asdict(limits).items():
-            self.limit_controls[name].setValue(value)
 
     def _save(self):
         try:

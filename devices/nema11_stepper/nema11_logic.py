@@ -34,14 +34,14 @@ class Nema11Logic(QtCore.QThread):
         self.sig_status.emit("Connected; current position set to 0 deg")
         return True
 
-    def configure(self, limits, timeout):
+    def configure(self, timeout):
         if self.is_busy():
-            raise RuntimeError("Wait for the active motor operation before changing limits")
-        self.hardware.configure(limits, timeout)
+            raise RuntimeError("Wait for the active motor operation before changing the timeout")
+        self.hardware.configure(timeout)
 
     def disconnect(self):
         if not self._operation.acquire(blocking=False):
-            raise RuntimeError("Wait for the current motor segment before disconnecting")
+            raise RuntimeError("Wait for the current move before disconnecting")
         try:
             self.hardware.disconnect()
         finally:
@@ -59,7 +59,7 @@ class Nema11Logic(QtCore.QThread):
             return operation(*args)
         finally:
             if self.hardware.position is not None:
-                self.sig_position.emit(self.hardware.position)  # Last encoder reading, no extra I/O.
+                self.sig_position.emit(self.hardware.position)  # Last acknowledged position, no extra I/O.
             self._operation.release()
             self.sig_busy.emit(False)
 
@@ -69,7 +69,7 @@ class Nema11Logic(QtCore.QThread):
     def read_angle(self):
         return self._call(self.hardware.read_angle)
 
-    # Absolute encoder-confirmed shaft angle in degrees; the only scan channel.
+    # Absolute commanded shaft angle in degrees; the only scan channel.
     def set_z_angle(self, value): return self.move_angle(value)
     def get_z_angle(self): return self.read_angle()
 
@@ -99,7 +99,7 @@ class Nema11Logic(QtCore.QThread):
 
     def force_stop(self):
         self.stop_event.set()
-        self.sig_status.emit("Stop requested; waiting for any in-flight segment acknowledgement")
+        self.sig_status.emit("Stop requested; an in-flight move finishes before stopping")
         return True
 
     def stop_scan(self):
