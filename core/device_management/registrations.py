@@ -707,6 +707,24 @@ def arduino_steppers_registration() -> DriverRegistration:
     )
 
 
+def nema11_stepper_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(driver_id="nema11_stepper", connection_fields={"address": _address_spec()}),
+        factory=_widget_factory("devices.nema11_stepper.nema11_main", "Nema11Stepper"),
+        configure_instance=lambda instance, connection: _prefill_text(instance, "address_lineEdit", connection),
+        connect=lambda instance, connection, _timeout_ms: instance.logic.connect(_connection_address(connection)),
+        startup_connect=lambda instance, connection, _timeout_ms: (
+            None if instance.request_connect(_connection_address(connection)) else False),
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.connected),
+        is_busy=lambda instance: bool(instance.logic.is_busy()),
+    )
+
+
 def phase2_device_registrations() -> tuple[DriverRegistration, ...]:
     """Return the reviewed Phase 2 startup-only registrations."""
 
@@ -721,4 +739,5 @@ def phase2_device_registrations() -> tuple[DriverRegistration, ...]:
         auto_focus_registration(),
         auto_position_registration(),
         arduino_steppers_registration(),
+        nema11_stepper_registration(),
     )
