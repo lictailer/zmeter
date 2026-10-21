@@ -64,7 +64,10 @@ class Nema11Logic(QtCore.QThread):
             self.sig_busy.emit(False)
 
     def move_angle(self, value):
-        return self._call(self.hardware.move_angle, value, self.stop_event)
+        self.sig_status.emit(f"Moving to {value:g} deg")
+        position = self._call(self.hardware.move_angle, value, self.stop_event, self.sig_position.emit)
+        self.sig_status.emit(f"At {position:g} deg")
+        return position
 
     def read_angle(self):
         return self._call(self.hardware.read_angle)
@@ -99,7 +102,7 @@ class Nema11Logic(QtCore.QThread):
 
     def force_stop(self):
         self.stop_event.set()
-        self.sig_status.emit("Stop requested; an in-flight move finishes before stopping")
+        self.sig_status.emit("Stop requested; the motor stops after the current 5 deg chunk")
         return True
 
     def stop_scan(self):

@@ -9,7 +9,11 @@ import threading
 import time
 
 PROTOCOL = "OK NEMA11 1"
-
+# The sketch blocks during MOVE_ABS, so long moves are sent in chunks sized from
+# the measured speed and the position is reported after each one (about 5 Hz).
+# Not a travel limit.
+PROGRESS_INTERVAL_S = 0.2
+FIRST_CHUNK_DEG = 1.0
 
 def number(value, name):
     if isinstance(value, bool):
@@ -117,16 +121,31 @@ class Nema11Hardware:
                 raise
             return self.position
 
-    def move_angle(self, target, stop):
+    def move_angle(self, target, stop, progress=None):
         with self._lock:
             target = number(target, "Target angle")
             checkpoint(stop)
-            tokens = self._command(f"MOVE_ABS {target:.6f}")
-            if not tokens or tokens[0] != "OK":
-                self._uncertain = True
-                raise RuntimeError(f"Unexpected Arduino reply: {tokens!r}")
-            # The OK value is the sketch's encoder reading; use the commanded position.
-            return self.read_angle()
+            current = self.position if self.position is not None else self.read_angle()
+            chunk = FIRST_CHUNK_DEG
+            while True:
+                checkpoint(stop)
+                remaining = target - current
+                waypoint = target if abs(remaining) <= chunk else current + math.copysign(chunk, remaining)
+                started = time.monotonic()
+                tokens = self._command(f"MOVE_ABS {waypoint:.6f}")
+                if not tokens or tokens[0] != "OK":
+                    self._uncertain = True
+                    raise RuntimeError(f"Unexpected Arduino reply: {tokens!r}")
+                # The OK value is the sketch's encoder reading; use the commanded position.
+                moved = abs(self.read_angle() - current)
+                current = self.position
+                if progress is not None:
+                    progress(current)
+                if waypoint == target:
+                    return current
+                elapsed = time.monotonic() - started
+                if moved > 0 and elapsed > 0:
+                    chunk = min(max(moved * PROGRESS_INTERVAL_S / elapsed, FIRST_CHUNK_DEG), 360.0)
 
     def disconnect(self):
         with self._lock:

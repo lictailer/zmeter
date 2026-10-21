@@ -47,11 +47,14 @@ class Nema11Stepper(QtWidgets.QWidget):
         outer.addWidget(self.motion)
 
         files = QtWidgets.QHBoxLayout()
+        self.stop_button = QtWidgets.QPushButton("Stop")
         self.save_button, self.load_button = QtWidgets.QPushButton("Save setup"), QtWidgets.QPushButton("Load setup")
+        files.addWidget(self.stop_button)
         files.addWidget(self.save_button)
         files.addWidget(self.load_button)
         outer.addLayout(files)
         note = QtWidgets.QLabel("Positions are commanded motor-shaft degrees; the closed-loop driver holds them. "
+                                "The reading updates about 5 times per second during a move; Stop halts within about 0.2 s. "
                                 "Connecting sets the current position to 0 deg. No software travel limits: "
                                 "every target is sent as entered. "
                                 "No home/zero/motion is sent on disconnect or exit.")
@@ -65,6 +68,7 @@ class Nema11Stepper(QtWidgets.QWidget):
         self.disconnect_button.clicked.connect(lambda: self._submit(self.logic.disconnect))
         self.set_button.clicked.connect(lambda: self._submit(self.logic.move_angle, self.target.value()))
         self.get_button.clicked.connect(lambda: self._submit(self.logic.read_angle))
+        self.stop_button.clicked.connect(self.logic.force_stop)
         self.timeout.editingFinished.connect(self._apply_timeout)
         self.save_button.clicked.connect(self._save)
         self.load_button.clicked.connect(self._load)
@@ -103,6 +107,7 @@ class Nema11Stepper(QtWidgets.QWidget):
         self.address_lineEdit.setEnabled(not self._busy and not connected)
         self.connect_button.setEnabled(not self._busy and not connected)
         self.disconnect_button.setEnabled(not self._busy and connected)
+        self.stop_button.setEnabled(self._busy)
 
     def setup_dict(self):
         return dict(schema_version=1, address=self.address_lineEdit.text(), timeout_s=self.timeout.value())

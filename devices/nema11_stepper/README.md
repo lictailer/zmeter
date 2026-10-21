@@ -22,8 +22,11 @@ pins and command names are unchanged.
 | --- | --- |
 | `z_angle` | Absolute commanded motor-shaft angle in degrees |
 
-`set_z_angle(value)` sends `MOVE_ABS`, waits for the move to finish and returns the
-commanded angle (`GET_CMD`). `get_z_angle()` returns the commanded angle. The CL42T
+`set_z_angle(value)` moves in chunks (`MOVE_ABS` then `GET_CMD` per chunk) and
+returns the final commanded angle. The first chunk is 1 deg; later chunks are sized
+from the measured speed so each takes about 0.2 s, giving a position update at about
+5 Hz whatever the microstep or `STEP_DELAY_US` setting (`PROGRESS_INTERVAL_S` in
+`nema11_hardware.py`). Chunks are not a travel limit. `get_z_angle()` returns the commanded angle. The CL42T
 closes the loop on the motor encoder, so the commanded angle is the shaft angle
 unless the driver alarms. zmeter cannot detect a stall or alarm itself: watch the
 driver's alarm LED. Values are rounded to whole microsteps (360/6400 = 0.05625 deg
@@ -35,22 +38,23 @@ opening the port reset the board. Disconnect/exit only close the port: no home,
 zero or motion command is sent.
 
 **There are no software travel limits in this device.** Every finite target is sent
-as entered, in one move. Panel moves are not limited at all; scan and autofocus
+as entered. Panel moves are not limited at all; scan and autofocus
 writes still pass ZMeter's global output limits and, for focus runs, the autofocus
 Z limits. Make sure those match your mechanics.
 
 ## Panel
 
 - COM port, Connect, Disconnect. The workbook address prefills the port.
-- Z angle: absolute target, Set, Get and the last acknowledged angle. Get never
-  overwrites the target.
+- Z angle: absolute target, Set, Get and the live commanded angle, updated about
+  5 times per second while moving. Get never overwrites the target.
 - Command timeout (default 120 s), long enough for the longest move:
   at about 9.4 RPM one motor revolution takes about 6.4 s.
 - Save/Load setup: a schema-version-1 JSON with the port and timeout. Loading
   requires the device to be idle and disconnected, and touches no hardware.
 
-A move is one command, so Stop takes effect only before the next command. A
-timeout or malformed reply marks the connection uncertain: no further command is
+**Stop** halts the motor after the current chunk (within about 0.2 s); the reading
+shows where it stopped. Each chunk adds a short pause (about 20 ms in the sketch), so long moves are
+slightly slower than one continuous move. A timeout or malformed reply marks the connection uncertain: no further command is
 sent until you disconnect, inspect the motor and reconnect.
 
 ## Wiring
@@ -160,7 +164,7 @@ python -B -m unittest discover -s devices/nema11_stepper/tests -p 'test_*.py' -v
 ```
 
 Fake-serial tests cover the handshake, connect-time zero, commanded readback with
-no encoder tap, no software limits, Stop, malformed reply, timeout,
+no encoder tap, no software limits, live position during chunked moves, Stop, malformed reply, timeout,
 worker/teardown, setup round trip, registration construction and an autofocus run routed through
 `z_angle`. A host C++ compiler builds the actual sketch against a fake closed-loop
 motor, encoder and serial port. That is not an Arduino build or a physical test.

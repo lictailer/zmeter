@@ -25,6 +25,7 @@ class FakeSerial:
         self.commands, self.response, self.closed = [], b"", False
         self.steps = 500  # Board power-on state may be arbitrary.
         self.ping, self.drop_move, self.on_move, self.reply = "OK NEMA11 1", False, None, None
+        self.seconds_per_deg = 0.0
 
     def commanded(self):
         return self.steps * STEP_DEG
@@ -50,7 +51,8 @@ class FakeSerial:
         elif words == ["GET_CMD"]:
             response = self.reply or f"CMD {self.commanded():.6f}"
         elif words[0] == "MOVE_ABS":
-            self.steps = round(float(words[1]) / STEP_DEG)
+            before, self.steps = self.steps, round(float(words[1]) / STEP_DEG)
+            time.sleep(abs(self.steps - before) * STEP_DEG * self.seconds_per_deg)
             response = "OK 0.000000"
             if self.on_move: self.on_move()
             if self.drop_move:
@@ -100,13 +102,38 @@ class Nema11Tests(unittest.TestCase):
         controller, port = hardware()
         controller.connect("FAKE", threading.Event())
         self.assertAlmostEqual(controller.move_angle(-3600, threading.Event()), -3600)
-        self.assertEqual([c for c in port.commands if c.startswith("MOVE")], ["MOVE_ABS -3600.000000"])
+        self.assertEqual(len([c for c in port.commands if c.startswith("MOVE")]), 11)  # 1 deg, then 360 deg chunks
+        moves = len(port.commands)
         for invalid in (True, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
                 controller.move_angle(invalid, threading.Event())
-        self.assertEqual(len([c for c in port.commands if c.startswith("MOVE")]), 1)
+        self.assertEqual(len(port.commands), moves)
         with self.assertRaises(ValueError):
             controller.configure(0)
+
+    def test_long_move_reports_position_about_every_200_ms_and_stops_between_chunks(self):
+        controller, port = hardware()
+        port.seconds_per_deg = 0.002  # 500 deg/s, so 0.2 s chunks are about 100 deg.
+        logic = Nema11Logic(controller)
+        logic.connect("FAKE")
+        seen = []
+        logic.sig_position.connect(lambda value: seen.append((time.monotonic(), value)))
+        self.assertAlmostEqual(logic.set_z_angle(1000), 1000, delta=STEP_DEG / 2)
+        moves = [float(c.split()[1]) for c in port.commands if c.startswith("MOVE")]
+        self.assertAlmostEqual(moves[0], 1)
+        self.assertTrue(8 <= len(moves) <= 14, moves)
+        self.assertTrue(all(70 < b - a < 140 for a, b in zip(moves[1:], moves[2:-1])), moves)
+        positions = [value for _, value in seen]
+        self.assertEqual(positions, sorted(positions))
+        gaps = [b - a for (a, _), (b, _) in zip(seen[1:], seen[2:-2])]
+        self.assertTrue(all(0.12 < gap < 0.3 for gap in gaps), gaps)
+        port.seconds_per_deg = 0.0
+        port.commands.clear()
+        port.on_move = logic.stop_event.set
+        with self.assertRaises(MotorStopped): logic.set_z_angle(0)
+        self.assertEqual(len([c for c in port.commands if c.startswith("MOVE")]), 1)
+        self.assertAlmostEqual(logic.get_z_angle(), 999, delta=STEP_DEG / 2)
+        self.assertTrue(logic.terminate_dev())
 
     def test_stop_prevents_next_move(self):
         controller, port = hardware()
