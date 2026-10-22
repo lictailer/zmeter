@@ -7,7 +7,7 @@ from dataclasses import asdict
 import numpy as np
 
 from PyQt6 import QtCore
-from core.measurement_records import RunRecord
+from core.measurement_records import RunRecord, new_run_key
 
 from .autofocus_engine import AutofocusSettings, FocusStopped, finite, run_focus
 from .autofocus_hardware import RouterIO, SOURCE_FACTORIES, Z_FACTORIES
@@ -36,6 +36,7 @@ class AutofocusLogic(QtCore.QThread):
         self.last_outcome = "idle"
         self.last_error = None
         self.last_output_directory = None
+        self.last_run_key = None
         self.stop_event = threading.Event()
         self._operation_lock = threading.Lock()
         self._job_lock = threading.Lock()
@@ -114,6 +115,10 @@ class AutofocusLogic(QtCore.QThread):
             raise RuntimeError("No focus measurement has been acquired")
         return self.history[-1].score
 
+    def get_run_key(self):
+        """Latest autofocus attempt's fixed local timestamp; NaN before any run."""
+        return self.last_run_key if self.last_run_key is not None else float("nan")
+
     def set_focus(self, trigger):
         """Every finite numeric trigger runs autofocus; its magnitude is ignored."""
         finite(trigger, "Autofocus trigger")
@@ -129,8 +134,9 @@ class AutofocusLogic(QtCore.QThread):
             self.result = None
             self.history = []
             self.last_output_directory = None
+            self.last_run_key = new_run_key()
             if self.run_settings.output.enabled:
-                record = RunRecord(self.run_settings.output.directory, "autofocus")
+                record = RunRecord(self.run_settings.output.directory, "autofocus", run_key=self.last_run_key)
                 self.last_output_directory = str(record.path)
                 record.json("run.json", {"status": "running", "settings": self.run_settings.to_dict()})
             self.sig_sample.emit(None)
@@ -184,7 +190,7 @@ class AutofocusLogic(QtCore.QThread):
 
     def _save_run_record(self, record):
         record.json("run.json", {
-            "schema_version": 2, "settings": self.run_settings.to_dict(),
+            "schema_version": 2, "run_key": self.last_run_key, "settings": self.run_settings.to_dict(),
             "outcome": self.last_outcome, "error": self.last_error,
             "result": self.result.to_dict() if self.result else None,
             "samples": [asdict(sample) for sample in self.history],

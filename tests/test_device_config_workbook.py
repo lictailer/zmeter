@@ -58,6 +58,7 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
         self.assertEqual(configurations["spectraphysicsx3_laser"].scan_channels.setters, ("wavelenght_stable", "shutter"))
         for driver in ("auto_focus", "auto_position"):
             self.assertIn(configurations[driver].connection["address"], (None, ""))
+            self.assertIn("run_key", configurations[driver].scan_channels.getters)
 
     def test_guide_covers_every_registry_driver_and_alias(self):
         registry = build_default_registry()

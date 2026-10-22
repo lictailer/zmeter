@@ -36,7 +36,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing under whole-request manager leases |
 | `core/device_log.py` | Shared in-memory device-log presentation and formatting |
-| `core/measurement_io.py`, `measurement_widgets.py`, `measurement_records.py` | Checked cross-device coordinator routing, channel selectors and unique atomic data/PNG bundles; no instrument ownership |
+| `core/measurement_io.py`, `measurement_widgets.py`, `measurement_records.py` | Checked cross-device coordinator routing, channel selectors and unique atomic data/PNG bundles with numeric local-time run keys; no instrument ownership |
 | `core/shared_runtime/` | Lazy typed VISA/Kinesis ownership, leases, VISA discovery watchdog/retention, diagnostics, shutdown, fake injection, and local vendor manifests |
 | `core/shared_runtime/vendor/thorlabs_kinesis/` | Tracked, manifest-verified Kinesis 1.14.58.26351 runtime and setup instructions |
 | `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |

@@ -8,7 +8,7 @@ import numpy as np
 from PyQt6 import QtCore
 
 from core.measurement_io import RouterIO, finite
-from core.measurement_records import RunRecord
+from core.measurement_records import RunRecord, new_run_key
 from .position_engine import PositionSettings, PositionStopped, ReferenceMap, checkpoint, register_maps
 from .position_hardware import MapReader
 
@@ -30,6 +30,7 @@ class AutoPositionLogic(QtCore.QThread):
         self.reference, self.result, self.reader = None, None, None
         self.applied = False
         self.last_outcome, self.last_error, self.last_output_directory = "idle", None, None
+        self.last_run_key = None
         self.stop_event = threading.Event()
         self._operation_lock, self._job_lock = threading.Lock(), threading.Lock()
         self._job = None
@@ -101,9 +102,12 @@ class AutoPositionLogic(QtCore.QThread):
             self.result, self.reader, self.applied = None, None, False
             self.last_outcome, self.last_error = "running", None
             self.last_output_directory = None
+            if kind == "position":
+                self.last_run_key = new_run_key()
             # Reserve/write before acquisition: invalid or unwritable paths must
             # fail before any scan output is changed.
-            record = RunRecord(self.settings.directory, "reference" if kind == "reference" else "auto-position")
+            record = RunRecord(self.settings.directory, "reference" if kind == "reference" else "auto-position",
+                               run_key=self.last_run_key if kind == "position" else None)
             self.last_output_directory = str(record.path)
             self.reader = self.reader_factory(self.settings.map, RouterIO(self.router, self.device_label))
             self.reader.prepare(self.stop_event)
@@ -172,6 +176,10 @@ class AutoPositionLogic(QtCore.QThread):
     def get_shift_x(self): return self._value("shift_x")
     def get_shift_y(self): return self._value("shift_y")
     def get_correlation(self): return self._value("correlation")
+
+    def get_run_key(self):
+        """Latest positioning attempt's key, not the reference acquisition's key."""
+        return self.last_run_key if self.last_run_key is not None else float("nan")
 
     def load_reference(self, path):
         with self._operation_lock:

@@ -559,7 +559,8 @@ class AutofocusMain(QtWidgets.QWidget):
             path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export autofocus result", "", "JSON (*.json)")
             if path:
                 self.write_json(path, {
-                    "schema_version": 2, "settings": self.logic.run_settings.to_dict(),
+                    "schema_version": 2, "run_key": self.logic.last_run_key,
+                    "settings": self.logic.run_settings.to_dict(),
                     "outcome": self.logic.last_outcome, "error": self.logic.last_error,
                     "result": self.logic.result.to_dict() if self.logic.result else None,
                     "samples": [asdict(s) for s in self.logic.history],

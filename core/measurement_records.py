@@ -16,14 +16,20 @@ import numpy as np
 _render_lock = threading.RLock()
 
 
+def new_run_key():
+    """Numeric local start-time label, exactly representable by scan float arrays."""
+    return int(datetime.now().strftime("%Y%m%d%H%M%S"))
+
+
 class RunRecord:
-    def __init__(self, directory, kind):
+    def __init__(self, directory, kind, *, run_key=None):
         if not str(directory).strip():
             raise ValueError("Choose a results directory")
         root = Path(directory).expanduser()
         root.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-        self.path = root / f"{kind}-{stamp}-{uuid.uuid4().hex[:8]}"
+        self.run_key = new_run_key() if run_key is None else run_key
+        self.path = root / f"{kind}-{self.run_key}-{stamp}-{uuid.uuid4().hex[:8]}"
         self.path.mkdir(exist_ok=False)
         self.json("run.json", {"status": "started", "kind": kind, "created_utc": stamp})
 
@@ -42,6 +48,8 @@ class RunRecord:
             temporary.unlink(missing_ok=True)
 
     def json(self, name, payload):
+        if name == "run.json":
+            payload = {**payload, "run_key": self.run_key}
         self.bytes(name, json.dumps(payload, indent=2, allow_nan=False).encode("utf-8"))
 
     def array(self, name, data):

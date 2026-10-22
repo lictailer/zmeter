@@ -143,7 +143,9 @@ class PositionWorkflowTests(unittest.TestCase):
     def test_reference_then_position_reuses_fixed_reference_without_double_shift(self):
         with tempfile.TemporaryDirectory() as directory:
             logic, router = self.make_logic(directory)
+            self.assertTrue(np.isnan(logic.get_run_key()))
             self.assertEqual(logic.acquire_reference(), 1)
+            self.assertTrue(np.isnan(logic.get_run_key()))
             reference, original = logic.reference, logic.reference.image.copy()
             self.assertEqual((router.values[logic.settings.map.x], router.values[logic.settings.map.y]), (0, 0))
             reference_file = Path(logic.last_output_directory) / "reference.json"
@@ -162,6 +164,9 @@ class PositionWorkflowTests(unittest.TestCase):
                 self.assertTrue((output / "comparison.png").is_file())
                 data = json.loads((output / "run.json").read_text())
                 self.assertEqual(data["status"], "complete")
+                self.assertEqual(data["run_key"], logic.get_run_key())
+                self.assertIn(f"auto-position-{data['run_key']}-", output.name)
+                self.assertEqual(int(float(logic.get_run_key())), logic.get_run_key())
                 self.assertTrue(data["point_commands_completed"])
                 self.assertEqual(data["completed_pixels"], 2601)
             self.assertNotEqual(*paths)
@@ -204,6 +209,7 @@ class PositionWorkflowTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): logic.get_x()
             data = json.loads((Path(logic.last_output_directory) / "run.json").read_text())
             self.assertEqual(data["status"], "error")
+            self.assertEqual(data["run_key"], logic.get_run_key())
             self.assertFalse(data["point_commands_completed"])
 
     def test_stop_keeps_partial_map_and_last_commands_without_return(self):
@@ -439,9 +445,11 @@ class PositionWorkflowTests(unittest.TestCase):
                     else:
                         owner.assertAlmostEqual(position.get_x(), -0.006, delta=0.0002)
                         events.append("measurement")
-                def read_info(self, channel): return 123.0
-            def level(channel, values):
-                return {"setters": {"setter0": {"channel": channel}}, "getters": [],
+                def read_info(self, channel):
+                    return {"auto_focus_run_key": focus.get_run_key,
+                            "auto_position_run_key": position.get_run_key}[channel]()
+            def level(channel, values, getters=()):
+                return {"setters": {"setter0": {"channel": channel}}, "getters": list(getters),
                         "setting_array": np.array([values]), "settle_time": 0, "start_wait_time": 0,
                         "manual_set_before": [], "manual_set_after": []}
             scan = ScanLogic(main_window=Window())
@@ -449,8 +457,13 @@ class PositionWorkflowTests(unittest.TestCase):
                 "level3": level("temperature_stable", [100, 110]),
                 "level2": level("auto_focus_focus", [1]),
                 "level1": level("auto_position_position", [1]),
-                "level0": level("measurement_bias", [1, 2])}})
-            scan.looping(scan.max_level)
+                "level0": level("measurement_bias", [1, 2], ["auto_focus_run_key", "auto_position_run_key"])}})
+            with mock.patch("devices.auto_focus.autofocus_logic.new_run_key", side_effect=[20261022181250, 20261022181300]), \
+                 mock.patch("devices.auto_position.position_logic.new_run_key", side_effect=[20261022181252, 20261022181302]):
+                scan.looping(scan.max_level)
+            np.testing.assert_array_equal(scan.level_data_arrays[0].reshape(2, -1), [
+                [20261022181250, 20261022181250, 20261022181300, 20261022181300],
+                [20261022181252, 20261022181252, 20261022181302, 20261022181302]])
             self.assertEqual(events, ["temperature", "focus_start", "focus_done", "position_start", "position_done", "measurement", "measurement"] * 2)
             self.assertTrue(focus.terminate_dev())
 
@@ -466,7 +479,7 @@ class PositionWorkflowTests(unittest.TestCase):
         self.assertFalse(config.connect_on_start)
         self.assertEqual(config.connection["address"], "")
         self.assertEqual(config.scan_channels.setters, ("position",))
-        self.assertEqual(config.scan_channels.getters, ("x", "y", "shift_x", "shift_y", "correlation"))
+        self.assertEqual(config.scan_channels.getters, ("x", "y", "shift_x", "shift_y", "correlation", "run_key"))
         config = replace(config, enabled=True)  # No physical devices enter this fixture.
         with mock.patch.object(RouterIO, "write", side_effect=AssertionError("real output forbidden")) as write:
             manager = DeviceManager(registry, SimpleNamespace())

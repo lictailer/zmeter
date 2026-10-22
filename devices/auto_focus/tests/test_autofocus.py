@@ -690,25 +690,46 @@ class AutofocusQtTests(unittest.TestCase):
             with mock.patch.object(QtWidgets.QFileDialog, "getSaveFileName", return_value=(str(path), "")):
                 panel._export_result()
             data = json.loads(path.read_text())
+            self.assertEqual(data["run_key"], logic.get_run_key())
             self.assertEqual(AutofocusSettings.from_dict(data["settings"]), logic.run_settings)
             self.assertEqual(data["result"]["best_position"], 2.5)
             self.assertAlmostEqual(data["result"]["selected_position"], 2.3, places=5)
             self.assertAlmostEqual(data["result"]["gaussian_fit"]["center"], 2.3, places=5)
         self.assertTrue(logic.terminate_dev())
 
+    def test_run_key_is_fixed_until_next_trigger_without_enabling_saving(self):
+        from unittest import mock
+        logic, axis = self.make_logic()
+        logic.apply_settings(quick_settings())
+        logic.connect_z()
+        with mock.patch("devices.auto_focus.autofocus_logic.new_run_key",
+                        side_effect=[20261022181250, 20261022181300]) as make_key:
+            for key in (20261022181250, 20261022181300):
+                logic.set_focus(1)
+                for _ in range(3):
+                    self.assertEqual(logic.get_run_key(), key)
+                self.assertIsNone(logic.last_output_directory)
+            self.assertEqual(make_key.call_count, 2)
+        self.assertTrue(logic.terminate_dev())
+
     def test_optional_saving_success_disabled_partial_and_legacy_settings(self):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             logic, axis = self.make_logic()
+            self.assertTrue(np.isnan(logic.get_run_key()))
             logic.apply_settings(replace(quick_settings(), output=OutputSettings(False, directory)))
             logic.connect_z()
             logic.set_focus(1)
+            self.assertRegex(str(logic.get_run_key()), r"^\d{14}$")
             self.assertEqual(list(Path(directory).iterdir()), [])
             logic.apply_settings(replace(logic.settings, output=OutputSettings(True, directory)))
             logic.set_focus(1)
             path = Path(logic.last_output_directory)
             saved = json.loads((path / "run.json").read_text())
             self.assertEqual(saved["outcome"], "complete")
+            self.assertEqual(saved["run_key"], logic.get_run_key())
+            self.assertIn(f"autofocus-{saved['run_key']}-", path.name)
+            self.assertEqual(int(float(logic.get_run_key())), logic.get_run_key())
             self.assertTrue((path / "focus_curve.png").is_file())
             self.assertEqual(AutofocusSettings.from_dict(saved["settings"]), logic.run_settings)
             logic.sig_sample.connect(lambda item: logic.force_stop() if item is not None else None)
@@ -717,6 +738,8 @@ class AutofocusQtTests(unittest.TestCase):
             self.assertNotEqual(partial, path)
             saved = json.loads((partial / "run.json").read_text())
             self.assertEqual(saved["outcome"], "stopped")
+            self.assertEqual(saved["run_key"], logic.get_run_key())
+            self.assertIn(f"autofocus-{saved['run_key']}-", partial.name)
             self.assertEqual(len(saved["samples"]), 1)
             self.assertTrue((partial / "focus_curve.png").is_file())
             legacy = quick_settings().to_dict()
@@ -944,7 +967,7 @@ class AutofocusQtTests(unittest.TestCase):
         self.assertFalse(config.connect_on_start)
         self.assertEqual(config.connection["address"], "")
         self.assertEqual(config.scan_channels.setters, ("focus",))
-        self.assertEqual(config.scan_channels.getters, ("z", "focus_score"))
+        self.assertEqual(config.scan_channels.getters, ("z", "focus_score", "run_key"))
         config = replace(config, enabled=True)  # Enable only the isolated test coordinator.
         with mock.patch("devices.auto_focus.autofocus_hardware.RoutedZAxis.connect", side_effect=AssertionError("real hardware")) as connect:
             manager = DeviceManager(registry, SimpleNamespace())

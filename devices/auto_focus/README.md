@@ -196,6 +196,25 @@ the measured best score. The `focus` setter's numeric return is the selected Z
 (fitted center after a successful Gaussian fit, measured best otherwise); `z`
 reports the actual current coordinate, including actuator quantization.
 
+### Relating focus runs to measurement data
+
+Add the read channel **`auto_focus_run_key`** to the innermost measurement level
+(alongside `auto_position_run_key` when using both coordinators). It returns the
+latest autofocus attempt's start time as a numeric **local-computer-time**
+`YYYYMMDDhhmmss`, for example `20261022181250`. Repeated reads do not create a
+new key or run autofocus. Before the first attempt it returns NaN. An attempt
+that stops/fails keeps its key; a key alone does not mean focus succeeded.
+
+With automatic saving enabled, search the results directory for
+`autofocus-20261022181250-*`. The same integer is stored as `run_key` in its
+`run.json` and manual result export. Enable **Saving** if you need the linked
+data/visuals: a key is still generated when saving is off, but no folder is made.
+Keys are local to each operation, not a shared outer-scan ID. An inner sweep
+records the same key until the next autofocus attempt. The 14-digit integer is
+exact in the scan's float64 arrays; format it without decimals/scientific notation
+when searching. Runs starting in the same local second can share this time label;
+the existing UTC microsecond/UUID suffix still keeps their folders distinct.
+
 ## Settings, migration and developer guide
 
 ### Optional automatic data and visual saving
@@ -217,6 +236,9 @@ The added `output` settings group is part of schema 2. Older schema-2 setups
 without it load with automatic saving disabled. Explicit manual setup/result
 exports remain available independently. Saving uses `core/measurement_records.py`
 with a serialized, headless Matplotlib renderer, never Qt widget access in workers.
+`run_key` is additive result metadata, not a new settings/schema requirement.
+Existing settings and saved files need no migration; older runs have no key and
+are not renamed or rewritten.
 
 Explicit Save/Load setup uses schema-version-2 JSON with channels, native units,
 calibration, acquisition/search and limits. Result/partial export also uses

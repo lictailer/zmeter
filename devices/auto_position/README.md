@@ -127,6 +127,26 @@ engine's existing skip semantics. Getters `x`, `y`, `shift_x`, `shift_y` and
 **commanded coordinates**, not independent actuator position feedback. Underlying
 device setters must implement their required move completion/settling behavior.
 
+### Relating positioning runs to measurement data
+
+Add **`auto_position_run_key`** and, if used, `auto_focus_run_key` as getters at
+the innermost measurement level. Each measurement then records which positioning
+and focus attempts preceded it, without changing scan order or scan JSON format.
+`run_key` returns the latest positioning attempt's local-computer start time as
+a numeric `YYYYMMDDhhmmss`, for example `20261022181250`. It stays fixed until the
+next positioning attempt and returns NaN before the first. Acquiring/loading a
+reference or saving an edited point does not replace the positioning key.
+
+Find the associated folder using `auto-position-20261022181250-*`; its `run.json`
+contains the same integer. Reference bundles also contain their own time label,
+but these are not what the positioning getter reports. Failed/stopped attempts
+retain their keys/data when a bundle could be created. Preflight/path failures
+may prevent a folder from being created. A key is not proof of a successful move.
+Keys use seconds, so same-second runs can share a label; the UTC microsecond/UUID
+suffix keeps folders distinct. The key is exact in float64 scan data; display it
+with zero decimals when searching. Existing folders are not renamed, settings and
+reference formats are unchanged, and `run_key` is optional additive run metadata.
+
 ## Persistence, limits and lifecycle
 
 Each reference bundle contains `reference.json` (schema 1, raw finite map,

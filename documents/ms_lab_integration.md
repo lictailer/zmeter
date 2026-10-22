@@ -64,6 +64,14 @@ Autofocus has its own schema-2 setup/result migration contract; auto-position
 uses schema 1. Their run bundles are separate from ordinary scan JSON. Laser
 hold-to-operate controls and intentional preservation of state on close remain.
 
+The follow-up `auto_focus_run_key` and `auto_position_run_key` getters label each
+attempt with its local start time (`YYYYMMDDhhmmss`). Add both to the innermost
+measurement getters to link measurement rows with their saved coordinator bundles.
+The numeric key is included in folder names and as additive `run.json` metadata;
+existing files/settings and ordinary scan JSON are unchanged. Autofocus saving
+remains opt-in. See the device READMEs for initial/failed-attempt behavior and
+same-second timestamp limitations.
+
 ## Dependencies and installation
 
 The existing Windows YAML already contains PySerial, scikit-image, SciPy and
