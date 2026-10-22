@@ -22,17 +22,17 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
         self.assertEqual(tuple(c.value for c in self.devices[1]), DEVICE_HEADERS)
         self.assertEqual(self.devices.max_row, 201)
         self.assertEqual(list(self.devices.tables), ["FlatDeviceConfigTable"])
-        self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].ref, "A1:H30")
+        self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].ref, "A1:H31")
         self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].tableStyleInfo.name, "TableStyleLight1")
 
-    def test_existing_rows_keep_upstream_values_not_lab_autoconnect_settings(self):
+    def test_existing_rows_keep_current_profile_without_autoconnect(self):
         expected_ids = ["sr860_0", "sr860_1", "sr860_2", "sr830_0", "sr830_1", "sr830_2", "mfli_0",
                         "keithley24xx_0", "keithley24xx_1", "nidaq", "ni6423", "k10cr1_0", "k10cr1_1",
                         "pem100", "sp150", "hp34401a", "bbd30x", "four9", "montana2", "opticool", "tlpm",
                         "mock_device_0", "mock_device_1"]
         self.assertEqual([self.devices.cell(r, 1).value for r in range(2, 25)], expected_ids)
         for row in range(2, 25):
-            self.assertIs(self.devices.cell(row, 3).value, row == 8)
+            self.assertIs(self.devices.cell(row, 3).value, False)
             self.assertIs(self.devices.cell(row, 4).value, False)
         self.assertEqual(self.devices["E8"].value, "DEV30037, 192.168.141.54")
         self.assertEqual(self.devices["E9"].value, "GPIB1::18::INSTR")
@@ -63,23 +63,23 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
     def test_guide_covers_every_registry_driver_and_alias(self):
         registry = build_default_registry()
         expected = set(registry.driver_ids) | {alias for spec in registry.config_specs.values() for alias in spec.aliases}
-        accepted = [self.workbook["Guide"].cell(r, 4).value for r in range(4, 28)]
+        accepted = [self.workbook["Guide"].cell(r, 4).value for r in range(4, 29)]
         self.assertEqual(set(accepted), expected)
         self.assertEqual(len(accepted), len(set(accepted)))
         for row in range(2, 202):
             formula = self.devices.cell(row, 8).value
             self.assertIn(f"COUNTA(A{row}:G{row})=0", formula)
-            self.assertIn("$D$4:$D$27", formula)
+            self.assertIn("$D$4:$D$28", formula)
             self.assertIn("UNKNOWN DRIVER", formula)
             self.assertIn("INVALID CONNECT FLAG", formula)
 
     def test_cached_checks_match_native_boolean_flags(self):
         cached = load_workbook(WORKBOOK_PATH, data_only=True)
         self.addCleanup(cached.close)
-        for row in range(2, 31):
+        for row in range(2, 32):
             self.assertIsInstance(self.devices.cell(row, 3).value, bool)
             self.assertIsInstance(self.devices.cell(row, 4).value, bool)
-            self.assertEqual(cached["Devices"].cell(row, 8).value, "ENABLED" if row == 8 else "DISABLED")
+            self.assertEqual(cached["Devices"].cell(row, 8).value, "ENABLED" if row == 31 else "DISABLED")
         self.assertIn(cached["Devices"]["H201"].value, (None, ""))
 
 

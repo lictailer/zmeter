@@ -72,6 +72,16 @@ existing files/settings and ordinary scan JSON are unchanged. Autofocus saving
 remains opt-in. See the device READMEs for initial/failed-attempt behavior and
 same-second timestamp limitations.
 
+The run-key follow-up was checked against the newer NEMA11 branch changes:
+342 root tests and 78 autofocus/position tests passed with fake I/O/offscreen Qt.
+Coverage includes nested measurement arrays, exact float64 keys, unchanged values
+on repeated reads, optional saving, failed/stopped records, manual exports and
+same-second folder separation. The current workbook's NEMA11 row, enable flags,
+Guide and table were preserved; only the two coordinator getter lists changed.
+Registry/workbook test expectations were synchronized with the upstream NEMA11
+addition, without changing its device implementation or enabling connections.
+No real-hardware or full Windows installation checks were performed.
+
 ## Dependencies and installation
 
 The existing Windows YAML already contains PySerial, scikit-image, SciPy and

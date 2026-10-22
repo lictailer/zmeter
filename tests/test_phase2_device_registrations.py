@@ -33,7 +33,7 @@ DEFERRED_DRIVER_IDS = (
 )
 
 PHASE2_DRIVER_IDS = ("four9", "montana2", "opticool", "attodry", "tlpm", "mc2000b",
-                     "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers")
+                     "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper")
 
 
 class Phase2RegistrationTests(unittest.TestCase):
@@ -45,7 +45,7 @@ from core.device_management.registry import build_default_registry
 
 registry = build_default_registry()
 assert registry.driver_ids[12:-1] == ("four9", "montana2", "opticool", "attodry", "tlpm", "mc2000b",
-                                   "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers")
+                                   "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper")
 for driver_id in registry.driver_ids[12:-1]:
     assert driver_id in registry.config_specs
 loaded = sorted(
