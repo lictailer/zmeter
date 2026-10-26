@@ -28,7 +28,7 @@ STATUS_ANSWERED = "answered"
 STATUS_UNKNOWN = "unknown"
 STATUS_NOT_ANSWERED = "not_answered"
 STATUS_PREFILLED = "prefilled"
-PROMPT_VERSION = "4"
+PROMPT_VERSION = "5"
 # Thinking models (deepseek-v4-pro, Claude with effort) count their reasoning
 # against this limit; billing is only for tokens actually produced.
 MAX_OUTPUT_TOKENS = 32000
@@ -114,7 +114,10 @@ anything weaker and ask it instead.
 - scope: only in a queue: "queue" for facts shared by all scans, or the exact scan name.
 - previous_corrections lists conclusions a user fixed or rejected before: respect them.
 
-"questions": the facts you still need.
+"questions": the facts you still need. suggested_questions.md is a menu, not a \
+checklist: pick what fits this measurement type and the clues in the scan. When the \
+result can depend on history (gate sweeps, correlated or hysteretic states), ask how the \
+state was prepared.
 - text: a short field label, not a sentence and no question mark, e.g. "Current \
 temperature", "Laser power at sample", "Goal of this scan".
 - section: "scan" for what can differ from scan to scan (sample spot, power, temperature, \
@@ -122,7 +125,7 @@ goal, what changed since the last scan); "setup" for what rarely changes (wiring
 optics). Most questions should be about this scan; keep setup ones few.
 - id: short snake_case; reuse the id of a previous answer for the same field.
 - options: 2-5 short likely answers whenever you can guess them, so most lines take one \
-click. The user can still type anything.
+click. They are examples, never the only allowed answers; the user can type anything.
 - unit: only for a number.
 ZMeter fills in previous answers itself. At most {max_questions} questions, most useful \
 first. Never put a range or limit in a question; any answer is allowed."""

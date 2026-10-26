@@ -1,4 +1,4 @@
-# ZMeter lab context  (version 0.4, 2026-10-21)
+# ZMeter lab context  (version 0.5, 2026-10-26)
 
 <!-- The AI model reads this whole file before writing each setup record.
 Sections 1-5 hold general knowledge that fits most labs; treat them as
@@ -19,8 +19,12 @@ everything below is a hint, not a rule.
 - Ask mostly about this scan: its goal, what changed since the last one,
   sample spot, power, anything set by hand. The setup (wiring, lasers,
   optics) rarely changes, so ask little about it and reuse old answers.
+- Many quantum materials remember their past: the same gate voltage can
+  give a different state after a different cooldown or sweep direction.
+  When a scan depends on that, ask how the state was prepared.
 - Keep it easy: short field labels, likely answers to pick from, nothing
-  the settings or snapshot already show.
+  the settings or snapshot already show. Answer options are examples; the
+  user can always type something else.
 - A queue gets one record for all its scans; the order of scans and
   manual-set steps shows the plan (e.g. a temperature series).
 - A snapshot device marked "skipped" was not read; it only matters if the
@@ -63,24 +67,54 @@ everything below is a hint, not a rule.
 - mock_device, demo_device: simulators, not real hardware.
 
 ## 4. Common experiment families (clues, not rules)
-- Transport: lock-ins + an excitation source, gate sweeps, 2- or 4-probe,
-  Hall bar. Key unknowns: which contacts each lock-in input and the source
-  are on, series resistor, excitation amplitude and frequency, filters.
-- Nonlinear transport (nonlinear Hall, 2nd harmonic): lock-in harmonic 2.
-- Gate maps: two gates swept (dual gate), or n and E channels.
-- Optical mapping (reflection, PL, photocurrent): galvo or stage x/y sweep.
-- Polarization-resolved optics (SHG, polarimetry): rotation stages swept.
-- Photocurrent (CPGE/LPGE): waveplate rotated through 360 deg, lock-in on
-  the photocurrent with a chopper reference.
-- Temperature, field or power dependence: one slow variable stepped by
-  manual sets between scans.
+What usually matters for each kind of measurement. Use what fits; most
+scans touch only one or two of these.
+- Transport (resistance, Hall): lock-ins + an excitation source, 2- or
+  4-probe, Hall bar. Which contacts carry current and which measure voltage,
+  excitation amplitude and frequency, series resistor, preamp gain, filters.
+- Edge / topological transport (quantum spin Hall and similar): local vs
+  nonlocal configuration, which edge or contact pair, channel length,
+  whether the plateau or quantized value is the point of the scan.
+- Correlated or charge-ordered states (insulating states at finite doping,
+  charge density waves, superlattices): carrier density n and displacement
+  field D, sweep direction and rate, hold time, cooldown protocol (gates set
+  while cooling), whether the state is bistable or hysteretic, how long the
+  sample has sat in this state.
+- Nonlinear transport (nonlinear Hall, Berry curvature dipole, 2nd
+  harmonic): lock-in on harmonic 2, current direction relative to the
+  crystal axis, excitation amplitude (the signal scales with its square),
+  symmetry checks such as reversing current or swapping contacts.
+- Gate maps: two gates swept (dual gate), or n and D (E) channels built from
+  them; how n and D are calibrated; gate leakage.
+- Optical mapping (reflection, PL, photocurrent, SHG): galvo or stage x/y
+  sweep; spot size, objective, power at sample, which flake or region.
+- Photocurrent (incl. circular / linear photogalvanic, CPGE / LPGE):
+  photon energy or wavelength (visible to mid-IR), polarization state and
+  which waveplate is rotating, incidence angle, chopper or other modulation,
+  bias and gate voltages, which contacts collect the current.
+- Polarization-resolved optics (SHG, Kerr, polarimetry): excitation and
+  detection polarization, analyzer, waveplate angles, crystal-axis angle,
+  detector and its integration time.
+- Spectroscopy (Raman, PL, spectral photocurrent): laser line, grating or
+  monochromator setting, filters, accumulation time.
+- Ultrafast / time-resolved (pump-probe, two-pulse correlation): pulse
+  width, repetition rate, pump and probe energies and powers, delay stage
+  setting, which beam is chopped.
+- Tunnelling or vertical heterostructures: interlayer bias, barrier,
+  which layer is grounded.
+- Temperature, field, power or wavelength dependence: one slow variable
+  stepped by manual sets between scans; field direction (in- or
+  out-of-plane) and sweep rate.
 
 ## 5. Things people forget
 - Laser wavelength and power at the sample; filters and objective.
 - Which waveplate or polarizer sits on each rotation stage.
 - Contacts used by each lock-in input and by the source.
 - Series resistor or current-limiting path.
-- Sample state: cooldown history, gate bias during cooldown, illumination.
+- Sample state: cooldown history, gate bias during cooldown, illumination,
+  sweep direction, time since the last change of state.
+- What changed on purpose since the previous scan, and what was checked
+  but left the same.
 
 ## 6. This lab (replace for your lab)
 ### Xuguo Zhou, optics (SHG, reflection, photocurrent) on 2D materials
@@ -97,3 +131,12 @@ everything below is a hint, not a rule.
   0.2660 Vtg - 0.0319, E = 0.1667 Vbg - 0.2660 Vtg + 0.0319).
 - Samples: TXT series (monolayer TaIrTe4, dual-gated, hBN), 3L TaIrTe4,
   bulk TaIrTe4, AgCrP2S6, Co0.25NbSe2.
+- Group background (for context, not a checklist): monolayer TaIrTe4 is a
+  dual quantum spin Hall insulator, with a correlated (likely CDW)
+  insulating state at finite electron doping (Nature 628, 515 (2024)) and a
+  bistable superlattice that switches with doping and cooling protocol and
+  persists for days (Nature 652, 68 (2026); transport, nonlinear Hall,
+  Raman, STM). Earlier work: gate-switchable Berry curvature dipole seen as
+  circular photogalvanic current in monolayer WTe2 under mid-IR, normal
+  incidence (Nat. Phys. 14, 900 (2018)); spatial, spectral and two-pulse
+  ultrafast photocurrent in graphene-BN-graphene (Nat. Phys. 12, 455 (2016)).
