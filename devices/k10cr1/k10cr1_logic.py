@@ -10,6 +10,13 @@ from . import k10cr1_hardware as ism
 
 
 class K10CR1Logic(QtCore.QThread):
+
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "angle",
+    )
+
     DEVICE_MANAGER_COMPONENT = "k10cr1-native-integrated-stepper"
 
     sig_last_pos = QtCore.pyqtSignal(object)

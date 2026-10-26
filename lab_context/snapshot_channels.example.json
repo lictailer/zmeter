@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy this file to snapshot_channels.json to change which getters a setup snapshot reads. Keys are a driver type (sr860, keithley24xx, ...) or a device id (SR860_0, Keithley_bg, ...). A device-id entry is applied after its driver entry. Names are getter names without the get_ prefix. Only add read-only getters; never add one that changes the instrument.",
+  "sr860": {"add": ["aux_out"], "remove": []},
+  "Keithley_tg": {"add": [], "remove": []}
+}

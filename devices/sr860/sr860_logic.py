@@ -18,6 +18,30 @@ class SR860_Logic(QtCore.QThread):
     method name so the dispatcher can automatically call it.
     """
 
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "frequency",
+        "amplitude",
+        "time_constant",
+        "sensitivity",
+        "phase",
+        "ref_mode",
+        "ext_trigger",
+        "ref_input",
+        "sync_filter",
+        "harmonic",
+        "input_config",
+        "voltage_input_coupling",
+        "voltage_input_range",
+        "current_input_range",
+        "input_shield",
+        "notch_filter",
+        "dc_level",
+        "dc_level_mode",
+        "filter_slope",
+    )
+
     # ---------- value update signals ----------
     sig_frequency = QtCore.pyqtSignal(object)
     sig_amplitude = QtCore.pyqtSignal(object)

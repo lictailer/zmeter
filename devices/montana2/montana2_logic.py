@@ -5,6 +5,15 @@ from .montana2_hardware import Montana2Hardware
 
 class Montana2Logic(QtCore.QThread):
 
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "platform_temperature",
+        "stage1_temperature",
+        "platform_target_temperature",
+        "platform_temperature_stable",
+    )
+
     sig_platform_temperature = QtCore.pyqtSignal(object)
     sig_platform_target_temperature = QtCore.pyqtSignal(object)
     sig_platform_temperature_stable_bool = QtCore.pyqtSignal(object)
@@ -182,4 +191,4 @@ if __name__ == "__main__":
     logic.connect()
     logic.get_platform_temperature()
     logic.get_platform_temperature_stable()
-    logic.set_platform_target_temperature_to_stable(4.0)
+    logic.set_platform_target_temperature_to_stable(4.0)
