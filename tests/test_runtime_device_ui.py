@@ -649,10 +649,17 @@ class RuntimeDeviceUiTests(unittest.TestCase):
             ),
             mock.patch.object(scan.logic, "start") as logic_start,
         ):
-            with self.assertRaisesRegex(RuntimeError, "injected stop failure"):
-                Scan._start_scan_now(scan)
+            self.assertTrue(Scan._start_scan_now(scan))
+            for _attempt in range(200):
+                self.app.processEvents(
+                    QtCore.QEventLoop.ProcessEventsFlag.AllEvents, 10
+                )
+                if scan.outputs_finalized:
+                    break
+                QtCore.QThread.msleep(2)
 
         logic_start.assert_not_called()
+        self.assertIsInstance(scan._last_start_error, RuntimeError)
         self.assertEqual(len(observations), 1)
         self.assertTrue(
             any("scan activity" in blocker for blocker in observations[0]),

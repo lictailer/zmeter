@@ -121,11 +121,12 @@ One worker owns all API calls. Panel requests are asynchronous. Synchronous scan
 methods run outside the GUI thread. MFLI opts into background command routing;
 routed manual requests use the panel gate, while scans use the scan gate.
 
-- Manager `stop_scan()` is called **before** scanning. It immediately gates panel
-  jobs, cancels queued work, and inserts a worker barrier before subsequent scan
-  calls. An active native call finishes first. Monitoring stops.
+- Manager `stop_scan()` is called **before** scanning on the scan-boundary worker.
+  It immediately gates panel jobs, cancels queued work, and waits up to 10 seconds
+  for the worker barrier. An active native call finishes first. Monitoring stops.
 - Manager `start_scan()` is called **after** scanning. It releases the gate and
-  resumes monitoring only if previously requested and still connected.
+  waits up to 10 seconds for resume completion, restoring monitoring only if
+  previously requested and still connected.
 - `force_stop()` cancels queued jobs and cooperative sample waits. It never resets
   or zeros outputs. Transport failure stops monitoring and requires reconnection.
 - Manager connect/disconnect/termination waits have a 10-second budget. State

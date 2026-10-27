@@ -158,6 +158,7 @@ class SR860_Logic(QtCore.QThread):
         # runtime state
         self.connected = False
         self.reject_signal = False
+        self.scan_admission_closed = False
 
         self.hardware: SR860_Hardware | None = None
         self.visa_runtime = visa_runtime or VisaRuntime()
@@ -1003,7 +1004,13 @@ class SR860_Logic(QtCore.QThread):
 
     # -------------- thread main ------------------------
     def run(self):
-        if self.reject_signal or not self.connected or self.hardware is None:
+        if (
+            self.reject_signal
+            or self.scan_admission_closed
+            or not self.connected
+            or self.hardware is None
+        ):
+            self.job = ""
             return
 
         # generic dispatcher: call method named in self.job (no args)
@@ -1024,7 +1031,34 @@ class SR860_Logic(QtCore.QThread):
 
     # -------------- stop helper ------------------------
     def stop(self):
+        if self.scan_admission_closed:
+            self.job = ""
+            return
         self.reject_signal = True
         self.quit()
         self.wait()
         self.reject_signal = False
+
+    def prepare_scan(self, timeout_ms: int) -> bool:
+        self.scan_admission_closed = True
+        self.reject_signal = True
+        self.job = ""
+        quiesced = not self.isRunning() or self.wait(timeout_ms)
+        if not quiesced or self._ramp_lock.locked() or self._ramp_active:
+            return False
+        # The scan may ramp outputs, so clear an earlier ramp force-stop.
+        self._ramp_stop_event.clear()
+        self._ramp_stop_reason = None
+        return True
+
+    def resume_scan(self) -> bool:
+        self.scan_admission_closed = False
+        self.reject_signal = False
+        return True
+
+    def interrupt_jobs(self) -> bool:
+        """Reject queued panel jobs and interrupt the worker thread."""
+        self.reject_signal = True
+        self.job = ""
+        self.requestInterruption()
+        return True

@@ -27,13 +27,13 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | --- | --- |
 | `start_zmeter.py` | Thin command-line workbook selection and application/session orchestration |
 | `device_config.xlsx` | Default Excel-only device configuration beside the launcher |
-| `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, and lifecycle reports |
+| `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, truthful scan-lifecycle completion, and lifecycle reports |
 | `core/device_catalog.py` | Immutable rebuilt channel/catalog snapshots and typed refusal errors |
 | `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queue/manual/past item widgets, queue orchestration, per-item manual-set workers, UI state transitions, and runtime-mutation seals |
 | `core/queue_model.py` | Thread-safe live queue entries with stable IDs, ordered pending mutations, current-item ownership, and atomic run completion |
-| `core/scan.py` | Scan editor/window, plot updates, run logging, primary/recovery JSON, save/load/PPT/autosave UI integration |
-| `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
+| `core/scan.py` | Scan editor/window, explicit prepare/run/finalize state, bounded lifecycle/output worker, GUI-owned image capture, plot updates, run logging, primary/recovery JSON, save/load/PPT/autosave UI integration |
+| `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, and terminal-result publication; it does not restore device widgets or persist final outputs |
 | `core/setup_capture/` | Setup capture: start/end instrument snapshots (`SNAPSHOT_GETTERS` on device logic classes, optional `lab_context/snapshot_channels.json`), the scan window's Questionnaire tab, the queue questionnaire pop-up, the AI model call through the openai SDK (Claude, DeepSeek or any OpenAI-compatible provider) with suggestion fallback, and per-PC settings (one API key per provider in the OS keyring) |
 | `lab_context/` | Hand-edited lab knowledge read by the questionnaire model (`lab_context.md`), suggested questions (`suggested_questions.md`), and an example snapshot-channel override |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing under whole-request manager leases |
@@ -50,7 +50,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/auto_focus/`, `devices/auto_position/` | Routed focus search and fixed-reference map registration; separate worker/panels, settings contracts and optional/required run bundles |
 | `devices/arduino_steppers/` | Standalone three-motor serial controller and maintained Arduino sketch; routed Z is selected by autofocus |
 | `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
-| `devices/<device>/` | Device-specific widget/logic/hardware integrations and optional UI/dependencies |
+| `devices/<device>/` | Device-specific widget/logic/hardware integrations, including driver-owned scan/monitor admission, and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |

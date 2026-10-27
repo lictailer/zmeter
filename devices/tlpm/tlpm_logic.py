@@ -23,6 +23,7 @@ class TLPMLogic(QtCore.QThread):
     def __init__(self):
         QtCore.QThread.__init__(self)
         self.is_connected = False
+        self.scan_admission_closed = False
         self._hardware_lock = threading.RLock()
         self.target = None
         self.reset_flags()
@@ -133,6 +134,19 @@ class TLPMLogic(QtCore.QThread):
     def request_stop(self):
         self.receieved_stop = True
 
+    def prepare_scan(self, timeout_ms: int) -> bool:
+        self.scan_admission_closed = True
+        self.request_stop()
+        return not self.isRunning() or self.wait(timeout_ms)
+
+    def resume_scan(self) -> bool:
+        self.scan_admission_closed = False
+        self.receieved_stop = False
+        return True
+
+    def lifecycle_busy(self) -> bool:
+        return self.isRunning()
+
     def get_power(self):
         power = c_double()
         with self._hardware_lock:
@@ -152,6 +166,9 @@ class TLPMLogic(QtCore.QThread):
         return converted
     
     def run(self):
+        if self.scan_admission_closed:
+            self.reset_flags()
+            return
         was_connect = self.do_connect
         try:
             if self.do_connect:

@@ -24,7 +24,7 @@ The widget starts a 50 ms monitor timer but only schedules reads while connected
 
 ## Lifecycle and safety
 
-The widget provides `connect_visa`, `disconnect_device`, and `terminate_dev`; termination calls the logic disconnect path. It does not provide `start_scan`, `stop_scan`, or `force_stop`, so background-monitor coordination relies only on its busy check and is not a complete device lifecycle.
+The registered scan lifecycle preserves the prior 50 ms monitor state, closes UI-job admission, and stops/restores the Qt timer on its owner thread. `stop_scan()` waits off the GUI thread for at most 6 seconds, covering the current 5-second VISA timeout; an incomplete `get_all` fails preparation. `force_stop()` requests cancellation without disconnecting or changing NPLC/display state. Termination continues to call the logic disconnect path.
 
 Review identity, error queue handling, NPLC, display state, timeout behavior, and disconnect after partial connection before enabling it. Agents must not enumerate VISA resources, connect, configure, read, or disconnect this instrument. See [hardware_safety.md](../../documents/hardware_safety.md).
 

@@ -34,7 +34,7 @@ The hardware documents internal reference frequency as 1 mHz–500 kHz, sine out
 
 ## Lifecycle and safety
 
-Connection uses the original `*IDN?` query path and 100 ms VISA session timeout. The reviewed registration stops monitoring before scans, restores prior monitoring afterward, propagates force-stop to active ramps, and requests ramp stop before bounded disconnect. Ordinary disconnect attempts the original VISA device clear before closing the lease.
+Connection uses the original `*IDN?` query path, checks that the identity contains `SR860`, and uses a 100 ms VISA session timeout. The registered lifecycle saves the prior 50 ms monitor state, closes UI-job admission, stops/restores the Qt timer on its owner thread, and waits off the GUI thread for at most 2 seconds for an in-flight UI/monitor job; preparation fails while an output ramp is still active and otherwise clears an earlier ramp stop so scan writes can ramp. `force_stop()` stops active ramps and interrupts queued jobs without disconnecting or altering source/input settings. Disconnect requests ramp stop first, then attempts the original VISA device clear before closing the lease.
 
 Agents must not enumerate VISA resources, connect, configure, source, read, reset, or disconnect the SR860. The user must validate filters, units, timeouts, monitor coordination, auxiliary limits, and shutdown state. See [hardware_safety.md](../../documents/hardware_safety.md).
 

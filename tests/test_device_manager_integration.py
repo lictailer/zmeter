@@ -408,25 +408,8 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         )
         self.assertEqual(Scan._resolve_participating_device_ids(getter_only), ())
 
-    def test_monitor_stop_targets_only_scan_participants(self):
-        calls = []
-        scan = SimpleNamespace(
-            main_window=SimpleNamespace(
-                equips={
-                    "used": SimpleNamespace(
-                        stop_monitor=lambda: calls.append("used")
-                    ),
-                    "unused": SimpleNamespace(
-                        stop_monitor=lambda: calls.append("unused")
-                    ),
-                }
-            ),
-            _log_warning=lambda _message: None,
-        )
-
-        Scan._stop_all_equipment_monitors(scan, ("used",))
-
-        self.assertEqual(calls, ["used"])
+    def test_scan_has_no_generic_monitor_stop_path(self):
+        self.assertFalse(hasattr(Scan, "_stop_all_equipment_monitors"))
 
     def test_scan_stop_and_cleanup_reuse_captured_participants(self):
         force_stop_calls = []
@@ -451,6 +434,7 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         restart_calls = []
         errors = []
         finishes = []
+        terminals = []
         resets = []
         artificial_logic = SimpleNamespace(
             reset_skip_next_scan_read=lambda: resets.append("artificial")
@@ -469,14 +453,45 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
             looping=lambda _level: (_ for _ in ()).throw(RuntimeError("scan failed")),
             reset_flags=lambda: resets.append("flags"),
             sig_scan_error=SimpleNamespace(emit=errors.append),
+            sig_scan_terminal=SimpleNamespace(emit=terminals.append),
             sig_scan_finished=SimpleNamespace(emit=lambda: finishes.append(True)),
+            completed_points=2,
+            total_points=3,
         )
 
         ScanLogic.scan(logic)
 
-        self.assertEqual(restart_calls, [("device_a",)])
+        self.assertEqual(restart_calls, [])
         self.assertEqual(len(errors), 1)
+        self.assertEqual(terminals[0]["participating_device_ids"], ("device_a",))
+        self.assertEqual(terminals[0]["completed_points"], 2)
         self.assertEqual(finishes, [True])
+
+    def test_successful_scan_worker_emits_terminal_result(self):
+        terminals = []
+        logic = SimpleNamespace(
+            main_window=SimpleNamespace(
+                artificial_channel_logic=SimpleNamespace(
+                    reset_skip_next_scan_read=lambda: None
+                ),
+                reset_skip_next_scan_read_from_global_limit=lambda: None,
+            ),
+            max_level=0,
+            participating_device_ids=("device_a",),
+            looping=lambda _level: None,
+            reset_flags=lambda: None,
+            sig_scan_error=SimpleNamespace(emit=lambda _message: None),
+            sig_scan_terminal=SimpleNamespace(emit=terminals.append),
+            sig_scan_finished=SimpleNamespace(emit=lambda: None),
+            completed_points=3,
+            total_points=3,
+        )
+
+        ScanLogic.scan(logic)
+
+        self.assertIsNone(terminals[0]["error"])
+        self.assertEqual(terminals[0]["participating_device_ids"], ("device_a",))
+        self.assertEqual(terminals[0]["completed_points"], 3)
 
     def test_failed_stop_for_scan_is_surfaced_before_scan_logic_starts(self):
         failure = LifecycleFailure(
@@ -516,15 +531,22 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
             scan.main_window = SimpleNamespace(
                 stop_equipments_for_scanning=lambda _device_ids: (_ for _ in ()).throw(
                     DeviceLifecycleError(report)
-                )
+                ),
+                start_equipments=lambda _device_ids: None,
             )
             scan._focus_plot_tab_1_for_scan_start = lambda **_kwargs: None
             scan._start_new_scan_log_session = lambda: None
 
-            with self.assertRaises(DeviceLifecycleError):
-                Scan._start_scan_now(scan)
+            self.assertTrue(Scan._start_scan_now(scan))
+            for _attempt in range(200):
+                self.app.processEvents()
+                if scan.outputs_finalized:
+                    break
+                QtCore.QThread.msleep(2)
 
             self.assertFalse(probe_logic.started)
+            self.assertIsInstance(scan._last_start_error, DeviceLifecycleError)
+            self.assertTrue(scan.outputs_finalized)
         finally:
             scan.logic = original_logic
             scan.main_window = original_main_window

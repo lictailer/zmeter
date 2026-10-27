@@ -313,13 +313,14 @@ class MFLILogic(QtCore.QObject):
 
     def stop_scan(self, timeout_ms=10_000):
         """Manager calls this BEFORE the scan, not at its completion."""
-        # Scan preparation is called on the GUI thread. Gate panel jobs now;
-        # the FIFO barrier finishes prior work before any later scan command.
-        self.request("prepare_scan")
+        # The manager calls scan lifecycle on the boundary worker. Waiting for
+        # the FIFO barrier makes preparation completion truthful without
+        # blocking Qt event processing.
+        return self.request("prepare_scan").result(timeout_ms / 1000)
 
     def start_scan(self, timeout_ms=10_000):
         """Manager calls this AFTER the scan; restore prior monitor intent."""
-        self.request("resume")
+        return self.request("resume").result(timeout_ms / 1000)
 
     def force_stop(self):
         self._worker.force_stop()
