@@ -14,6 +14,7 @@ from devices.hp34401a.hp34401a_main import HP34401A
 from devices.ni6423.ni6423_main import NI6423
 from devices.nidaq.nidaq_main import NIDAQ
 from devices.sr830.sr830_main import SR830
+from devices.sr860.sr860_logic import SR860_Logic
 from devices.sr860.sr860_main import SR860
 from devices.tlpm.tlpm_main import TLPM
 
@@ -265,6 +266,27 @@ class MonitorScanLifecycleTests(unittest.TestCase):
         self.assertEqual(result, [True])
         self.assertEqual(timer.stop_threads, [widget.thread()])
         self.assertNotEqual(widget.logic.prepare_calls[0][1], widget.thread())
+
+    def test_sr860_ramp_stop_and_scan_preparation_work_together(self):
+        runtime = VisaRuntime(manager_factory=_NoHardwareVisaManager)
+        self.visa_runtimes.append(runtime)
+        logic = SR860_Logic(runtime)
+
+        logic.request_force_stop("SR860 Stop ramp button")
+        self.assertTrue(logic._ramp_stop_event.is_set())
+        self.assertFalse(logic.reject_signal)
+
+        self.assertTrue(logic.prepare_scan(100))
+        self.assertFalse(logic._ramp_stop_event.is_set())
+        self.assertTrue(logic.resume_scan())
+
+        logic._ramp_active = True
+        self.assertFalse(logic.prepare_scan(100))
+        logic._ramp_active = False
+        logic.resume_scan()
+
+        self.assertTrue(logic.interrupt_jobs())
+        self.assertTrue(logic.reject_signal)
 
 
 if __name__ == "__main__":
