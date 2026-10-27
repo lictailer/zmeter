@@ -55,7 +55,7 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
         self.assertEqual(atto.connection["address"], "REPLACE_WITH_ATTODRY_ADDRESS")
         self.assertEqual(atto.scan_channels.setters, ("T", "T_stable", "B", "B_stable"))
         self.assertEqual(atto.scan_channels.getters, ("T", "B"))
-        self.assertEqual(configurations["spectraphysicsx3_laser"].scan_channels.setters, ("wavelenght_stable", "shutter"))
+        self.assertEqual(configurations["spectraphysicsx3_laser"].scan_channels.setters, ("wavelength_stable", "shutter"))
         for driver in ("auto_focus", "auto_position"):
             self.assertIn(configurations[driver].connection["address"], (None, ""))
             self.assertIn("run_key", configurations[driver].scan_channels.getters)

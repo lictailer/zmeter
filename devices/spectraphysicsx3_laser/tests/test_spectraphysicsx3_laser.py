@@ -311,8 +311,8 @@ class X3LogicWithoutQtTests(unittest.TestCase):
 
     def test_scan_move_reads_actual_twice_after_target(self):
         self.port.actual_sequence = [690, 700, 700]
-        self.assertEqual(self.logic.set_wavelenght_stable(700), 700)
-        self.assertEqual(self.logic.get_wavelenght_stable(), 700)
+        self.assertEqual(self.logic.set_wavelength_stable(700), 700)
+        self.assertEqual(self.logic.get_wavelength_stable(), 700)
         self.assertEqual(self.port.writes.count(b"WAVelength 700\r"), 1)
         self.assertFalse(any(b"SHUT" in write for write in self.port.writes))
 
@@ -327,17 +327,17 @@ class X3LogicWithoutQtTests(unittest.TestCase):
         self.port.status |= 1 << 15
         before = list(self.port.writes)
         with self.assertRaisesRegex(RuntimeError, "fault/interlock"):
-            self.logic.set_wavelenght_stable(700)
+            self.logic.set_wavelength_stable(700)
         self.assertEqual(self.port.writes.count(b"WAVelength 700\r"), 0)
         self.port.status &= ~(1 << 15)
         self.logic.force_stop()
         with self.assertRaises(self.logic_module.X3OperationCancelled):
-            self.logic.set_wavelenght_stable(700)
+            self.logic.set_wavelength_stable(700)
         self.assertEqual(self.port.writes, before + [b"*STB?\r"])
 
     def test_timeout_does_not_repeat_target_or_change_shutter(self):
         with self.assertRaises(self.logic_module.X3MoveTimeout):
-            self.logic.set_wavelenght_stable(700)
+            self.logic.set_wavelength_stable(700)
         self.assertEqual(self.port.writes.count(b"WAVelength 700\r"), 1)
         self.assertFalse(any(b"SHUT" in write for write in self.port.writes))
 
@@ -360,7 +360,7 @@ class X3LogicWithoutQtTests(unittest.TestCase):
         scan_setters = {
             name[4:] for name in dir(self.logic) if name.startswith("set_")
         }
-        self.assertEqual(scan_setters, {"wavelenght_stable", "shutter"})
+        self.assertEqual(scan_setters, {"wavelength_stable", "shutter"})
         self.port.warmup_percent = 90.0
         with self.assertRaisesRegex(RuntimeError, "warm-up"):
             self.logic.turn_diode_on()
@@ -451,8 +451,8 @@ class X3LogicAndPanelTests(unittest.TestCase):
         )
         logic.connect("COM4")
         self.port.actual_sequence = [690, 700, 700]
-        self.assertEqual(logic.set_wavelenght_stable(700), 700)
-        self.assertEqual(logic.get_wavelenght_stable(), 700)
+        self.assertEqual(logic.set_wavelength_stable(700), 700)
+        self.assertEqual(logic.get_wavelength_stable(), 700)
         self.assertEqual(self.port.writes.count(b"WAVelength 700\r"), 1)
         self.assertFalse(any(b"SHUT" in item for item in self.port.writes))
         logic.terminate_dev()
@@ -463,7 +463,7 @@ class X3LogicAndPanelTests(unittest.TestCase):
         before = list(self.port.writes)
         logic.force_stop()
         with self.assertRaises(X3OperationCancelled):
-            logic.set_wavelenght_stable(700)
+            logic.set_wavelength_stable(700)
         self.assertEqual(self.port.writes, before)
         logic.terminate_dev()
 

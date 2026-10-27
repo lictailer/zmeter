@@ -255,7 +255,7 @@ class SpectraPhysicsX3Laser(QtWidgets.QWidget):
         )
         self.set_wavelength_button.clicked.connect(
             lambda: self.logic.submit_ui_job(
-                self.logic.set_wavelenght_stable, self.target_spinBox.value()
+                self.logic.set_wavelength_stable, self.target_spinBox.value()
             )
         )
         self.diode_on_button.held.connect(
@@ -320,7 +320,7 @@ class SpectraPhysicsX3Laser(QtWidgets.QWidget):
     def _refresh_main_readbacks(self) -> None:
         self.logic.read_status()
         self.logic.get_target_wavelength()
-        self.logic.get_wavelenght_stable()
+        self.logic.get_wavelength_stable()
         self.logic.get_output_power_w()
         self.logic.read_mode()
 

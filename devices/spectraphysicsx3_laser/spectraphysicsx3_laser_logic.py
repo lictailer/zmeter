@@ -95,7 +95,7 @@ class SpectraPhysicsX3Logic(QtCore.QThread):
         self.sig_power_w.emit(None)
         self.sig_message.emit("disconnected; laser and shutter unchanged")
 
-    def set_wavelenght_stable(self, wavelength_nm):
+    def set_wavelength_stable(self, wavelength_nm):
         """Set a scan point and wait for confirmed actual wavelength in nm."""
         target = self.hardware.validate_wavelength(wavelength_nm)
         with self._operation_lock:
@@ -137,7 +137,7 @@ class SpectraPhysicsX3Logic(QtCore.QThread):
                 self._check_deadline(deadline, target, current, "reach target")
                 self._wait_or_cancel()
 
-    def get_wavelenght_stable(self):
+    def get_wavelength_stable(self):
         """Scan getter: actual, not merely requested, wavelength (nm)."""
         with self._operation_lock:
             self._require_connected()

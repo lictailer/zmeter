@@ -17,12 +17,11 @@ also closes the shutter when turning the diode off.
 ## Configuration and scan channels
 
 The tracked `device_config.xlsx` has a `spectraphysicsx3_laser` row with
-`enabled=TRUE`, `connect_on_start=FALSE`, address `COM4`, and two
-setter scan channels: `wavelenght_stable` and `shutter`. The getter scan
-channels are `wavelenght_stable`, `shutter`, and read-only `output_power_w`.
-The spelling
-`wavelenght_stable` follows the requested channel name exactly; older saved
-scan definitions that refer to `wavelength` must be changed to it. Review
+`enabled=FALSE`, `connect_on_start=FALSE`, address `COM4`, and two
+setter scan channels: `wavelength_stable` and `shutter`. The getter scan
+channels are `wavelength_stable`, `shutter`, and read-only `output_power_w`.
+Older saved scan definitions that refer to `wavelength` or the earlier
+misspelling `wavelenght_stable` must be changed to `wavelength_stable`. Review
 that port on the lab PC;
 it is a placeholder based on the operator's test. Open ZMeter's X3 panel and
 connect manually. Do not connect automatically until the hardware procedure
@@ -30,11 +29,11 @@ has been reviewed. The same Windows COM port cannot be opened by Python while
 the manufacturer GUI owns it. A separate RS-232 host path may exist, but
 concurrent GUI/host control is unverified.
 
-`set_wavelenght_stable(nm)` accepts finite whole-nm targets inside the reported
+`set_wavelength_stable(nm)` accepts finite whole-nm targets inside the reported
 controller limits (and 680–1300 nm). It checks status for a fault/open
 interlock, sends one `WAVelength <nm>` command, confirms `WAVelength?` reports
 that target, then waits for two consecutive `READ:WAVelength?` readings at
-that exact nm. Default timeout is 120 s. `get_wavelenght_stable()` returns
+that exact nm. Default timeout is 120 s. `get_wavelength_stable()` returns
 **actual** wavelength, not the target. This establishes wavelength readback
 agreement; it does **not** establish that optical output power has stopped
 oscillating. Do not treat it as a power-stability interlock. A power-stability
