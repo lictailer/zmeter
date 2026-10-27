@@ -1,262 +1,268 @@
-#!/usr/bin/env python3
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+"""Qt worker and scan-facing facade for configurable autofocus."""
+from __future__ import annotations
 
-import time
+import threading
+from dataclasses import asdict
 
 import numpy as np
-import matplotlib.pyplot as plt
-import serial
 
-import cv2
-import scipy.io as sio
+from PyQt6 import QtCore
+from core.measurement_records import RunRecord, new_run_key
 
-class ANC_and_DAQ_xyz:
-    '''
-    xyz and scanning system class that combines a stepper motor for Z-axis control
-    '''
-    def __init__(self, daq, ANC):
-        self.com_port = "COM 7" #this may  be used in this class but can be used in the stepper_and_galvo_xyz class
-        # daq class variables
-        self.daq = daq # I will keep this as input for the class to allow using the same instant used somewhere else
-        self.ao_x = "/Dev1/AO0"
-        self.ao_y = "/Dev1/AO1"
-        self.ai = "/Dev1/AI0"
-
-        #ANC class variables
-        self.ANC = ANC # this is an instance of the ANC class that will be used
-
-    def move_z(self, z: float):
-        return 0
-    def move_x(self, x: float):
-        return 0
-    def move_y(self, y: float):
-        return 0
-    def read_pd(self) -> float:
-        """Read the photodiode value."""
-        return self.daq.read_single_ai_task(self.ai)
-    def measure_map(self,x_center,y_center,x_range,y_range,x_pts,y_pts) -> np.ndarray:   #
-        return 0
+from .autofocus_engine import AutofocusSettings, FocusStopped, finite, run_focus
+from .autofocus_hardware import RouterIO, SOURCE_FACTORIES, Z_FACTORIES
 
 
-class stepper_and_galvo_xyz:
-    '''
-    xyz and scanning system class that combines a stepper motor for Z-axis control
-    '''
-    def __init__(self, daq):
-        # galvo class variables
-        self.daq = daq # I will keep this as input for the class to allow using the same instant used somewhere else
-        self.ao_x = "/Dev1/AO0"
-        self.ao_y = "/Dev1/AO1"
-        self.ai = "/Dev1/AI0"
+class AutofocusLogic(QtCore.QThread):
+    sig_status = QtCore.pyqtSignal(str)
+    sig_error = QtCore.pyqtSignal(str)
+    sig_connected = QtCore.pyqtSignal(bool)
+    sig_position = QtCore.pyqtSignal(object)
+    sig_sample = QtCore.pyqtSignal(object)
+    sig_result = QtCore.pyqtSignal(object)
+    sig_busy = QtCore.pyqtSignal(bool)
 
-        #arduino stepper class variables
-        self.com_port = "COM 7"
-        self.baud_rate = 115200
-        self.motor_rpm = 7
-        self.ser = None
+    def __init__(self, *, z_factories=None, source_factories=None):
+        super().__init__()
+        self.settings = AutofocusSettings()
+        self.z_factories = dict(Z_FACTORIES if z_factories is None else z_factories)
+        self.source_factories = dict(SOURCE_FACTORIES if source_factories is None else source_factories)
+        self.router = None
+        self.device_label = "auto_focus"
+        self.axis = None
+        self.result = None
+        self.history = []
+        self.run_settings = None
+        self.last_outcome = "idle"
+        self.last_error = None
+        self.last_output_directory = None
+        self.last_run_key = None
+        self.stop_event = threading.Event()
+        self._operation_lock = threading.Lock()
+        self._job_lock = threading.Lock()
+        self._job = None
 
-    def connect_system(self): #it is just connect stepper for my case
-        """Connect to the stepper motor via serial port."""
-        self.ser = serial.Serial(self.com_port, self.baud_rate, timeout=1)
-        time.sleep(2)  # Allow time for the serial connection to establish
-    
-    def disconnect_system(self):
-        """Disconnect from the stepper motor."""
-        if self.ser:
-            self.ser.close()
-            self.ser = None
-    def move_z(self, z: float):
-        """Move the stepper motor to a specified angle."""
-        if self.ser:
-            self.ser.write(f"stepperA {z}\n".encode())
-            t_move = abs(z)/360.0 * (60.0/self.motor_rpm)
-            time.sleep(t_move + 0.2)
+    @property
+    def connected(self) -> bool:
+        return self.axis is not None and self.axis.connected
 
-    def move_x(self, x: float):
-        """Move the galvo X axis to a specified position."""
-        self.daq.write_single_ao_task(self.ao_x, float(x))
-    def move_y(self, y: float):
-        """Move the galvo Y axis to a specified position."""
-        self.daq.write_single_ao_task(self.ao_y, float(y))
+    def is_busy(self) -> bool:
+        return self.isRunning() or self._operation_lock.locked()
 
-    def read_pd(self) -> float:
-        """Read the photodiode value."""
-        return self.daq.read_single_ai_task(self.ai)
-    # Additional methods can be added here for further functionality
+    def configure_command_router(self, command_router, source_device=None) -> None:
+        if self.is_busy():
+            raise RuntimeError("Cannot replace the router during an autofocus operation")
+        self.router = command_router
+        if source_device:
+            self.device_label = source_device
 
-    def measure_map(self,x_center,y_center,x_range,y_range,x_pts,y_pts) -> np.ndarray:   #
-        xs = np.linspace(x_center - x_range/2,
-                         x_center + x_range/2, x_pts)
-        ys = np.linspace(y_center - y_range/2,
-                         y_center + y_range/2, y_pts)
-        M = np.zeros((len(xs), len(ys)))
-        for i, xv in enumerate(xs):
-            self.move_x(float(xv))
-            for j, yv in enumerate(ys):
-                self.move_y(float(yv))
-                M[i, j] = self.daq.read_single_ai_task(self.ai)
-        return M
+    def detach_command_router(self) -> None:
+        self.configure_command_router(None)
 
-class autofocus_logic:
-    def __init__(self, xyz_sys): # the input is an instance of the xyz system
-        # in the main window, self.my_xyz_sys = autofocus(stepper_and_galvo_xyz(self.my_daq))
-        self.xyz_sys = xyz_sys # this instance have it's default values no need to redifine motor rpm or com port for example
+    def apply_settings(self, settings: AutofocusSettings) -> None:
+        settings.validate()
+        if self.is_busy():
+            raise RuntimeError("Wait for the current autofocus operation before changing settings")
+        if self.connected and settings.z != self.settings.z:
+            raise RuntimeError("Disconnect Z before changing its driver, units, channels or limits")
+        if settings.z.backend not in self.z_factories or settings.source.mode not in self.source_factories:
+            raise ValueError("Unknown Z or acquisition adapter")
+        self.settings = settings
 
-        #auto_focus parameters
-        self.initial_z_step = 1200
-        self.threshold_z_step = 10
-        self.threshold_metric_step = None # maybe for some cases converge based on focus metric is better
+    def connect_z(self) -> bool:
+        with self._operation_lock:
+            if self.connected:
+                return True
+            self.settings.z.validate()
+            factory = self.z_factories[self.settings.z.backend][1]
+            axis = factory(self.settings.z, RouterIO(self.router, self.device_label))
+            try:
+                axis.connect(self.stop_event)
+                position = axis.position()
+                self.settings.z.validate_target(position)
+            except Exception:
+                axis.disconnect()
+                raise
+            self.axis = axis
+        self.sig_connected.emit(True)
+        self.sig_position.emit(position)
+        self.sig_status.emit(f"Z selected; position is in {self.settings.z.unit}")
+        return True
 
-        self.current_z = 0.0
+    def disconnect(self) -> None:
+        if not self._operation_lock.acquire(blocking=False):
+            raise RuntimeError("Stop autofocus and wait for its current move before disconnecting")
+        try:
+            if self.axis is not None:
+                self.axis.disconnect()
+                self.axis = None
+        finally:
+            self._operation_lock.release()
+        self.sig_connected.emit(False)
+        self.sig_position.emit(None)
 
-        # measure map paraeters
-        self.x_center, self.y_center = 0.483, 0.77
-        self.x_range,  self.y_range  = 0.1, 0.1
-        self.x_pts,    self.y_pts    = 51, 51
+    def get_z(self):
+        with self._operation_lock:
+            self._require_connected()
+            position = self.axis.position()
+        self.sig_position.emit(position)
+        return position
 
-        #saving parameters
-        self.save_dir = None  # Directory to save results, can be set later
+    def get_focus_score(self):
+        if self.result is not None:
+            return self.result.best_score
+        if not self.history:
+            raise RuntimeError("No focus measurement has been acquired")
+        return self.history[-1].score
 
-    def measure_map(self) -> np.ndarray:   #
-        M= None
-        if self.xyz_sys:
-            M = self.xyz_sys.measure_map(self.x_center, self.y_center,
-                                    self.x_range, self.y_range,
-                                    self.x_pts, self.y_pts)
-        return M
-    
-    @staticmethod
-    def focus_metric(M: np.ndarray) -> float:
-        gx = cv2.Sobel(M, cv2.CV_64F, 1, 0, ksize=3)
-        gy = cv2.Sobel(M, cv2.CV_64F, 0, 1, ksize=3)
-        return float(np.sum(gx*gx + gy*gy))
-    
-    def get_run_idx(self): #this will give the right number to use based on what exist in the save driectory
-        """Get the next run index based on existing files in the save directory."""
-        if self.save_dir:
-            os.makedirs(self.save_dir, exist_ok=True)
-            run_idx = 1
-            while os.path.exists(os.path.join(self.save_dir, f"{run_idx:02d}.mat")):
-                run_idx += 1
-        return run_idx
-    
-    def save_iteration(self,M,history_z_centers, history_metrics,iteration):
-        """Save the current as png image"""
-        if self.save_dir is None:
-            print("Save directory not set. Skipping save.")
-            return
-        # interactive plots: map + metric
-        fig = plt.figure(figsize=(8, 8))
-        ax_map = fig.add_subplot(2, 1, 1)
-        im = ax_map.imshow(M,
-                        origin='lower',
-                        extent=[self.x_center-self.x_range/2, self.x_center+self.x_range/2,
-                                self.y_center-self.y_range/2, self.y_center+self.y_range/2],
-                        aspect='auto')
-        ax_map.set_title("Live Reflected Map")
-        ax_map.set_xlabel("Galvo X (V)")
-        ax_map.set_ylabel("Galvo Y (V)")
-        cbar = fig.colorbar(im, ax=ax_map)
-        cbar.set_label("Photodiode Signal")
-        im.set_clim(np.min(M), np.max(M))
+    def get_run_key(self):
+        """Latest autofocus attempt's fixed local timestamp; NaN before any run."""
+        return self.last_run_key if self.last_run_key is not None else float("nan")
 
-        ax_metric = fig.add_subplot(2, 1, 2)
-        ax_metric.plot(history_z_centers, history_metrics, 'o-')
-        ax_metric.set_title("Autofocus Gradient Metric")
-        ax_metric.set_xlabel("angle")
-        ax_metric.set_ylabel("Max Gradient")
-        ax_metric.grid(True)
-        
-        run_idx = self.get_run_idx()  # Get the next run index
-        fname = f"{run_idx:02d}_{iteration:02d}.png"
-        fig.savefig(os.path.join(self.save_dir, fname))
+    def set_focus(self, trigger):
+        """Every finite numeric trigger runs autofocus; its magnitude is ignored."""
+        finite(trigger, "Autofocus trigger")
+        if not self._operation_lock.acquire(blocking=False):
+            raise RuntimeError("An autofocus operation is already active")
+        self.sig_busy.emit(True)
+        record = None
+        try:
+            self._require_connected()
+            self.run_settings = self.settings
+            self.last_outcome = "running"
+            self.last_error = None
+            self.result = None
+            self.history = []
+            self.last_output_directory = None
+            self.last_run_key = new_run_key()
+            if self.run_settings.output.enabled:
+                record = RunRecord(self.run_settings.output.directory, "autofocus", run_key=self.last_run_key)
+                self.last_output_directory = str(record.path)
+                record.json("run.json", {"status": "running", "settings": self.run_settings.to_dict()})
+            self.sig_sample.emit(None)
+            io = RouterIO(self.router, self.device_label)
+            source = self.source_factories[self.settings.source.mode][1](self.settings.source, io)
+            self.sig_status.emit("Autofocus running")
 
-    def save_run(self,histroy_xymaps, history_metrics):
-        """Save the entire autofocus run's data to a file."""
-        if self.save_dir is None:
-            print("Save directory not set. Skipping save.")
-            return
-        # Save all history data to a text file
-        run_idx = self.get_run_idx()  # Get the next run index
-        mat_name = f"{run_idx:02d}.mat"
-        mat_path = os.path.join(self.save_dir, mat_name)
-        sio.savemat(mat_path, {"xy_maps": histroy_xymaps, "metrics": history_metrics})
+            def sample_ready(sample, data):
+                self.sig_position.emit(sample.position)
+                self.sig_sample.emit((sample, data))
+                if record is not None and self.run_settings.output.save_frames and np.asarray(data).ndim >= 2:
+                    name = f"frame-{len(self.history):04d}"
+                    record.array(name + ".npy", data)
+                    record.map(name + ".png", data, title=f"Focus image at Z={sample.position:g} {self.run_settings.z.unit}")
 
-        print(f"Run data saved to {mat_path}")
+            self.result = run_focus(self.axis, source, self.run_settings, self.stop_event,
+                                    sample_ready, self.history)
+            self.last_outcome = self.result.status
+            if record is not None:
+                self._save_run_record(record)
+            self.sig_result.emit(self.result)
+            self.sig_position.emit(self.result.final_position)
+            fit = self.result.gaussian_fit
+            fit_text = (f"; Gaussian center {fit.center:g}, sigma {fit.sigma:g}, R² {fit.r_squared:.4g}"
+                        if fit is not None else "")
+            if self.result.fit_error:
+                fit_text += "; " + self.result.fit_error
+            self.sig_status.emit(
+                f"{self.result.status}: measured best Z {self.result.best_position:g}, "
+                f"score {self.result.best_score:g}" + fit_text + "; "
+                + ("selected position applied" if self.result.applied else "final focus-position move not applied")
+                + (f"; saved: {self.last_output_directory}" if record is not None else "")
+            )
+            return self.result.selected_position if self.result.selected_position is not None else self.result.best_position
+        except Exception as exc:
+            self.last_outcome = "stopped" if isinstance(exc, FocusStopped) else "error"
+            self.last_error = str(exc)
+            if record is not None:
+                try:
+                    self._save_run_record(record)
+                except Exception as save_error:
+                    self.last_error += f"; saving also failed: {save_error}"
+                    self.sig_error.emit(self.last_error)
+            last_position = getattr(self.axis, "last_position", None)
+            if last_position is not None:
+                self.sig_position.emit(last_position)
+            raise
+        finally:
+            self._operation_lock.release()
+            self.sig_busy.emit(False)
 
-    def set_AutoFocus(self):
-        """Perform autofocus by iteratively adjusting the stepper motor position."""
-        #for data saving
-        history_z_centers = []
-        history_metrics = []
-        histroy_xymaps=[]
+    def _save_run_record(self, record):
+        record.json("run.json", {
+            "schema_version": 2, "run_key": self.last_run_key, "settings": self.run_settings.to_dict(),
+            "outcome": self.last_outcome, "error": self.last_error,
+            "result": self.result.to_dict() if self.result else None,
+            "samples": [asdict(sample) for sample in self.history],
+        })
+        record.curve(self.history, self.run_settings.z.unit,
+                     self.result.gaussian_fit if self.result else None)
 
-        #for while loop initiaiotn
-        iteration = 0
-        center_z=0
-        curr_z_step=self.initial_z_step 
+    def submit(self, operation, *args) -> bool:
+        with self._job_lock:
+            if self.isRunning() or self._job is not None or self._operation_lock.locked():
+                self.sig_error.emit("Autofocus is busy")
+                return False
+            self.stop_event.clear()  # A new explicit operator operation.
+            self._job = (operation, args)
+            self.sig_busy.emit(True)
+            self.start()
+            return True
 
-        while curr_z_step>self.threshold_z_step:
-            z_pos = [center_z - curr_z_step, center_z, center_z + curr_z_step]
-            f_vals = [] # the values for the focus metric for each Z_position
-            M_vals= []
+    def run(self) -> None:
+        try:
+            operation, args = self._job
+            operation(*args)
+        except FocusStopped as exc:
+            self.sig_status.emit(str(exc))
+        except Exception as exc:
+            self.sig_error.emit(str(exc))
+        finally:
+            with self._job_lock:
+                self._job = None
+            self.sig_busy.emit(False)
 
-            print(f"\nScanning ±{curr_z_step:.1f}° around {center_z:.1f}°")
+    def force_stop(self) -> bool:
+        self.stop_event.set()
+        self.sig_status.emit("Stop requested; the current hardware command may still be completing")
+        return True
 
-            for z in z_pos:
-                self.xyz_sys.move_z(z) # this is a relative motion if Z is 1000 it will move 1000 from the current position
-                # acquire and display map
-                M = self.measure_map()
+    def stop_scan(self) -> None:
+        # No background monitor; refuse only a genuinely active autofocus job.
+        if self.is_busy():
+            raise RuntimeError("Autofocus is still active; stop it or let it finish before starting a scan")
+        self.stop_event.clear()
 
-                # metric
-                f = self.focus_metric(M)
-                print(f"  {z:.1f}° → focus metric = {f:.4g}")
-                f_vals.append(f)
-                M_vals.append(M)
+    def start_scan(self) -> None:
+        self.stop_event.clear()
 
-                # pick best and narrow span
-            best = int(np.argmax(f_vals))
-            center_z = z_pos[best]
-            curr_z_step /= 2.0
+    def terminate_dev(self, wait_ms=3000) -> bool:
+        self.stop_event.set()
+        if self.isRunning() and not self.wait(wait_ms):
+            return False
+        if not self._operation_lock.acquire(timeout=wait_ms / 1000):
+            return False
+        try:
+            if self.axis is not None:
+                self.axis.disconnect()
+                self.axis = None
+        finally:
+            self._operation_lock.release()
+        self.sig_connected.emit(False)
+        return True
 
-            # update history
-            history_z_centers.append(center_z)
-            history_metrics.append(f_vals[best])
-            histroy_xymaps.append(M_vals[best])
-            iteration += 1
+    def find_catalog_references(self, *, removed_setters=(), removed_getters=(), removed_device_labels=()):
+        s = self.settings
+        refs = []
+        if s.z.backend == "routed":
+            refs.extend(((s.z.setter, removed_setters), (s.z.getter, removed_getters)))
+        if s.source.mode != "camera":
+            refs.append((s.source.signal, removed_getters))
+        if s.source.mode == "raster" or (s.source.mode == "point" and s.source.position_xy):
+            refs.extend(((s.source.x, removed_setters), (s.source.y, removed_setters)))
+        return tuple(f"autofocus uses {ref.device}/{ref.channel}" for ref, removed in refs
+                     if ref.device in removed_device_labels or f"{ref.device}_{ref.channel}" in removed)
 
-            self.save_iteration(M_vals[best], history_z_centers, history_metrics, iteration)
-        
-        self.xyz_sys.move_z(center_z)  # Move to the best focus position
-        self.save_run(histroy_xymaps, history_metrics)
-
-
-if __name__ == "__main__":
-    from devices.nidaq.nidaq_hardware import NIDAQHardWare  # Ensure this module is available
-
-    # Initialize hardware system
-    my_daq = NIDAQHardWare()
-    xyz = stepper_and_galvo_xyz(my_daq)
-    '''
-    class variables that can be set before connection:
-    xyz.com_port = "COM 7"  # Serial port for stepper motor
-    xyz.baud_rate = 115200  # Baud rate for serial communication
-    xyz.motor_rpm = 7  # RPM for the stepper motor
-    '''
-    xyz.connect_system()
-    '''
-    other class parameters that better for the scanning system
-    xyz.x_center, xyz.y_center = 0.483, 0.77  # Center coordinates for scanning
-    xyz.x_range, xyz.y_range = 0.1, 0.1  # Range for scanning in X and Y
-    xyz.x_pts, xyz.y_pts = 51, 51  # Number of points
-    '''
-
-    # Run autofocus logic
-    autofocus = autofocus_logic(xyz)
-    autofocus.save_dir = "./autofocus_results"  # optional path to save output
-
-    print("🔍 Starting autofocus search...")
-    autofocus.set_AutoFocus()
-    print("✅ Autofocus complete.")
+    def _require_connected(self) -> None:
+        if not self.connected:
+            raise RuntimeError("Select the Z position channels first; connect the actuator in its own panel")

@@ -9,7 +9,9 @@ The package is registered startup-only and has hardware-independent tests that i
 ## Scan channels
 
 - getter: `get_power()` returns the driver's power value, normally watts under the default driver unit;
-- setters: none. `set_wavelength_target(value)` only stores a target and does not itself write the device, so discovery does not expose wavelength setting as a scan action.
+- setter: `set_wavelength(value)` synchronously writes the meter's wavelength correction in nanometers and returns after the native driver call completes;
+
+The panel and scan engine share this setter. The panel queues its spin-box value for the TLPM worker; scans call the setter directly. Saved scans made with the broken transitional channel `tlpm_wavelength_target` must be changed to `tlpm_wavelength`.
 
 The UI wavelength value is in nanometers. Indefinite display reads default to 20 Hz.
 
@@ -24,7 +26,7 @@ First-resource selection and reset are explicitly retained compatibility risks. 
 
 ## Lifecycle and safety
 
-Connection errors close partial discovery/device sessions, report failure, reset worker flags, and permit retry. `stop_scan()` saves indefinite-monitor intent and frequency, rejects new UI jobs, requests loop exit, and waits off the GUI thread for up to 10 seconds. `start_scan()` restores that frequency and restarts indefinite monitoring only when it was active before preparation. `force_stop()` requests exit without disconnecting or erasing the saved scan restoration state. `terminate_dev()` uses the same 10-second bound before disconnecting. A native driver call can still exceed the join deadline; that result fails scan preparation or teardown rather than claiming success.
+Connection errors close partial discovery/device sessions, report failure, reset worker flags, and permit retry. Native wavelength and power calls share one lock so UI monitoring and scan calls do not enter the DLL concurrently. `stop_scan()` saves indefinite-monitor intent and frequency, rejects new UI jobs, requests loop exit, and waits off the GUI thread for up to 10 seconds. `start_scan()` restores that frequency and restarts indefinite monitoring only when it was active before preparation. `force_stop()` requests exit without disconnecting or erasing the saved scan restoration state. `terminate_dev()` uses the same 10-second bound before disconnecting. A native driver call can still exceed the join deadline; that result fails scan preparation or teardown rather than claiming success.
 
 Agents must not load/run resource discovery, open/reset a meter, change wavelength, read power, or disconnect it. See [device_contract.md](../../documents/device_contract.md) and [hardware_safety.md](../../documents/hardware_safety.md). Any bench procedure is a **User-executed hardware test**.
 

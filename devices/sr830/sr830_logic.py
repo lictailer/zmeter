@@ -6,6 +6,27 @@ from core.shared_runtime.visa import VisaRuntime
 
 
 class SR830_Logic(QtCore.QThread):
+
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "sensitivity",
+        "time_constant",
+        "frequency",
+        "amplitude",
+        "phase",
+        "ref_input",
+        "ext_trigger",
+        "sync_filter",
+        "harmonic",
+        "input_config",
+        "input_shield",
+        "input_coupling",
+        "notch_filter",
+        "reserve",
+        "filter_slope",
+    )
+
     sig_sensitivity = QtCore.pyqtSignal(object)
     sig_time_constant = QtCore.pyqtSignal(object)
     sig_frequency = QtCore.pyqtSignal(object)

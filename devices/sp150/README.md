@@ -41,7 +41,7 @@ Do not copy the example address into a shared profile without verifying it in th
 
 The logic exposes only `set_wavelength(value)` and `get_wavelength()` to scan discovery. Values must be finite. Reads send `?NM`; writes send `<value> <GOTO>` with two decimal places.
 
-After a write, the logic polls readback until it is within the configured tolerance. Defaults are a 120-second move timeout, 0.25-second interval between queries, and 0.1 nm tolerance. These values are software limits awaiting bench confirmation; changing them requires a separately reviewed driver change after checking the actual grating, drive speed, and safe operating range. Failed writes are not retried automatically.
+Before a move, the logic reads the current wavelength so it can preserve the legacy controller settling behavior: one second for upward moves and ten seconds for downward moves. After that cancellable settling period, it polls readback until it is within the configured tolerance. Empty terminated replies are treated as transient while a move remains inside its timeout; a standalone read retries them twice. Non-empty malformed replies and failed writes are not retried. Defaults are a 120-second move timeout, 0.25-second interval between queries, and 0.1 nm tolerance. These values are software limits awaiting bench confirmation; changing them requires a separately reviewed driver change after checking the actual grating, drive speed, and safe operating range.
 
 Repository-wide scan limits remain separate and are keyed by the stable equipment label plus channel. A lab profile may impose a narrower wavelength range.
 

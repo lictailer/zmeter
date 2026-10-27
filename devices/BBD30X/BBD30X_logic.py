@@ -12,6 +12,13 @@ from .BBD30X_hardware import BBD30x_hardware
 
 
 class BBD30X_Logic(QtCore.QThread):
+
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "pos_mm",
+    )
+
     LIGHT_SPEED_MM_PER_PS = 0.299792458
 
     sig_current_pos = QtCore.pyqtSignal(object)

@@ -5,6 +5,14 @@ import numpy as np
 
 
 class OptiCool_Logic(QtCore.QThread):
+
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "temperature",
+        "field",
+    )
+
     sig_last_temperature = QtCore.pyqtSignal(object)
     sig_last_field = QtCore.pyqtSignal(object)
     sig_setting_temperature = QtCore.pyqtSignal(object)

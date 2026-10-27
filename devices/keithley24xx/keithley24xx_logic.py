@@ -10,6 +10,8 @@ class Keithley24xxLogic(QtCore.QThread):
     sig_new_read = QtCore.pyqtSignal(object)
     sig_on_off = QtCore.pyqtSignal(object)
     sig_last_set = QtCore.pyqtSignal(object)
+    sig_nplc = QtCore.pyqtSignal(object)
+    sig_error = QtCore.pyqtSignal(str)
 
     def __init__(self, visa_runtime: VisaRuntime | None = None):
         QtCore.QThread.__init__(self)
@@ -36,11 +38,18 @@ class Keithley24xxLogic(QtCore.QThread):
         self.do_close = False
         self.force_stop = False
         self.do_reset = False
+        self.do_set_nplc = False
 
     def initialize(self, addr):
         self.k24xxHardware.initialize(addr)
         self.sour_func_to_volt()
         self.sens_func_to_curr()
+        try:
+            self.refresh_measurement_nplc()
+        except Exception as exc:
+            # NPLC readback should not turn an otherwise successful connection
+            # into a failed connection.
+            self.sig_error.emit(f"Could not read NPLC after connecting: {exc}")
     # ---------------------------- sour ----------------------------
 
     def sour_func_to_volt(self):
@@ -99,6 +108,18 @@ class Keithley24xxLogic(QtCore.QThread):
     def get_current(self):
         self.sens_func_to_curr()
         return self.read()
+
+    def configure_measurement_nplc(self, value):
+        """Program and publish the shared voltage/current NPLC setting."""
+        readback = self.k24xxHardware.set_measurement_nplc(value)
+        self.sig_nplc.emit(readback)
+        return readback
+
+    def refresh_measurement_nplc(self):
+        """Read and publish the instrument's voltage/current NPLC values."""
+        readback = self.k24xxHardware.get_measurement_nplc()
+        self.sig_nplc.emit(readback)
+        return readback
 
     # --------------------------------------------------------------
 
@@ -179,6 +200,10 @@ class Keithley24xxLogic(QtCore.QThread):
         
     def reset(self):
         self.k24xxHardware.reset()
+        try:
+            self.refresh_measurement_nplc()
+        except Exception as exc:
+            self.sig_error.emit(f"Could not read NPLC after reset: {exc}")
 
     def update_points_per_sec(self, pps: float):
         """Update the number of points sent to the instrument per second.
@@ -224,6 +249,11 @@ class Keithley24xxLogic(QtCore.QThread):
             self.sig_on_off.emit(False)
         elif self.do_reset:
             self.reset()
+        elif self.do_set_nplc:
+            try:
+                self.configure_measurement_nplc(self.requested_nplc)
+            except Exception as exc:
+                self.sig_error.emit(f"Could not set NPLC: {exc}")
         self.reset_flags()
 
 # Direct hardware demonstration entry point intentionally removed.

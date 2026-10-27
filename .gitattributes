@@ -1,0 +1,3 @@
+# These vendor data files are SHA-256/size checked. Preserve exact bytes in
+# checkouts AND git archives instead of normalizing manufacturer CRLF endings.
+core/shared_runtime/vendor/thorlabs_kinesis/*.xml -text -diff

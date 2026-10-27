@@ -157,9 +157,14 @@ The flat `devices/` package contains integrations or experimental work for sever
 | NI data acquisition | `nidaq`, `ni6423` |
 | Source meters and multimeters | `keithley24xx`, `hp34401a` |
 | Lock-in amplifiers | `sr830` (official maintained implementation), `sr860` |
-| Cryostats/environment control | `opticool`, `montana2`, `four9` |
-| Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X` |
-| Positioning/autofocus | `auto_focus`, `auto_position`, `autofocus_xuguo`, `ANC300` |
+| Cryostats/environment control | `opticool`, `montana2`, `four9`, `attodry` |
+| Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `mc2000b`, `spectraphysicsx3_laser` |
+| Positioning/autofocus | `arduino_steppers`, `auto_focus`, `auto_position`, `ANC300` (unregistered) |
+
+The [MS integration notes](documents/ms_lab_integration.md) list changes from
+beta.4, optional dependencies, disabled example rows, compatibility and testing.
+Retired autofocus prototypes are under `archive/legacy-autofocus/`, not parallel
+active devices. This development branch is not itself a published release.
 
 Treat this as a source inventory, not a compatibility or validation matrix. Check the current module, its dependencies, and its lifecycle behavior before selecting it in the workbook.
 

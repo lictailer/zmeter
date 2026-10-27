@@ -20,6 +20,9 @@ class SP150(QtWidgets.QWidget):
         move_timeout_s: float = 120.0,
         poll_interval_s: float = 0.25,
         completion_tolerance_nm: float = 0.1,
+        upward_settle_s: float = 1.0,
+        downward_settle_s: float = 10.0,
+        empty_response_retries: int = 2,
     ) -> None:
         super().__init__()
         uic.loadUi(str(Path(__file__).with_name("sp150.ui")), self)
@@ -28,6 +31,9 @@ class SP150(QtWidgets.QWidget):
             move_timeout_s=move_timeout_s,
             poll_interval_s=poll_interval_s,
             completion_tolerance_nm=completion_tolerance_nm,
+            upward_settle_s=upward_settle_s,
+            downward_settle_s=downward_settle_s,
+            empty_response_retries=empty_response_retries,
         )
         self._connect_signals()
         self.label_3.setText("ready")

@@ -27,6 +27,12 @@ DEFAULT_STABLE_POLL_INTERVAL_S = 1.0
 class Four9Logic(QtCore.QThread):
     """Expose Four9 scan channels while keeping GUI requests asynchronous."""
 
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "temperature",
+    )
+
     sig_temperature = QtCore.pyqtSignal(object)
     sig_target_temperature = QtCore.pyqtSignal(object)
     sig_temperature_stable = QtCore.pyqtSignal(bool, str)

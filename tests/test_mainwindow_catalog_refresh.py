@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 import os
 import tempfile
 import unittest
@@ -13,7 +14,8 @@ import numpy as np
 from PyQt6 import QtWidgets
 
 import start_zmeter
-from devices.autofocus_xuguo.autofocusXZ_hardware import AutoPositionXZHardware
+from devices.auto_position.position_main import AutoPositionMain
+from core.measurement_io import Channel
 from core.device_catalog import (
     DeviceCatalogBusyError,
     DeviceCatalogError,
@@ -783,18 +785,20 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         self.assertFalse(self.window._catalog_mutation_in_progress)
 
     def test_command_client_and_autofocus_shape_detach_are_idempotent(self):
-        hardware = AutoPositionXZHardware()
-        hardware.configure_command_router(
+        panel = self._track(AutoPositionMain())
+        panel.configure_command_router(
             self.window.command_router,
             source_device="feature_autoposition",
         )
-        client = hardware._ensure_client()
+        client = DeviceCommandClient(self.window.command_router, "feature_autoposition")
         self.assertIsInstance(client, DeviceCommandClient)
 
-        hardware.detach_command_router()
-        hardware.detach_command_router()
-        self.assertIsNone(hardware.command_router)
-        self.assertIsNone(hardware._client)
+        panel.detach_command_router()
+        panel.detach_command_router()
+        self.assertIsNone(panel.logic.router)
+        self.assertIsNone(panel._router)
+        client.close()
+        client.close()
         with self.assertRaisesRegex(RuntimeError, "closed"):
             client.request_catalog()
         forwarded_catalogs = []
@@ -806,22 +810,24 @@ class MainWindowCatalogRefreshTests(unittest.TestCase):
         self.assertEqual(forwarded_catalogs, [])
         self.assertEqual(late_responses, [])
 
-        hardware.set_position_channels(
-            "mock_device_1",
-            "channel_A",
-            "mock_device_2",
-            "channel_B",
-        )
-        hardware.set_reference_channel("mock_device_1", "random_channel")
-        references = hardware.find_catalog_references(
+        geometry = replace(panel.logic.settings.map,
+                           x=Channel("mock_device_1", "channel_A"),
+                           y=Channel("mock_device_2", "channel_B"),
+                           signal=Channel("mock_device_1", "random_channel"))
+        settings = replace(panel.logic.settings, map=geometry)
+        panel.logic.apply_settings(settings)
+        panel.load_controls(settings)
+        references = panel.find_catalog_references(
             removed_setters={"mock_device_1_channel_A"},
             removed_getters={"mock_device_1_random_channel"},
         )
         self.assertEqual(
             references,
             (
-                "autoposition x setter: mock_device_1_channel_A",
-                "autoposition reference getter: mock_device_1_random_channel",
+                "auto-position panel selection: mock_device_1/channel_A",
+                "auto-position panel selection: mock_device_1/random_channel",
+                "auto-position uses mock_device_1/channel_A",
+                "auto-position uses mock_device_1/random_channel",
             ),
         )
 

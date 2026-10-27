@@ -27,3 +27,9 @@ data/
 
 # Editor settings
 .vscode/
+
+# Local authoring/OS artifacts and non-redistributable vendor installers
+.DS_Store
+*.inspect.ndjson
+*.whl
+outputs/

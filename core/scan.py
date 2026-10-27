@@ -15,6 +15,17 @@ from .all_plots import LinePlot
 from .all_plots import ImagePlot
 import os, shutil
 from .append_to_ppt import add_slide_with_png_bytes, add_slide_with_qpixmap
+from .setup_capture import runtime as setup_runtime
+from .setup_capture import questionnaire as setup_questionnaire
+from .setup_capture.snapshot import changed_fields as setup_changed_fields
+from .setup_capture.widgets import (
+    TAB_TITLE as QUESTIONNAIRE_TAB_TITLE,
+    QuestionnaireTab,
+    questionnaire_data_from_info,
+    sync_questionnaire_to_info,
+)
+
+SETUP_FORMAT_VERSION = 2
 
 
 _AVERAGE_GETTER_REFERENCE = re.compile(r"^level(\d+)_average_(.+)$")
@@ -71,6 +82,7 @@ class _OutputJobResult:
     messages: tuple[tuple[str, str], ...]
     timings: tuple[tuple[str, float], ...]
     restore_error: Exception | None = None
+    json_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -293,7 +305,11 @@ def _persist_scan_outputs(snapshot):
             messages.append(("WARNING", "JSON backup skipped: drive Z: not found."))
         timings.append(("JSON backup copy", time.perf_counter() - started))
 
-    return _OutputJobResult(tuple(messages), tuple(timings))
+    return _OutputJobResult(
+        tuple(messages),
+        tuple(timings),
+        json_path=json_path if json_written else None,
+    )
 
 
 class Scan(QtWidgets.QWidget):
@@ -313,6 +329,7 @@ class Scan(QtWidgets.QWidget):
         self.logic.sig_update_remaining_points.connect(self.update_remaining_points_label)
         self.logic.sig_auto_backup.connect(self.auto_backup)
         self.logic.sig_scan_error.connect(self.handle_scan_error)
+        self.logic.sig_setup_snapshot.connect(self._on_setup_snapshot)
 
         
         self.main_window=main_window
@@ -423,6 +440,7 @@ class Scan(QtWidgets.QWidget):
             terminal_signal.connect(self.scan_finished)
         else:
             self.logic.sig_scan_finished.connect(self.scan_finished)
+        self._init_questionnaire_tab()
 
     @property
     def outputs_finalized(self) -> bool:
@@ -629,6 +647,7 @@ class Scan(QtWidgets.QWidget):
 
 
     def scan_finished(self, _terminal_result=None):
+        setup_runtime.release_scan_devices(id(self))
         status = self._get_finish_status()
         elapsed_seconds = self._get_elapsed_seconds()
         elapsed_str = str(_dt.timedelta(seconds=elapsed_seconds)) if elapsed_seconds is not None else "unknown"
@@ -780,12 +799,17 @@ class Scan(QtWidgets.QWidget):
             restore_error = exc
         timings.append(("device restore", time.perf_counter() - started))
 
+        json_path = None
         if snapshot is not None:
             output_result = _persist_scan_outputs(snapshot)
             messages.extend(output_result.messages)
             timings.extend(output_result.timings)
+            json_path = output_result.json_path
         return _OutputJobResult(
-            tuple(messages), tuple(timings), restore_error=restore_error
+            tuple(messages),
+            tuple(timings),
+            restore_error=restore_error,
+            json_path=json_path,
         )
 
     def _finalize_scan_outputs(self):
@@ -825,6 +849,8 @@ class Scan(QtWidgets.QWidget):
                         f"{type(result.restore_error).__name__}: "
                         f"{result.restore_error}"
                     )
+                if result.json_path:
+                    self._on_scan_file_saved(result.json_path)
 
             if snapshot is not None:
                 current_serial = self.main_window.scanlist.serial.value()
@@ -1332,6 +1358,7 @@ class Scan(QtWidgets.QWidget):
         try:
             self.logic.reset_flags()
             self.logic.go_scan = True
+            self._prepare_setup_capture(self._participating_device_ids)
             self.update_all_plots()
             self._set_scan_state("running")
             self.logic.start()
@@ -1352,6 +1379,7 @@ class Scan(QtWidgets.QWidget):
 
     def _begin_start_rollback(self, error):
         self._last_start_error = error
+        setup_runtime.release_scan_devices(id(self))
         self.handle_scan_error(
             f"Scan start failed: {type(error).__name__}: {error}"
         )
@@ -1886,6 +1914,7 @@ class Scan(QtWidgets.QWidget):
         try:
             write_json_snapshot(fileName)
             self._log_info(f"Manual save succeeded: {fileName}")
+            self._on_scan_file_saved(fileName)
 
             if os.path.exists(r"Z:\\"):
                 backup_sub = self._backup_subfolder()
@@ -1942,6 +1971,7 @@ class Scan(QtWidgets.QWidget):
                 raise ValueError("Loaded file did not contain a scan dictionary.")
 
             self.info = loaded_info
+            self.last_saved_json_path = fileName
             self.info.setdefault("comments", "")
             self.info.setdefault("scan_log", [])
             if not isinstance(self.info.get("scan_log"), list):
@@ -2017,6 +2047,7 @@ class Scan(QtWidgets.QWidget):
                     if isinstance(w, ImagePlot):
                         w.load_image(data, setters_targets_len_FEL)
 
+        self._bind_questionnaire_tab()
         self._replace_current_scan_log(loaded_log_lines)
         for line in loaded_log_lines:
             self._append_log_entry(line, include_timestamp=False, persist_current_run=False)
@@ -2068,6 +2099,252 @@ class Scan(QtWidgets.QWidget):
         self.scan_point_info_2.setText(f"Finished / Total Points: {point_str}")
         self.scan_point_info_3.setText(f"Finished / Total Points: {point_str}")
     
+    # ------------------------------------------------------ setup capture --
+    def _setup_controller(self):
+        return getattr(self.main_window, "setup_capture", None)
+
+    def _init_questionnaire_tab(self):
+        self.queue_questionnaire_active = False
+        self.last_saved_json_path = None
+        self._saved_this_run = False
+        self.setup_run_count = 0
+        self._questionnaire_request = None
+        self.questionnaire_tab = QuestionnaireTab(self)
+        index = self.ScanTab.indexOf(self.Plots1Tab)
+        self.ScanTab.insertTab(index, self.questionnaire_tab, QUESTIONNAIRE_TAB_TITLE)
+        self.questionnaire_tab.sig_ask_now.connect(self.when_ask_questions_clicked)
+        self.questionnaire_tab.sig_save_answers.connect(self.when_save_answers_clicked)
+        self.questionnaire_tab.sig_edited.connect(self._on_questionnaire_edited)
+        self.questionnaire_tab.sig_enabled_changed.connect(
+            lambda _checked: self._sync_questionnaire_to_info()
+        )
+        self._bind_questionnaire_tab()
+
+    def _bind_questionnaire_tab(self):
+        self._questionnaire_request = None
+        self.questionnaire_tab.bind(questionnaire_data_from_info(self.info))
+        self._sync_questionnaire_to_info()
+        self._update_questionnaire_tab_title()
+
+    def _sync_questionnaire_to_info(self):
+        sync_questionnaire_to_info(self.info, self.questionnaire_tab.data)
+
+    def _update_questionnaire_tab_title(self):
+        index = self.ScanTab.indexOf(self.questionnaire_tab)
+        items = self.questionnaire_tab.items()
+        title = QUESTIONNAIRE_TAB_TITLE
+        if items:
+            title += f" ({len(items)})"
+        self.ScanTab.setTabText(index, title)
+
+    def _prepare_setup_capture(self, device_ids):
+        """Build this run's snapshot plan on the UI thread; never blocks a scan."""
+        self.logic.setup_capture = None
+        self.last_saved_json_path = None
+        self._saved_this_run = False
+        self.setup_run_count += 1
+        controller = self._setup_controller()
+        self.info["format_version"] = SETUP_FORMAT_VERSION
+        setup = {
+            "snapshot_start": None,
+            "snapshot_end": None,
+            "changed_during_scan": [],
+            "description": dict(controller.description) if controller else {},
+        }
+        self.info["setup"] = setup
+        try:
+            run = setup_runtime.SnapshotRun(
+                self.main_window,
+                device_ids,
+                self.info.get("levels"),
+                scan_key=id(self),
+                lab_folder=controller.lab_folder if controller else None,
+            )
+        except Exception as exc:
+            setup["error"] = f"{type(exc).__name__}: {exc}"
+            self._log_warning(f"Setup snapshot unavailable: {setup['error']}")
+            return
+        setup["lab_context_version"] = run.lab_context_version
+        if run.config_note:
+            setup["config_note"] = run.config_note
+            self._log_warning(f"Snapshot channel file ignored: {run.config_note}")
+        setup_runtime.register_scan_devices(id(self), device_ids)
+        self.logic.setup_capture = run
+
+    @QtCore.pyqtSlot(str, object)
+    def _on_setup_snapshot(self, kind, snapshot):
+        setup = self.info.setdefault("setup", {})
+        setup[f"snapshot_{kind}"] = snapshot
+        devices = (snapshot or {}).get("devices", {}) or {}
+        fields = sum(len(entry.get("fields", {}) or {}) for entry in devices.values())
+        skipped = sum(1 for entry in devices.values() if entry.get("skipped"))
+        summary = f"Setup snapshot ({kind}): {len(devices)} devices, {fields} values"
+        if skipped:
+            summary += f", {skipped} listed without values"
+        if snapshot and snapshot.get("error"):
+            summary += f", error: {snapshot['error']}"
+        self._log_info(summary + ".")
+        if kind == "end":
+            changed = setup_changed_fields(setup.get("snapshot_start"), snapshot)
+            setup["changed_during_scan"] = changed
+            if changed:
+                self._log_warning(
+                    "Settings changed during the scan: " + ", ".join(changed[:20])
+                )
+            return
+        if self.questionnaire_tab.enabled and not self.queue_questionnaire_active:
+            self._generate_questions(snapshot)
+
+    def when_ask_questions_clicked(self):
+        setup = self.info.get("setup") or {}
+        self._generate_questions(setup.get("snapshot_start"))
+
+    def _generate_questions(self, snapshot):
+        controller = self._setup_controller()
+        if controller is None:
+            self.questionnaire_tab.set_busy("Setup capture is not available in this window.")
+            return
+        self.update_alllevel_setting_array()
+        plan = copy.deepcopy([setup_questionnaire.summarize_scan(self.info)])
+        previous = controller.previous_items_for(self.questionnaire_tab.items())
+        token = object()
+        self._questionnaire_request = token
+        self.questionnaire_tab.set_busy(f"Asking {controller.model} for setup questions...")
+        controller.generate_async(
+            mode="scan",
+            plan=plan,
+            snapshot=copy.deepcopy(snapshot),
+            previous_items=previous,
+            previous_inferences=copy.deepcopy(self.questionnaire_tab.inferences()),
+            callback=lambda record, token=token: self._on_questions_ready(record, token),
+        )
+
+    def _on_questions_ready(self, record, token):
+        if token is not self._questionnaire_request:
+            record.pop(setup_questionnaire.DEBUG_KEY, None)
+            return
+        self._questionnaire_request = None
+        self._save_model_output(record)
+        try:
+            self.questionnaire_tab.set_record(record)
+            self._update_questionnaire_tab_title()
+        except RuntimeError:
+            return  # scan window closed while the model was answering
+        source = record.get("source")
+        count = len(record.get("items") or [])
+        if source == "agent":
+            conclusions = len(record.get("inferences") or [])
+            self._log_info(
+                f"Questionnaire ready: {count} questions, {conclusions} conclusions."
+            )
+        else:
+            self._log_warning(
+                f"Questionnaire model unavailable ({record.get('error')}); "
+                f"showing {count} suggested questions."
+            )
+        self._on_questionnaire_edited()
+
+    def _save_model_output(self, record):
+        """Write the model's prompt and reply to a .md in the data folder."""
+        try:
+            name = self.lineEdit.text() or str(self.info.get("name", "scan"))
+            path = setup_questionnaire.save_model_output(
+                record, setup_runtime.data_folder(self.main_window), name
+            )
+        except Exception as exc:
+            record.pop(setup_questionnaire.DEBUG_KEY, None)
+            self._log_warning(f"Could not save questionnaire model output: {exc}")
+            return
+        if path:
+            self._log_info(f"Questionnaire model output saved: {path}")
+
+    def apply_queue_questionnaire(self, record, queue_meta, *, write_sidecar=False):
+        """Give this scan its own copy of a submitted queue questionnaire."""
+        own = copy.deepcopy(record)
+        own["items"] = setup_questionnaire.copy_items_for_scan(record.get("items") or [])
+        scan_name = self.lineEdit.text() or str(self.info.get("name", ""))
+        own["inferences"] = setup_questionnaire.inferences_for_scan(
+            record.get("inferences") or [], scan_name
+        )
+        self.questionnaire_tab.set_record(own, queue=copy.deepcopy(queue_meta))
+        self.questionnaire_tab.enabled_checkBox.setChecked(True)
+        self._sync_questionnaire_to_info()
+        self._update_questionnaire_tab_title()
+        if write_sidecar and self.last_saved_json_path:
+            self.when_save_answers_clicked()
+        else:
+            self._on_questionnaire_edited()
+
+    def _on_questionnaire_edited(self):
+        self._sync_questionnaire_to_info()
+        if not self.questionnaire_tab.items():
+            self.questionnaire_tab.set_save_state("")
+        elif self._saved_this_run and self.last_saved_json_path:
+            self.questionnaire_tab.set_save_state(
+                "The scan file is already saved. Click Save answers to keep these "
+                "answers next to it."
+            )
+        elif self.logic.isRunning():
+            self.questionnaire_tab.set_save_state(
+                "Answers will be saved in the scan file when the scan finishes."
+            )
+        else:
+            self.questionnaire_tab.set_save_state(
+                "Answers are saved with the scan file (Save), or next to it (Save answers)."
+            )
+
+    def _on_scan_file_saved(self, path):
+        self.last_saved_json_path = path
+        self._saved_this_run = True
+        items = self.questionnaire_tab.items()
+        if items:
+            controller = self._setup_controller()
+            if controller is not None:
+                controller.remember_answers(items)
+            self.questionnaire_tab.set_save_state(f"Answers saved in {os.path.basename(path)}.")
+
+    def setup_sidecar_path(self, path=None):
+        path = path or self.last_saved_json_path
+        if not path:
+            return None
+        return os.path.splitext(path)[0] + ".setup.json"
+
+    def when_save_answers_clicked(self):
+        self._sync_questionnaire_to_info()
+        sidecar = self.setup_sidecar_path()
+        if sidecar is None:
+            self.questionnaire_tab.set_save_state(
+                "The scan file is not saved yet. Answers go into it when the scan saves."
+            )
+            return False
+        payload = {
+            "format_version": 1,
+            "scan_file": os.path.basename(self.last_saved_json_path),
+            "saved_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "questionnaire": self.info.get("questionnaire"),
+            "setup": self.info.get("setup"),
+        }
+        temporary = f"{sidecar}.{os.getpid()}.tmp"
+        try:
+            with open(temporary, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2, default=str)
+            os.replace(temporary, sidecar)
+        except Exception as exc:
+            if os.path.exists(temporary):
+                try:
+                    os.remove(temporary)
+                except OSError:
+                    pass
+            self._log_error(f"Answer save failed: {type(exc).__name__}: {exc}")
+            self.questionnaire_tab.set_save_state(f"Answer save failed: {exc}")
+            return False
+        controller = self._setup_controller()
+        if controller is not None:
+            controller.remember_answers(self.questionnaire_tab.items())
+        self._log_info(f"Answers saved: {sidecar}")
+        self.questionnaire_tab.set_save_state(f"Answers saved to {os.path.basename(sidecar)}.")
+        return True
+
     def auto_backup(self, trigger: bool):
         """Handle auto-backup signal from ScanLogic."""
         if not trigger:

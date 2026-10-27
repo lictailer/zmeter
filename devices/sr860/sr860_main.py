@@ -46,6 +46,12 @@ class SR860(QtWidgets.QWidget):
         # ----- logic / model layer -----
         self.visa_runtime = visa_runtime or VisaRuntime()
         self.logic = SR860_Logic(self.visa_runtime)
+        self.amplitude_ramp_rate_doubleSpinBox.setValue(
+            self.logic.amplitude_ramp_rate_v_per_s
+        )
+        self.dc_ramp_rate_doubleSpinBox.setValue(
+            self.logic.dc_level_ramp_rate_mv_per_s
+        )
         self.visa_refresh = VisaResourceRefresh(
             self.visa_runtime, self.address_cb, self
         )
@@ -99,7 +105,7 @@ class SR860(QtWidgets.QWidget):
         self.logic.sig_R.connect(self.update_R)
         self.logic.sig_Theta.connect(self.update_Theta)
         self.logic.sig_is_changing.connect(self.update_status)
-        self.logic.sig_connected.connect(self.update_status)
+        self.logic.sig_connected.connect(self._handle_connection_status)
         self.logic.sig_log.connect(self._handle_logic_log)
         self.logic.sig_input_shield.connect(self.update_input_shield)
         self.logic.sig_dc_level.connect(self.update_dc_level)
@@ -108,7 +114,9 @@ class SR860(QtWidgets.QWidget):
 
         # ----- connect UI widgets to get/set actions -----
         self.freq_doubleSpinBox.valueChanged.connect(self.set_frequency)
-        self.ampl_doubleSpinBox.valueChanged.connect(self.set_amplitude)
+        self.amplitude_set_pushButton.clicked.connect(
+            self.set_amplitude_from_ui
+        )
         self.time_constant_comboBox.currentIndexChanged.connect(self.set_time_constant)
         self.sensitivity_comboBox.currentIndexChanged.connect(self.set_sensitivity)
         self.auto_scale_pushButton.clicked.connect(self.set_auto_scale)
@@ -120,8 +128,17 @@ class SR860(QtWidgets.QWidget):
         self.sync_filter_checkBox.stateChanged.connect(self.set_sync_filter)
         self.harmonic_spinBox.valueChanged.connect(self.set_harmonic)
         self.input_shield_comboBox.currentIndexChanged.connect(self.set_input_shield)
-        self.dclevel_doubleSpinBox.valueChanged.connect(self.set_dc_level)
+        self.dc_level_set_pushButton.clicked.connect(
+            self.set_dc_level_from_ui
+        )
         self.dclevel_mode_comboBox.currentIndexChanged.connect(self.set_dc_level_mode)
+        self.amplitude_ramp_rate_doubleSpinBox.valueChanged.connect(
+            self.set_amplitude_ramp_rate
+        )
+        self.dc_ramp_rate_doubleSpinBox.valueChanged.connect(
+            self.set_dc_ramp_rate
+        )
+        self.stop_ramp_pushButton.clicked.connect(self.stop_ramp_from_ui)
         self.filter_slope_comboBox.currentIndexChanged.connect(self.set_filter_slope)
 
         # voltage / signal input helpers
@@ -146,6 +163,7 @@ class SR860(QtWidgets.QWidget):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.monitor)
         self.stop_signal.connect(self.stop_timer)
+        self.start_signal.connect(self.start_timer)
         self._append_log("SR860 UI ready. Click connect, then start graph to monitor.", level="INFO")
 
     # ------------------------------------------------------------------
@@ -227,7 +245,8 @@ class SR860(QtWidgets.QWidget):
         self._scan_monitor_was_active = False
 
     def force_stop(self):
-        self.logic.request_force_stop()
+        self.logic.request_force_stop("scan/application force-stop")
+        self.logic.interrupt_jobs()
         if QtCore.QThread.currentThread() != self.thread():
             QtCore.QMetaObject.invokeMethod(
                 self,
@@ -242,9 +261,34 @@ class SR860(QtWidgets.QWidget):
     def _force_stop_on_owner(self):
         self.stop_timer()
 
+    def set_amplitude_ramp_rate(self, value):
+        try:
+            rate = self.logic.configure_amplitude_ramp_rate(value)
+        except ValueError as exc:
+            self._append_log(str(exc), level="ERROR")
+            return
+        self._append_log(f"Amplitude ramp rate set to {rate:g} V/s.", level="INFO")
+
+    def set_dc_ramp_rate(self, value):
+        try:
+            rate = self.logic.configure_dc_ramp_rate(value)
+        except ValueError as exc:
+            self._append_log(str(exc), level="ERROR")
+            return
+        self._append_log(f"DC ramp rate set to {rate:g} mV/s.", level="INFO")
+
+    def stop_ramp_from_ui(self, _checked=False):
+        self.logic.request_force_stop("SR860 Stop ramp button")
+
     def update_status(self, txt):
         """Generic label updater for *sig_is_changing* & *sig_connected*."""
         self.status_label.setText(str(txt))
+
+    def _handle_connection_status(self, status):
+        self.update_status(status)
+        if str(status).startswith("connected to ") and not self.logic.isRunning():
+            self.logic.job = "refresh_output_levels"
+            self.logic.start()
 
     def _handle_logic_log(self, payload):
         if isinstance(payload, tuple) and len(payload) == 2:
@@ -280,6 +324,35 @@ class SR860(QtWidgets.QWidget):
     # ------------------------------------------------------------------
     # get_/set_ wrappers (naming follows sr860_logic)
     # ------------------------------------------------------------------
+    def _start_output_ramp(
+        self,
+        *,
+        job,
+        target,
+        state_attribute,
+        update_signal,
+    ):
+        if not self.logic.connected:
+            self._append_log("Cannot ramp SR860 output while disconnected.", level="WARN")
+            update_signal.emit(getattr(self.logic, state_attribute))
+            return
+        if self.logic.isRunning():
+            self._append_log(
+                "Cannot start a new SR860 output ramp while another job is active.",
+                level="WARN",
+            )
+            update_signal.emit(getattr(self.logic, state_attribute))
+            return
+        try:
+            self.logic.prepare_for_manual_ramp()
+        except RuntimeError as exc:
+            self._append_log(str(exc), level="WARN")
+            update_signal.emit(getattr(self.logic, state_attribute))
+            return
+        setattr(self.logic, state_attribute, float(target))
+        self.logic.job = job
+        self.logic.start()
+
     def set_frequency(self, val: float | None = None):
         self.logic.stop()
         self.logic.setpoint_frequency = val if val is not None else self.freq_doubleSpinBox.value()
@@ -296,20 +369,24 @@ class SR860(QtWidgets.QWidget):
         self.freq_doubleSpinBox.blockSignals(False)
 
     # -- amplitude -----------------------------------------------------
+    def set_amplitude_from_ui(self, _checked=False):
+        self.set_amplitude(self.ampl_doubleSpinBox.value())
+
     def set_amplitude(self, val: float | None = None):
-        self.logic.stop()
-        self.logic.setpoint_amplitude = val if val is not None else self.ampl_doubleSpinBox.value()
-        self.logic.job = "set_amplitude"
-        self.logic.start()
+        target = val if val is not None else self.ampl_doubleSpinBox.value()
+        self._start_output_ramp(
+            job="set_amplitude",
+            target=target,
+            state_attribute="setpoint_amplitude",
+            update_signal=self.logic.sig_amplitude,
+        )
 
     def get_amplitude(self):
         self.logic.job = "get_amplitude"
         self.logic.start()
 
     def update_amplitude(self, val):
-        self.ampl_doubleSpinBox.blockSignals(True)
-        self.ampl_doubleSpinBox.setValue(float(val))
-        self.ampl_doubleSpinBox.blockSignals(False)
+        self.amplitude_current_label.setText(f"Current: {float(val):.6g} V")
 
     # -- time-constant -------------------------------------------------
     def set_time_constant(self, idx: int | None = None):
@@ -633,20 +710,24 @@ class SR860(QtWidgets.QWidget):
         pass
 
     # -- dc level -----------------------------------------------------
+    def set_dc_level_from_ui(self, _checked=False):
+        self.set_dc_level(self.dclevel_doubleSpinBox.value())
+
     def set_dc_level(self, val: float | None = None):
-        self.logic.stop()
-        self.logic.setpoint_dc_level = val if val is not None else self.dclevel_doubleSpinBox.value()
-        self.logic.job = "set_dc_level"
-        self.logic.start()
+        target = val if val is not None else self.dclevel_doubleSpinBox.value()
+        self._start_output_ramp(
+            job="set_dc_level",
+            target=target,
+            state_attribute="setpoint_dc_level",
+            update_signal=self.logic.sig_dc_level,
+        )
     
     def get_dc_level(self):
         self.logic.job = "get_dc_level"
         self.logic.start()
     
     def update_dc_level(self, val):
-        self.dclevel_doubleSpinBox.blockSignals(True)
-        self.dclevel_doubleSpinBox.setValue(float(val))
-        self.dclevel_doubleSpinBox.blockSignals(False)
+        self.dc_level_current_label.setText(f"Current: {float(val):.6g} mV")
 
     def set_dc_level_mode(self, idx: int | None = None):
         self.logic.stop()
