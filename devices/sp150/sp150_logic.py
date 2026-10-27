@@ -9,7 +9,7 @@ from typing import Any
 
 from PyQt6 import QtCore
 
-from .sp150_hardware import SP150Hardware
+from .sp150_hardware import SP150EmptyResponseError, SP150Hardware
 
 
 class SP150MoveTimeout(TimeoutError):
@@ -40,6 +40,9 @@ class SP150Logic(QtCore.QThread):
         move_timeout_s: float = 120.0,
         poll_interval_s: float = 0.25,
         completion_tolerance_nm: float = 0.1,
+        upward_settle_s: float = 1.0,
+        downward_settle_s: float = 10.0,
+        empty_response_retries: int = 2,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         super().__init__()
@@ -51,6 +54,19 @@ class SP150Logic(QtCore.QThread):
         self.completion_tolerance_nm = self._positive(
             completion_tolerance_nm, "completion tolerance"
         )
+        self.upward_settle_s = self._nonnegative(
+            upward_settle_s, "upward settle time"
+        )
+        self.downward_settle_s = self._nonnegative(
+            downward_settle_s, "downward settle time"
+        )
+        if isinstance(empty_response_retries, bool) or not isinstance(
+            empty_response_retries, int
+        ):
+            raise TypeError("SP150 empty response retries must be an integer")
+        if empty_response_retries < 0:
+            raise ValueError("SP150 empty response retries cannot be negative")
+        self.empty_response_retries = empty_response_retries
         self._monotonic = monotonic
         self._operation_lock = threading.RLock()
         self._job_lock = threading.Lock()
@@ -92,11 +108,30 @@ class SP150Logic(QtCore.QThread):
         with self._operation_lock:
             self._require_scan_ready()
             self.sig_setting_wavelength.emit(f"moving to {target:.2f} nm")
+            current = self._read_wavelength_with_empty_retries()
             self.hardware.command_wavelength(target)
             deadline = self._monotonic() + self.move_timeout_s
+            settle_s = (
+                self.downward_settle_s
+                if target < current
+                else self.upward_settle_s
+            )
+            self._wait_or_cancel(settle_s)
+            last_readback = current
             while True:
                 self._raise_if_cancelled()
-                actual = self.hardware.read_wavelength()
+                try:
+                    actual = self.hardware.read_wavelength()
+                except SP150EmptyResponseError:
+                    if self._monotonic() >= deadline:
+                        raise SP150MoveTimeout(
+                            "SP150 did not return wavelength data within "
+                            f"{self.move_timeout_s:.2f} s after a move; "
+                            f"last readback was {last_readback:.2f} nm"
+                        )
+                    self._wait_or_cancel(self.poll_interval_s)
+                    continue
+                last_readback = actual
                 self.sig_last_wavelength.emit(actual)
                 if abs(actual - target) <= self.completion_tolerance_nm:
                     return actual
@@ -106,13 +141,12 @@ class SP150Logic(QtCore.QThread):
                         f"{target:.2f} nm within {self.move_timeout_s:.2f} s; "
                         f"last readback was {actual:.2f} nm"
                     )
-                if self._cancel_event.wait(self.poll_interval_s):
-                    raise SP150OperationCancelled("SP150 move cancelled")
+                self._wait_or_cancel(self.poll_interval_s)
 
     def get_wavelength(self):
         with self._operation_lock:
             self._require_scan_ready()
-            value = self.hardware.read_wavelength()
+            value = self._read_wavelength_with_empty_retries()
         self.sig_last_wavelength.emit(value)
         return value
 
@@ -191,6 +225,22 @@ class SP150Logic(QtCore.QThread):
     def _raise_if_cancelled(self) -> None:
         if self._cancel_event.is_set():
             raise SP150OperationCancelled("SP150 operation cancelled")
+
+    def _read_wavelength_with_empty_retries(self) -> float:
+        empty_responses = 0
+        while True:
+            self._raise_if_cancelled()
+            try:
+                return self.hardware.read_wavelength()
+            except SP150EmptyResponseError:
+                if empty_responses >= self.empty_response_retries:
+                    raise
+                empty_responses += 1
+                self._wait_or_cancel(self.poll_interval_s)
+
+    def _wait_or_cancel(self, duration_s: float) -> None:
+        if self._cancel_event.wait(duration_s):
+            raise SP150OperationCancelled("SP150 move cancelled")
 
     @staticmethod
     def _positive(value: float, label: str) -> float:

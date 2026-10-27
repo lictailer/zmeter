@@ -147,7 +147,7 @@ print("Qt options and strict launcher options separated")
 
             manager.teardown_all()
             self.assertEqual(profile.source_path, workbook_path.resolve())
-            self.assertEqual(profile.paths.save, repository_root / "data")
+            self.assertEqual(profile.paths.save, (repository_root / "data").resolve())
 
     def test_disabled_workbook_entry_never_calls_its_registered_factory(self):
         services = RuntimeServices()

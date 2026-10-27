@@ -535,6 +535,30 @@ def opticool_registration() -> DriverRegistration:
     )
 
 
+def attodry_registration() -> DriverRegistration:
+    """Startup-only attoDRY2100; the optional vendor API stays lazy."""
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="attodry",
+            connection_fields={"address": _address_spec()},
+        ),
+        factory=_widget_factory("devices.attodry.attodry_main", "AttoDry"),
+        configure_instance=lambda instance, connection: _prefill_text(
+            instance, "address_lineEdit", connection
+        ),
+        connect=lambda instance, connection, _timeout_ms: instance.connect(
+            _connection_address(connection)
+        ) is True,
+        startup_connect=_pending_widget_connect,
+        disconnect=lambda instance: _call(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.is_connected),
+    )
+
+
 def _tlpm_startup_connect(instance, _connection, _timeout_ms: int):
     if not instance.connect():
         return False
@@ -558,6 +582,149 @@ def tlpm_registration() -> DriverRegistration:
     )
 
 
+def _mc2000b_startup_connect(instance, connection, _timeout_ms: int):
+    if not instance.request_connect(_connection_address(connection)):
+        return False
+    return None
+
+
+def mc2000b_registration() -> DriverRegistration:
+    """Explicit-port serial integration for the Thorlabs MC2000B."""
+
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="mc2000b",
+            connection_fields={"address": _address_spec()},
+        ),
+        factory=_widget_factory("devices.mc2000b.mc2000b_main", "MC2000B"),
+        configure_instance=lambda instance, connection: _prefill_text(
+            instance, "address_lineEdit", connection
+        ),
+        connect=lambda instance, connection, _timeout_ms: instance.connect(
+            _connection_address(connection)
+        ),
+        startup_connect=_mc2000b_startup_connect,
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(
+            instance, "terminate_dev"
+        ),
+        is_connected=lambda instance: bool(instance.logic.connected),
+    )
+
+
+def spectraphysicsx3_laser_registration() -> DriverRegistration:
+    """Explicit-port InSight X3 wavelength integration."""
+
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="spectraphysicsx3_laser",
+            connection_fields={"address": _address_spec()},
+        ),
+        factory=_widget_factory(
+            "devices.spectraphysicsx3_laser.spectraphysicsx3_laser_main",
+            "SpectraPhysicsX3Laser",
+        ),
+        configure_instance=lambda instance, connection: _prefill_text(
+            instance, "address_lineEdit", connection
+        ),
+        connect=lambda instance, connection, _timeout_ms: instance.connect(
+            _connection_address(connection)
+        ),
+        startup_connect=lambda instance, connection, _timeout_ms: (
+            None
+            if instance.request_connect(_connection_address(connection))
+            else False
+        ),
+        disconnect=lambda instance: _call(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(
+            instance, "terminate_dev"
+        ),
+        is_connected=lambda instance: bool(instance.logic.connected),
+    )
+
+
+def auto_focus_registration() -> DriverRegistration:
+    """Configurable autofocus coordinator, with explicit Z connection."""
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="auto_focus",
+            connection_fields={"address": _address_spec()},
+        ),
+        factory=_widget_factory("devices.auto_focus.autofocus_main", "AutofocusMain"),
+        configure_instance=lambda instance, connection: instance.configure_profile(connection),
+        connect=lambda instance, connection, _timeout_ms: instance.logic.connect_z(),
+        startup_connect=lambda instance, connection, _timeout_ms: (
+            None if instance.request_connect() else False
+        ),
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.connected),
+        is_busy=lambda instance: bool(instance.logic.is_busy()),
+    )
+
+
+def auto_position_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(driver_id="auto_position", connection_fields={"address": _address_spec()}),
+        factory=_widget_factory("devices.auto_position.position_main", "AutoPositionMain"),
+        configure_instance=lambda instance, connection: instance.configure_profile(connection),
+        connect=lambda instance, connection, _timeout_ms: instance.logic.check_ready(),
+        startup_connect=lambda instance, connection, _timeout_ms: None if instance.request_connect() else False,
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.connected),
+        is_busy=lambda instance: bool(instance.logic.is_busy()),
+    )
+
+
+def arduino_steppers_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(driver_id="arduino_steppers", connection_fields={"address": _address_spec()}),
+        factory=_widget_factory("devices.arduino_steppers.stepper_main", "ArduinoSteppers"),
+        configure_instance=lambda instance, connection: _prefill_text(instance, "address_lineEdit", connection),
+        connect=lambda instance, connection, _timeout_ms: instance.logic.connect(_connection_address(connection)),
+        startup_connect=lambda instance, connection, _timeout_ms: (
+            None if instance.request_connect(_connection_address(connection)) else False),
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.connected),
+        is_busy=lambda instance: bool(instance.logic.is_busy()),
+    )
+
+
+def nema11_stepper_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(driver_id="nema11_stepper", connection_fields={"address": _address_spec()}),
+        factory=_widget_factory("devices.nema11_stepper.nema11_main", "Nema11Stepper"),
+        configure_instance=lambda instance, connection: _prefill_text(instance, "address_lineEdit", connection),
+        connect=lambda instance, connection, _timeout_ms: instance.logic.connect(_connection_address(connection)),
+        startup_connect=lambda instance, connection, _timeout_ms: (
+            None if instance.request_connect(_connection_address(connection)) else False),
+        disconnect=lambda instance: _call_logic(instance, "disconnect"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        is_connected=lambda instance: bool(instance.logic.connected),
+        is_busy=lambda instance: bool(instance.logic.is_busy()),
+    )
+
+
 def phase2_device_registrations() -> tuple[DriverRegistration, ...]:
     """Return the reviewed Phase 2 startup-only registrations."""
 
@@ -565,5 +732,12 @@ def phase2_device_registrations() -> tuple[DriverRegistration, ...]:
         four9_registration(),
         montana2_registration(),
         opticool_registration(),
+        attodry_registration(),
         tlpm_registration(),
+        mc2000b_registration(),
+        spectraphysicsx3_laser_registration(),
+        auto_focus_registration(),
+        auto_position_registration(),
+        arduino_steppers_registration(),
+        nema11_stepper_registration(),
     )

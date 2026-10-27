@@ -13,6 +13,7 @@ from core.shared_runtime.visa import VisaRuntime
 
 from devices.sp150.sp150_hardware import (
     SP150ConnectionError,
+    SP150EmptyResponseError,
     SP150Hardware,
     SP150ProtocolError,
 )
@@ -132,6 +133,13 @@ class SP150HardwareTests(unittest.TestCase):
         with self.assertRaisesRegex(SP150ProtocolError, "query failed"):
             hardware.read_wavelength()
 
+    def test_empty_response_has_a_distinct_transient_error(self):
+        hardware, _instrument, _manager, _factory = self.make_hardware([""])
+        hardware.connect("GPIB0::11::INSTR")
+
+        with self.assertRaisesRegex(SP150EmptyResponseError, "empty"):
+            hardware.read_wavelength()
+
     def test_failed_connection_and_repeated_disconnect_clean_up(self):
         manager = FakeResourceManager(open_error=RuntimeError("open failed"))
         runtime = VisaRuntime(manager_factory=CountingFactory(manager))
@@ -158,6 +166,8 @@ class SP150LogicTests(unittest.TestCase):
         manager = FakeResourceManager(instrument)
         factory = CountingFactory(manager)
         hardware = SP150Hardware(VisaRuntime(manager_factory=factory))
+        kwargs.setdefault("upward_settle_s", 0)
+        kwargs.setdefault("downward_settle_s", 0)
         logic = SP150Logic(
             hardware,
             poll_interval_s=0,
@@ -184,17 +194,19 @@ class SP150LogicTests(unittest.TestCase):
         self.assertEqual(factory.calls, 0)
 
     def test_move_polls_until_readback_reaches_tolerance(self):
-        logic, instrument, _factory = self.make_logic(["499.0", "499.95"])
+        logic, instrument, _factory = self.make_logic(
+            ["498.0", "499.0", "499.95"]
+        )
         logic.connect("GPIB0::11::INSTR", query_delay_s=0)
 
         self.assertEqual(logic.set_wavelength(500), 499.95)
         self.assertEqual(instrument.writes, ["500.00 <GOTO>"])
-        self.assertEqual(len(instrument.queries), 2)
+        self.assertEqual(len(instrument.queries), 3)
 
     def test_move_timeout_reports_last_readback(self):
         times = iter([0.0, 1.0])
         logic, _instrument, _factory = self.make_logic(
-            ["400.0"], move_timeout_s=0.5, monotonic=times.__next__
+            ["400.0", "400.0"], move_timeout_s=0.5, monotonic=times.__next__
         )
         logic.connect("GPIB0::11::INSTR", query_delay_s=0)
         with self.assertRaisesRegex(SP150MoveTimeout, "last readback was 400.00"):
@@ -209,6 +221,77 @@ class SP150LogicTests(unittest.TestCase):
         self.assertTrue(logic.start_scan())
         self.assertEqual(logic.get_wavelength(), 500.0)
         logic.disconnect()
+
+    def test_stationary_get_retries_transient_empty_responses(self):
+        logic, instrument, _factory = self.make_logic(["", "", "632.8"])
+        logic.connect("GPIB0::11::INSTR", query_delay_s=0)
+
+        self.assertEqual(logic.get_wavelength(), 632.8)
+        self.assertEqual(len(instrument.queries), 3)
+
+    def test_stationary_get_stops_after_bounded_empty_retries(self):
+        logic, instrument, _factory = self.make_logic(["", "", ""])
+        logic.connect("GPIB0::11::INSTR", query_delay_s=0)
+
+        with self.assertRaises(SP150EmptyResponseError):
+            logic.get_wavelength()
+        self.assertEqual(len(instrument.queries), 3)
+
+    def test_move_retries_empty_readback_until_valid_data_arrives(self):
+        logic, instrument, _factory = self.make_logic(
+            ["400.0", "", "500.0"]
+        )
+        logic.connect("GPIB0::11::INSTR", query_delay_s=0)
+
+        self.assertEqual(logic.set_wavelength(500), 500.0)
+        self.assertEqual(len(instrument.queries), 3)
+
+    def test_move_empty_responses_remain_bounded_by_move_timeout(self):
+        times = iter([0.0, 0.25, 1.0])
+        logic, instrument, _factory = self.make_logic(
+            ["400.0", "", ""],
+            move_timeout_s=0.5,
+            monotonic=times.__next__,
+        )
+        logic.connect("GPIB0::11::INSTR", query_delay_s=0)
+
+        with self.assertRaisesRegex(SP150MoveTimeout, "wavelength data"):
+            logic.set_wavelength(500)
+        self.assertEqual(len(instrument.queries), 3)
+
+    def test_move_uses_legacy_direction_dependent_settle_times(self):
+        class RecordingEvent:
+            def __init__(self):
+                self.waits = []
+
+            def is_set(self):
+                return False
+
+            def wait(self, duration):
+                self.waits.append(duration)
+                return False
+
+            def clear(self):
+                pass
+
+            def set(self):
+                pass
+
+        upward, _instrument, _factory = self.make_logic(
+            ["400.0", "500.0"], upward_settle_s=1.0
+        )
+        upward._cancel_event = RecordingEvent()
+        upward.connect("GPIB0::11::INSTR", query_delay_s=0)
+        self.assertEqual(upward.set_wavelength(500), 500.0)
+        self.assertEqual(upward._cancel_event.waits[0], 1.0)
+
+        downward, _instrument, _factory = self.make_logic(
+            ["600.0", "500.0"], downward_settle_s=10.0
+        )
+        downward._cancel_event = RecordingEvent()
+        downward.connect("GPIB0::11::INSTR", query_delay_s=0)
+        self.assertEqual(downward.set_wavelength(500), 500.0)
+        self.assertEqual(downward._cancel_event.waits[0], 10.0)
 
     @staticmethod
     def _has_scan_signature(method, name):

@@ -2,7 +2,7 @@
 
 ## Purpose and status
 
-This package controls a Keithley 24xx-family source-measure unit through the shared `VisaRuntime`. It supports voltage or current sourcing, voltage or current sensing, a software voltage ramp, live UI reads, and output shutdown on close. Shared-session lifecycle and offscreen construction have fake coverage; model-by-model hardware validation remains pending.
+This package controls a Keithley 24xx-family source-measure unit through the shared `VisaRuntime`. It supports voltage or current sourcing, voltage or current sensing, a software voltage ramp, configurable measurement integration (NPLC), live UI reads, and output shutdown on close. Shared-session lifecycle and offscreen construction have fake coverage; model-by-model hardware validation remains pending.
 
 It is registered under driver ID `keithley24xx` with required connection field
 `address`. For first commissioning keep `connect_on_start=false`; a later
@@ -28,6 +28,14 @@ The default software voltage ramp is 1 V/s with 100 updates/s. `force_stop` is c
 
 Default sensing compliance arguments are 200 V for voltage sensing and `1e-5` A for current sensing. They are code defaults, not experiment-approved protection values. The hardware layer does not enforce explicit source limits; configure matching device and `scan_range_limits.json` limits before use.
 
+## Measurement integration (NPLC)
+
+The panel provides one **Integration** value from 0.01 to 10 NPLC and applies it to both voltage and current measurements. The 2400 treats NPLC globally; the 2450 can retain separate values by measurement function, so programming both functions keeps switching behavior consistent. The panel reads the two settings on connection and reads them back after each change. If they differ, both values are displayed.
+
+NPLC is normalized to the power-line period: 1 NPLC is approximately 16.7 ms at 60 Hz or 20 ms at 50 Hz, excluding ranging, source delay, transfer, and other measurement overhead. Higher values generally improve line-frequency noise rejection but make every reading—and therefore scans—slower. This is a session setting and is not persisted in ZMeter configuration or scan files.
+
+The driver uses SCPI commands. A 2450 must be configured for its SCPI command set (including the supported 2400-compatible SCPI mode), not TSP-only operation.
+
 ## Setup and lifecycle
 
 - Python: PyQt6, PyVISA, NumPy, pyqtgraph;
@@ -42,4 +50,4 @@ Agents must not enumerate VISA resources, connect, enable output, source, ramp, 
 
 Hardware-independent syntax check: `python -B -m py_compile devices/keithley24xx/keithley24xx_hardware.py devices/keithley24xx/keithley24xx_logic.py devices/keithley24xx/keithley24xx_main.py`.
 
-**User-executed hardware test:** isolate the SMU from the experiment and attach a suitable dummy load; set reviewed compliance and source limits on the instrument; connect to the explicit VISA address; command 0 V; ramp only to a user-approved low target; request stop during a second ramp and record the last actual value; test one bounded current-source/readback case; terminate; and verify output is off with an independent meter. Do not use the scan engine until this sequence passes.
+**User-executed hardware test:** isolate the SMU from the experiment and attach a suitable dummy load; set reviewed compliance and source limits on the instrument; connect to the explicit VISA address; verify the displayed NPLC readback; set 0.01, 1, and 10 NPLC and confirm each front-panel value/readback; command 0 V; ramp only to a user-approved low target; request stop during a second ramp and record the last actual value; test one bounded current-source/readback case; terminate; and verify output is off with an independent meter. Do not use the scan engine until this sequence passes.

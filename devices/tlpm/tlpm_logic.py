@@ -1,6 +1,8 @@
 from PyQt6 import QtCore
 import time
 import ctypes
+import math
+import threading
 # from scipy.io import savemat
 from ctypes import cdll, c_long, c_ulong, c_uint32, byref, create_string_buffer, c_bool, c_char_p, c_int, c_int16, c_double, sizeof, c_voidp
 from .tlpm_hardware import TLPM_Hardware
@@ -21,6 +23,8 @@ class TLPMLogic(QtCore.QThread):
     def __init__(self):
         QtCore.QThread.__init__(self)
         self.is_connected = False
+        self._hardware_lock = threading.RLock()
+        self.target = None
         self.reset_flags()
         self.freq = 20
 
@@ -87,21 +91,37 @@ class TLPMLogic(QtCore.QThread):
         self.sig_connect.emit(True)
 
     def disconnect(self):
-        if not self.is_connected:
-            return
-        self.hardware.close()
+        with self._hardware_lock:
+            if not self.is_connected:
+                return
+            self.hardware.close()
+            self.is_connected = False
         self.sig_connect.emit(False)
-        self.is_connected = False
 
-    def set_wavelength_target(self, target):
-        self.target = target
+    def queue_wavelength(self, target):
+        """Store a validated UI target for the TLPM worker thread."""
+        self.target = self._wavelength_value(target)
 
     def change_wavelength(self):
-        self.hardware.setWavelength(ctypes.c_double(self.target))
+        if self.target is None:
+            raise RuntimeError("TLPM wavelength target has not been set")
+        return self.set_wavelength(self.target)
+
+    def set_wavelength(self, wavelength_nm):
+        """Synchronously set the meter's wavelength correction in nanometers."""
+        value = self._wavelength_value(wavelength_nm)
+        with self._hardware_lock:
+            if not self.is_connected:
+                raise RuntimeError("TLPM is not connected")
+            self.hardware.setWavelength(ctypes.c_double(value))
+        return value
 
     def read_power(self):
         power = c_double()
-        self.hardware.measPower(byref(power))
+        with self._hardware_lock:
+            if not self.is_connected:
+                raise RuntimeError("TLPM is not connected")
+            self.hardware.measPower(byref(power))
         self.sig_power.emit(power.value)
         return power.value
 
@@ -115,8 +135,21 @@ class TLPMLogic(QtCore.QThread):
 
     def get_power(self):
         power = c_double()
-        self.hardware.measPower(byref(power))
+        with self._hardware_lock:
+            if not self.is_connected:
+                raise RuntimeError("TLPM is not connected")
+            self.hardware.measPower(byref(power))
         return power.value
+
+    @staticmethod
+    def _wavelength_value(value):
+        try:
+            converted = float(value)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("TLPM wavelength must be numeric") from exc
+        if not math.isfinite(converted):
+            raise ValueError("TLPM wavelength must be finite")
+        return converted
     
     def run(self):
         was_connect = self.do_connect

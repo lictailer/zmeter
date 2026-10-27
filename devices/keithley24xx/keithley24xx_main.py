@@ -45,10 +45,13 @@ class Keithley24xx(QtWidgets.QWidget):
         self.stop_btn.clicked.connect(self.force_stop)
         self.reset_btn.clicked.connect(self.reset)
         self.ramp_rate_pb.clicked.connect(self.set_ramp_rate)
+        self.nplc_set_btn.clicked.connect(self.set_nplc_from_ui)
 
         self.logic.sig_last_set.connect(self.update_set)
         self.logic.sig_new_read.connect(self.update_read)
         self.logic.sig_on_off.connect(self.on_off_label)
+        self.logic.sig_nplc.connect(self.update_nplc)
+        self.logic.sig_error.connect(self.report_error)
 
     def force_stop(self):
         # Stop request is only meaningful while a voltage ramp is active.
@@ -66,6 +69,41 @@ class Keithley24xx(QtWidgets.QWidget):
         self.logic.ramp_rate = val
         # Maintain backward-compatibility for any code that still reads volt_ramp_step
         self.logic.volt_ramp_step = val / self.logic.points_per_sec
+
+    def set_nplc_from_ui(self):
+        self.request_measurement_nplc(float(self.nplc_spinBox.value()))
+
+    def request_measurement_nplc(self, value):
+        if not self.is_connected:
+            print("device not connected")
+            return
+        if self.logic.isRunning():
+            print("device is busy; NPLC was not changed")
+            return
+        self.logic.requested_nplc = value
+        self.logic.do_set_nplc = True
+        self.logic.start()
+
+    def update_nplc(self, readback):
+        voltage_nplc, current_nplc = readback
+        if np.isclose(voltage_nplc, current_nplc, rtol=0.0, atol=1e-9):
+            nplc = voltage_nplc
+            milliseconds_60_hz = nplc / 60.0 * 1000.0
+            milliseconds_50_hz = nplc / 50.0 * 1000.0
+            text = (
+                f"Current: {nplc:g} NPLC "
+                f"(~{milliseconds_60_hz:g} ms @60 Hz / "
+                f"{milliseconds_50_hz:g} ms @50 Hz)"
+            )
+        else:
+            text = (
+                f"Current: voltage {voltage_nplc:g} NPLC, "
+                f"current {current_nplc:g} NPLC"
+            )
+        self.nplc_current_label.setText(text)
+
+    def report_error(self, message):
+        print(f"Keithley24xx error: {message}")
 
     def update_sour_func(self, t):
         if t == "volt":
@@ -136,6 +174,7 @@ class Keithley24xx(QtWidgets.QWidget):
         else:
             t = "OFF"
             self.is_connected = False
+            self.nplc_current_label.setText("Current: -- NPLC")
         self.label_on_off.setText(t)
 
     def set_curr(self, val):
