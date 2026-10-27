@@ -92,7 +92,7 @@
        </property>
       </widget>
      </item>
-     <item row="7" column="0" colspan="4">
+     <item row="8" column="0" colspan="4">
       <widget class="QTextEdit" name="logStatus_textEdit"/>
      </item>
      <item row="4" column="2">
@@ -196,7 +196,7 @@
        </property>
       </widget>
      </item>
-     <item row="7" column="5">
+     <item row="8" column="5">
       <spacer name="verticalSpacer">
        <property name="orientation">
         <enum>Qt::Vertical</enum>
@@ -232,7 +232,68 @@
         <number>600</number>
        </property>
        <property name="value">
-        <number>180</number>
+        <number>60</number>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="0">
+      <widget class="QLabel" name="label_9">
+       <property name="toolTip">
+        <string>Stable when the last 60 readings satisfy |mean - target| &lt; sqrt(target + 100) / 50 x mean multiplier and std &lt; sqrt(target + 100) / 50 x std multiplier. Targets below 3 K count as stable right away.</string>
+       </property>
+       <property name="text">
+        <string>Stable Multipliers (mean, std)</string>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="1">
+      <widget class="QDoubleSpinBox" name="stableAvgMultiplier_doubleSpinBox">
+       <property name="toolTip">
+        <string>Stable when the last 60 readings satisfy |mean - target| &lt; sqrt(target + 100) / 50 x mean multiplier and std &lt; sqrt(target + 100) / 50 x std multiplier. Targets below 3 K count as stable right away.</string>
+       </property>
+       <property name="decimals">
+        <number>2</number>
+       </property>
+       <property name="minimum">
+        <double>0.010000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>100.000000000000000</double>
+       </property>
+       <property name="singleStep">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="value">
+        <double>0.500000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="2">
+      <widget class="QDoubleSpinBox" name="stableStdMultiplier_doubleSpinBox">
+       <property name="toolTip">
+        <string>Stable when the last 60 readings satisfy |mean - target| &lt; sqrt(target + 100) / 50 x mean multiplier and std &lt; sqrt(target + 100) / 50 x std multiplier. Targets below 3 K count as stable right away.</string>
+       </property>
+       <property name="decimals">
+        <number>2</number>
+       </property>
+       <property name="minimum">
+        <double>0.010000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>100.000000000000000</double>
+       </property>
+       <property name="singleStep">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="value">
+        <double>1.000000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="3">
+      <widget class="QPushButton" name="updateStability_pushButton">
+       <property name="text">
+        <string>update</string>
        </property>
       </widget>
      </item>
