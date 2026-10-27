@@ -9,6 +9,13 @@ from .tlpm_hardware import TLPM_Hardware
 
 
 class TLPMLogic(QtCore.QThread):
+
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "power",
+    )
+
     sig_power = QtCore.pyqtSignal(object)
     sig_info = QtCore.pyqtSignal(str)
     sig_connect = QtCore.pyqtSignal(object)

@@ -21,6 +21,13 @@ class SP150OperationCancelled(RuntimeError):
 
 
 class SP150Logic(QtCore.QThread):
+
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "wavelength",
+    )
+
     sig_last_wavelength = QtCore.pyqtSignal(object)
     sig_setting_wavelength = QtCore.pyqtSignal(str)
     sig_connected = QtCore.pyqtSignal(bool)

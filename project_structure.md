@@ -34,6 +34,8 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/queue_model.py` | Thread-safe live queue entries with stable IDs, ordered pending mutations, current-item ownership, and atomic run completion |
 | `core/scan.py` | Scan editor/window, plot updates, run logging, primary/recovery JSON, save/load/PPT/autosave UI integration |
 | `core/scan_logic.py` | Active recursive scan worker, grouped I/O, timing, progress, pause/stop, cleanup |
+| `core/setup_capture/` | Setup capture: start/end instrument snapshots (`SNAPSHOT_GETTERS` on device logic classes, optional `lab_context/snapshot_channels.json`), the scan window's Questionnaire tab, the queue questionnaire pop-up, the AI model call through the openai SDK (Claude, DeepSeek or any OpenAI-compatible provider) with suggestion fallback, and per-PC settings (one API key per provider in the OS keyring) |
+| `lab_context/` | Hand-edited lab knowledge read by the questionnaire model (`lab_context.md`), suggested questions (`suggested_questions.md`), and an example snapshot-channel override |
 | `core/device_command_router.py` | Cross-device catalog/read/write routing under whole-request manager leases |
 | `core/device_log.py` | Shared in-memory device-log presentation and formatting |
 | `core/measurement_io.py`, `measurement_widgets.py`, `measurement_records.py` | Checked cross-device coordinator routing, channel selectors and unique atomic data/PNG bundles with numeric local-time run keys; no instrument ownership |

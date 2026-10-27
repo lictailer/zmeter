@@ -37,6 +37,8 @@ from .artificial_channel_2d_main import ArtificialChannel2D
 from .device_command_router import DeviceCommandRouter
 from .device_log import append_device_log, configure_device_log
 from .scan_range_main import ScanRangeWindow
+from .setup_capture.controller import SetupCaptureController
+from .setup_capture.widgets import SetupCaptureDialog
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +201,15 @@ class MainWindow(QtWidgets.QWidget):
         self.command_router = DeviceCommandRouter(main_window=self, parent=self)
         self.inject_command_router_metadata()
         self.command_router.publish_catalog(self.device_channel_catalog)
+
+        self.setup_capture = SetupCaptureController(main_window=self, parent=self)
+        self.setup_capture_button = QtWidgets.QPushButton("Setup capture")
+        self.setup_capture_button.setToolTip(
+            "API key, model, experiment description and lab-context files "
+            "for the setup questionnaire"
+        )
+        self.open_button_layout.addWidget(self.setup_capture_button)
+        self.setup_capture_button.clicked.connect(self.open_setup_capture_dialog)
 
         self.scanlist = ScanList(
             info=self.info,
@@ -642,6 +653,10 @@ class MainWindow(QtWidgets.QWidget):
 
     def open_scan_list_window_clicked(self):
         self._show_and_focus_window(self.scanlist)
+
+    def open_setup_capture_dialog(self):
+        dialog = SetupCaptureDialog(self.setup_capture, parent=self)
+        dialog.exec()
 
     def _prepare_device_button_reconciliation(self, equipment):
         """Build a side-effect-minimal button plan before changing the layout."""

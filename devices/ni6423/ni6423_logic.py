@@ -24,6 +24,15 @@ class NI6423Logic(QtCore.QThread):
     - get_AO0..get_AO3()  # AO readback from AI28..AI31
     """
 
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "AO0",
+        "AO1",
+        "AO2",
+        "AO3",
+    )
+
     sig_new_write = QtCore.pyqtSignal(object)          # [channel_name, value]
     sig_new_read = QtCore.pyqtSignal(object)           # [channel_name, value]
     sig_name = QtCore.pyqtSignal(object)               # active device name or "None"

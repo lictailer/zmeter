@@ -141,6 +141,7 @@ class ScanLogic(QtCore.QThread):
     sig_update_remaining_time = QtCore.pyqtSignal(str)      # Time estimate updates
     sig_update_remaining_points = QtCore.pyqtSignal(str)    # Progress tracking updates
     sig_auto_backup = QtCore.pyqtSignal(bool)                   # Auto-backup trigger every hour
+    sig_setup_snapshot = QtCore.pyqtSignal(str, object)     # Setup-capture snapshot ("start"/"end", dict)
 
     # Hardware channel definitions for NI-DAQ analog I/O
     AI = ['AI0', 'AI1', 'AI2', 'AI3', 'AI4', 'AI5', 'AI6', 'AI7']  # Analog input channels
@@ -150,6 +151,7 @@ class ScanLogic(QtCore.QThread):
         QtCore.QThread.__init__(self)
         self.main_window = main_window
         self.participating_device_ids = ()
+        self.setup_capture = None  # optional setup_capture.runtime.SnapshotRun
 
         # --- NEW: pause primitives ---
         self._pause_mutex = QtCore.QMutex()
@@ -817,6 +819,7 @@ class ScanLogic(QtCore.QThread):
             self.main_window.artificial_channel_logic.reset_skip_next_scan_read()
             if hasattr(self.main_window, "reset_skip_next_scan_read_from_global_limit"):
                 self.main_window.reset_skip_next_scan_read_from_global_limit()
+            ScanLogic.take_setup_snapshot(self, "start")
             self.looping(self.max_level)
         except Exception as exc:
             error_message = f"{type(exc).__name__}: {exc}"
@@ -828,6 +831,9 @@ class ScanLogic(QtCore.QThread):
             if hasattr(self.main_window, "reset_skip_next_scan_read_from_global_limit"):
                 self.main_window.reset_skip_next_scan_read_from_global_limit()
             
+            # Read the end snapshot while participating devices are still paused.
+            ScanLogic.take_setup_snapshot(self, "end")
+
             # Surface restart failures without suppressing GUI finalization.
             try:
                 self.main_window.start_equipments(self.participating_device_ids)
@@ -838,6 +844,17 @@ class ScanLogic(QtCore.QThread):
                 )
             finally:
                 self.sig_scan_finished.emit()
+
+    def take_setup_snapshot(self, kind):
+        """Record instrument settings for setup capture; never raises."""
+        run = getattr(self, "setup_capture", None)
+        if run is None:
+            return
+        try:
+            snapshot = run.take()
+        except Exception as exc:
+            snapshot = {"devices": {}, "error": f"{type(exc).__name__}: {exc}"}
+        self.sig_setup_snapshot.emit(kind, snapshot)
 
     def run(self):
         """

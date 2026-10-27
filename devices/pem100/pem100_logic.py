@@ -12,6 +12,14 @@ from .pem100_hardware import PEM100Hardware
 
 
 class PEM100Logic(QtCore.QThread):
+
+    # Read-only getters recorded by setup capture at scan start and end.
+    # Labs can add or remove names in lab_context/snapshot_channels.json.
+    SNAPSHOT_GETTERS = (
+        "wavelength",
+        "retardance",
+    )
+
     sig_last_retardance = QtCore.pyqtSignal(object)
     sig_last_wavelength = QtCore.pyqtSignal(object)
     sig_connected = QtCore.pyqtSignal(bool)

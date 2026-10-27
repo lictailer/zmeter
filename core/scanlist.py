@@ -12,6 +12,7 @@ from PyQt6 import uic
 from .scan import Scan
 from .nested_menu import NestedMenu
 from .queue_model import LiveQueueModel, QueueItemState
+from .setup_capture.queue_session import QueueQuestionnaireSession
 
 
 class ScanListShutdownTimeoutError(TimeoutError):
@@ -1072,6 +1073,16 @@ class ScanList(QtWidgets.QWidget):
         self.scrollArea_past.setWidget(self.list_past)
         self.Layout_delete.insertWidget(0, DeleteItem(owner=self))
 
+        self.queue_questionnaire_checkBox = QtWidgets.QCheckBox("Questionnaire")
+        self.queue_questionnaire_checkBox.setToolTip(
+            "When the queue starts, ask one setup questionnaire for the whole "
+            "queue. Every scan gets its own copy of the answers."
+        )
+        start_index = self.horizontalLayout_4.indexOf(self.start_pushButton)
+        self.horizontalLayout_4.insertWidget(
+            start_index + 1, self.queue_questionnaire_checkBox
+        )
+        self.queue_questionnaire_session = None
         self.start_pushButton.clicked.connect(self.start_queue)
         self.stop_pushButton.clicked.connect(self.stop_current_scan)
         self.stopAfter_pushButton.clicked.connect(self.stop_after_current_scan)
@@ -1141,6 +1152,9 @@ class ScanList(QtWidgets.QWidget):
                 self.queue_model.forget_terminal(entry.entry_id)
             raise
         self._sync_queue_layout()
+        session = getattr(self, "queue_questionnaire_session", None)
+        if session is not None:
+            session.item_added(item)
         return True
 
     def reorder_queue_item(self, item, *, origin_index=None, drop_index=None):
@@ -1318,6 +1332,7 @@ class ScanList(QtWidgets.QWidget):
         if callable(reserve):
             reservation = reserve("queue", f"{pending_count} queued item(s)")
         self._queue_activity_reservation = reservation
+        session = ScanList._prepare_queue_questionnaire(self)
         try:
             self.logic.reset_control_flags()
             if not self.queue_model.begin_run():
@@ -1337,8 +1352,41 @@ class ScanList(QtWidgets.QWidget):
             self._queue_activity_reservation = None
             if reservation is not None:
                 reservation.release()
+            if session is not None:
+                session.queue_finished()
+                self.queue_questionnaire_session = None
             raise
         self._log_info(f"Queue started with {pending_count} item(s).")
+        if session is not None:
+            try:
+                session.start(self.main_window)
+                self._log_info("Queue questionnaire opened.")
+            except Exception as exc:
+                self._log_warning(
+                    f"Queue questionnaire unavailable: {type(exc).__name__}: {exc}"
+                )
+
+    def _prepare_queue_questionnaire(self):
+        """Mark queued scans before the first one starts (queue box wins)."""
+        # Keep earlier sessions alive while their pop-up can still be submitted.
+        kept = [
+            old
+            for old in getattr(self, "_queue_questionnaire_sessions", [])
+            if not old.finished
+        ]
+        self._queue_questionnaire_sessions = kept
+        self.queue_questionnaire_session = None
+        checkbox = getattr(self, "queue_questionnaire_checkBox", None)
+        if checkbox is None or not checkbox.isChecked():
+            return None
+        controller = getattr(self.main_window, "setup_capture", None)
+        if controller is None:
+            return None
+        items = [entry.item for entry in self.queue_model.ordered_queue_entries()]
+        session = QueueQuestionnaireSession(self, controller, items)
+        self.queue_questionnaire_session = session
+        self._queue_questionnaire_sessions.append(session)
+        return session
 
     def stop_current_scan(self):
         if not self.logic.isRunning() and not self.queue_model.is_run_active:
@@ -1442,6 +1490,9 @@ class ScanList(QtWidgets.QWidget):
         # This queued acknowledgement is emitted after the queue's earlier UI
         # signals, so shutdown can prove those mutations have been delivered.
         self._queue_completion_delivered = True
+        session = getattr(self, "queue_questionnaire_session", None)
+        if session is not None:
+            session.queue_finished()
         reservation = getattr(self, "_queue_activity_reservation", None)
         self._queue_activity_reservation = None
         if reservation is not None:
