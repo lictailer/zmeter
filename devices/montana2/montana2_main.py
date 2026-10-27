@@ -41,6 +41,7 @@ class Montana2(QtWidgets.QWidget):
         self.bufferTime_spinBox.valueChanged.connect(self._on_buffer_time_changed)
         self.stopwaiting_pushButton.clicked.connect(self._on_stop_waiting_clicked)
         self.maxStablizingWait_spinBox.valueChanged.connect(self._on_max_stabilizing_wait_changed)
+        self.updateStability_pushButton.clicked.connect(self._on_update_stability_clicked)
         
     # -------------------------------------------------------------
 
@@ -107,6 +108,13 @@ class Montana2(QtWidgets.QWidget):
 
     def _on_max_stabilizing_wait_changed(self, value: int):
         self.logic.stable_wait_timeout_s = value * 60
+
+    def _on_update_stability_clicked(self):
+        # Plain attribute update, so it also applies to a stable wait that is already running.
+        self.logic.update_stability_multipliers(
+            self.stableAvgMultiplier_doubleSpinBox.value(),
+            self.stableStdMultiplier_doubleSpinBox.value(),
+        )
 
     def terminate_dev(self):
         print("Montana terminated.")
