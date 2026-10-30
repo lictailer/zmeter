@@ -36,7 +36,7 @@ class ScanQueueConfigurationLockTests(unittest.TestCase):
             self.scan.all_level_setting,
             self.scan.all_plot_setting,
             self.scan.load_button,
-            self.scan.save_button,
+            self.scan.save_setting_button,
             self.scan.scan_button,
             self.scan.scan_button_1,
             self.scan.scan_button_2,
@@ -89,7 +89,7 @@ class ScanQueueConfigurationLockTests(unittest.TestCase):
         self.assertTrue(all(widget.isEnabled() for widget in self._configuration_widgets()))
 
     def test_lock_is_idempotent_and_restores_each_prior_enabled_state(self):
-        self.scan.save_button.setEnabled(False)
+        self.scan.save_setting_button.setEnabled(False)
         self.scan.scan_button_2.setEnabled(False)
         expected_states = tuple(
             (widget, widget.isEnabled()) for widget in self._configuration_widgets()

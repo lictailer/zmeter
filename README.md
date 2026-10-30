@@ -198,6 +198,7 @@ The default local save directory is `data/`.
 - Existing names receive a numeric suffix rather than being overwritten.
 - JSON stores the scan configuration, setting arrays, acquired data, plot settings, comments, and scan log.
 - NumPy arrays are serialized as lists. Current files may contain Python JSON's unquoted `NaN` literal; the loader also accepts the exact string `"NaN"`. See `documents/data_format.md` before changing this compatibility-sensitive representation.
+- **Save setting** in the scan window writes the scan configuration without data as `scan_setting_<scan-name>.json` (no serial). **Load** opens setting files and data files alike; channels whose device is missing are kept and marked unresolved. See `documents/data_format.md`.
 - Long scans overwrite `autosave.json` in the current save directory at each hourly autosave trigger.
 - The default PPT path is `data/log.pptx`. PPT output requires desktop PowerPoint and may open it visibly.
 - External backup is disabled in the checked-in startup. Current backup handling expects the configured lab backup location and checks for `Z:\` before copying; verify the mapped drive and destination before a measurement.

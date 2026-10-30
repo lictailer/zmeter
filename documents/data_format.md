@@ -58,7 +58,17 @@ or failure is logged; failure of both paths does not add a retry state machine.
 
 Load requires a JSON object. It defaults missing `comments` and `scan_log`, normalizes a non-list log to `[]`, rebuilds the level/plot widgets, rehydrates plot settings, and loads persisted data into line/image plots. Other missing structural fields are not generally migrated.
 
+A file whose `data` is missing or empty loads as a scan setting: `data` becomes `{}`, the log reports `Loaded scan setting`, and the file is not treated as this scan's saved data file, so questionnaire answers are never written next to it.
+
 Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, but a general schema-version migration layer does not exist.
+
+## Scan setting files
+
+**Save setting** in the scan window (below **Load**) writes the current scan configuration without measurement data. The file uses the scan JSON schema above with `data` set to `{}` and `scan_log` set to `[]`. The previous run's `setup` snapshots are left out, and questionnaire answers are dropped; `questionnaire` is kept only as `{"enabled": true, "record": null}` when the questionnaire is switched on. The in-memory scan is not changed.
+
+The save dialog opens in the data folder with `scan_setting_<scan-name>.json` as the default name. There is no serial, so setting files never affect serial discovery. The write is atomic (temporary file, then replace); overwriting an existing setting file is confirmed by the dialog. No backup copy, recovery JSON, or `.setup.json` sidecar is written, and a canceled dialog writes nothing.
+
+Channels that are not in the current device catalog are kept in the loaded scan unchanged. The setter button shows `Unresolved: <channel>`, and Record getters and manual-set channels show `<channel> (unresolved)`. The marks clear when the device's channels are published. Starting a scan with an unresolved channel is not blocked here; it fails during device preparation.
 
 ## Autosave
 
