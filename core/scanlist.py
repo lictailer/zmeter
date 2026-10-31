@@ -1,3 +1,4 @@
+import os
 import sys
 import copy
 import time
@@ -9,7 +10,8 @@ import PyQt6.QtWidgets as QtWidgets
 import PyQt6.QtCore as QtCore
 import PyQt6.QtGui as QtGui
 from PyQt6 import uic
-from .scan import Scan
+from .scan import Scan, data_folder
+from . import queue_settings
 from .nested_menu import NestedMenu
 from .queue_model import LiveQueueModel, QueueItemState
 from .setup_capture.queue_session import QueueQuestionnaireSession
@@ -1096,6 +1098,8 @@ class ScanList(QtWidgets.QWidget):
         self.logic.sig_queue_stopped.connect(self.on_queue_stopped)
         self.logic.finished.connect(self._on_queue_thread_finished)
         self.pb_new_scan.clicked.connect(self.add_empty_scan_item)
+        self.load_queue_setting_pushButton.clicked.connect(self.when_load_queue_setting_clicked)
+        self.save_queue_setting_pushButton.clicked.connect(self.when_save_queue_setting_clicked)
         self.manual_add_item_pushButton.clicked.connect(self.add_manual_set_item_from_ui)
         self._log_ready = True
 
@@ -1585,6 +1589,77 @@ class ScanList(QtWidgets.QWidget):
         )
         self.list_available.add_item(si)
         # self.available_info.append(si.info)
+
+    def when_save_queue_setting_clicked(self):
+        """Save the queue as a folder of numbered setting files."""
+        entries = []
+        for item in self.list_queue.get_widgets():
+            if isinstance(item, ScanItem):
+                entries.append(
+                    queue_settings.scan_entry(item.scan.info.get("name"), item.scan.setting_payload())
+                )
+            elif isinstance(item, ManualSetItem):
+                entries.append(
+                    queue_settings.manual_set_entry(item.channel_name, item.parsed_value())
+                )
+        if not entries:
+            self._log_warning("Queue setting save skipped: the queue is empty.")
+            return None
+
+        stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        folder, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Queue Setting (folder name)",
+            os.path.join(data_folder(self.main_window), f"{queue_settings.QUEUE_FOLDER_PREFIX}{stamp}"),
+            "Queue setting folder (*)",
+        )
+        if not folder:
+            self._log_warning("Queue setting save canceled by user.")
+            return None
+        try:
+            queue_settings.write_queue_folder(folder, entries)
+        except Exception as exc:
+            self._log_error(f"Queue setting save failed: {type(exc).__name__}: {exc}")
+            return None
+        self._log_info(f"Queue setting saved: {folder} ({len(entries)} items).")
+        return folder
+
+    def when_load_queue_setting_clicked(self):
+        """Append the items of a saved queue folder to the end of the queue."""
+        folder = QtWidgets.QFileDialog.getExistingDirectory(
+            self, "Load Queue Setting", data_folder(self.main_window)
+        )
+        if not folder:
+            self._log_warning("Queue setting load canceled by user.")
+            return 0
+        try:
+            entries = queue_settings.read_queue_folder(folder)
+        except Exception as exc:
+            self._log_error(f"Queue setting load failed: {type(exc).__name__}: {exc}")
+            return 0
+        if not entries:
+            self._log_warning(f"Queue setting load: no numbered .json files in {folder}.")
+            return 0
+
+        loaded = 0
+        for kind, path, content in entries:
+            if kind == "manual_set":
+                item = ManualSetItem(*content, main_window=self.main_window)
+            else:
+                item = ScanItem(
+                    name=content.get("name") or "scan",
+                    info=self.info,
+                    setter_equipment_info=self.list_queue.setter_equipment_info,
+                    main_window=self.main_window,
+                    getter_equipment_info=self.list_queue.getter_equipment_info,
+                )
+                item.scan.load_info(content, path)
+            if not self.insert_queue_item(item):
+                item.deleteLater()
+                break
+            loaded += 1
+        self._log_info(f"Queue setting loaded: {folder} ({loaded} of {len(entries)} items).")
+        return loaded
 
     def add_empty_manual_set_item(self):
         if bool(getattr(self, "_shutdown_sealed", False)) or bool(

@@ -145,6 +145,50 @@ def scan_setting_payload(info):
     return payload
 
 
+def write_json_atomic(path, payload):
+    """Write scan JSON through a temporary file so a failure leaves no partial file."""
+    temporary_path = f"{path}.{os.getpid()}.tmp"
+    try:
+        _write_json_payload(temporary_path, payload)
+        os.replace(temporary_path, path)
+    except Exception:
+        if os.path.exists(temporary_path):
+            try:
+                os.remove(temporary_path)
+            except OSError:
+                pass
+        raise
+
+
+def _restore_nan(obj):
+    if isinstance(obj, list):
+        return [_restore_nan(item) for item in obj]
+    if isinstance(obj, dict):
+        return {key: _restore_nan(value) for key, value in obj.items()}
+    if obj == "NaN":
+        return np.nan
+    return obj
+
+
+def read_scan_json(path):
+    """Read a scan data or setting file; the string "NaN" becomes numpy.nan."""
+    with open(path, "r", encoding="utf-8") as file:
+        info = _restore_nan(json.load(file))
+    if not isinstance(info, dict) or not isinstance(info.get("levels"), dict):
+        raise ValueError(f"{os.path.basename(path)} is not a scan file (no levels).")
+    return info
+
+
+def data_folder(main_window):
+    """The data folder from the main window's save path box."""
+    text = main_window.save_info_path.toPlainText().strip()
+    if text:
+        return os.path.normpath(text.strip('"'))
+    if hasattr(main_window, "save_path"):
+        return os.path.normpath(str(main_window.save_path))
+    return os.getcwd()
+
+
 def _write_recovery_payload(snapshot, messages):
     temporary_path = None
     try:
@@ -1954,27 +1998,22 @@ class Scan(QtWidgets.QWidget):
             self._log_error(f"Manual save failed: {type(e).__name__}: {e}")
             write_recovery_snapshot(base_name)
 
-    def _data_folder(self):
-        text = self.main_window.save_info_path.toPlainText().strip()
-        if text:
-            return os.path.normpath(text.strip('"'))
-        if hasattr(self.main_window, "save_path"):
-            return os.path.normpath(str(self.main_window.save_path))
-        return os.getcwd()
-
-    def when_save_setting_clicked(self):
-        """Save the scan configuration, without data, to a file the operator picks."""
+    def setting_payload(self):
+        """The current scan configuration as a setting file (no data)."""
         self.update_alllevel_setting_array()
         self.info["comments"] = self.comments_textEdit.toPlainText()
         self.info["plots_per_page"] = self.PlotsPerPage.currentText()
         self._sync_questionnaire_to_info()
-        payload = scan_setting_payload(self.info)
+        return scan_setting_payload(self.info)
 
+    def when_save_setting_clicked(self):
+        """Save the scan configuration, without data, to a file the operator picks."""
+        payload = self.setting_payload()
         default_name = f"{SCAN_SETTING_PREFIX}{self.info.get('name') or 'scan'}.json"
         fileName, _ = QFileDialog.getSaveFileName(
             self,
             "Save Scan Setting",
-            os.path.join(self._data_folder(), default_name),
+            os.path.join(data_folder(self.main_window), default_name),
             "JSON Files (*.json);;All Files (*)",
         )
         if not fileName:
@@ -1983,16 +2022,9 @@ class Scan(QtWidgets.QWidget):
         if not os.path.splitext(fileName)[1]:
             fileName += ".json"
 
-        temporary_path = f"{fileName}.{os.getpid()}.tmp"
         try:
-            _write_json_payload(temporary_path, payload)
-            os.replace(temporary_path, fileName)
+            write_json_atomic(fileName, payload)
         except Exception as exc:
-            if os.path.exists(temporary_path):
-                try:
-                    os.remove(temporary_path)
-                except OSError:
-                    pass
             self._log_error(
                 f"Setting save failed: {type(exc).__name__}: {exc}",
                 persist_current_run=False,
@@ -2002,19 +2034,6 @@ class Scan(QtWidgets.QWidget):
         return fileName
 
     def when_load_clicked(self):
-        def handle_special_values(value):
-            if value == "NaN":
-                return np.nan
-            return value
-
-        def convert_special_values(obj):
-            if isinstance(obj, list):
-                return [convert_special_values(item) for item in obj]
-            elif isinstance(obj, dict):
-                return {key: convert_special_values(val) for key, val in obj.items()}
-            else:
-                return handle_special_values(obj)
-
         default_dir = self.main_window.save_info_path.toPlainText()
         fileName, _ = QFileDialog.getOpenFileName(
             self,
@@ -2025,38 +2044,40 @@ class Scan(QtWidgets.QWidget):
         if not fileName:
             self._log_warning("Load canceled by user.", persist_current_run=False)
             return
+        self.load_file(fileName)
 
+    def load_file(self, fileName):
+        """Load a scan data or setting file into this window; False if unreadable."""
         try:
-            with open(fileName, "r") as file:
-                content = file.read()
-
-            loaded_info = convert_special_values(json.loads(content))
-            if not isinstance(loaded_info, dict):
-                raise ValueError("Loaded file did not contain a scan dictionary.")
-
-            self.info = loaded_info
-            # A file without measured data is a scan setting: it loads the same
-            # way, but is not this scan's saved data file.
-            if not self.info.get("data"):
-                self.info["data"] = {}
-            is_setting = not self.info["data"]
-            self.last_saved_json_path = None if is_setting else fileName
-            self.info.setdefault("comments", "")
-            self.info.setdefault("scan_log", [])
-            if not isinstance(self.info.get("scan_log"), list):
-                self.info["scan_log"] = []
-
-            ppp_val = self.info.get("plots_per_page", None)
-            if ppp_val is not None:
-                idx = self.PlotsPerPage.findText(str(ppp_val))
-                if idx != -1:
-                    self.PlotsPerPage.setCurrentIndex(idx)
+            loaded_info = read_scan_json(fileName)
         except Exception as e:
             self._log_error(
                 f"Load failed: {type(e).__name__}: {e}",
                 persist_current_run=False,
             )
-            return
+            return False
+        self.load_info(loaded_info, fileName)
+        return True
+
+    def load_info(self, loaded_info, fileName):
+        """Rebuild this window from a scan dictionary read from ``fileName``."""
+        self.info = loaded_info
+        # A file without measured data is a scan setting: it loads the same
+        # way, but is not this scan's saved data file.
+        if not self.info.get("data"):
+            self.info["data"] = {}
+        is_setting = not self.info["data"]
+        self.last_saved_json_path = None if is_setting else fileName
+        self.info.setdefault("comments", "")
+        self.info.setdefault("scan_log", [])
+        if not isinstance(self.info.get("scan_log"), list):
+            self.info["scan_log"] = []
+
+        ppp_val = self.info.get("plots_per_page", None)
+        if ppp_val is not None:
+            idx = self.PlotsPerPage.findText(str(ppp_val))
+            if idx != -1:
+                self.PlotsPerPage.setCurrentIndex(idx)
 
         loaded_log_lines = list(self.info.get("scan_log", []))
 

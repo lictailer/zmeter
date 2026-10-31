@@ -70,6 +70,21 @@ The save dialog opens in the data folder with `scan_setting_<scan-name>.json` as
 
 Channels that are not in the current device catalog are kept in the loaded scan unchanged. The setter button shows `Unresolved: <channel>`, and Record getters and manual-set channels show `<channel> (unresolved)`. The marks clear when the device's channels are published. Starting a scan with an unresolved channel is not blocked here; it fails during device preparation.
 
+## Queue setting folders
+
+**Save queue setting** (under the queue list) writes every item in the queue, in order, into a new or empty folder. The dialog opens in the data folder with `scan_queue_<YYYYmmdd_HHMMSS>` as the default name; a folder that already contains files is refused. Each file name starts with its queue position:
+
+```text
+scan_queue_20261031_093000/
+    01_scan_setting_gate_sweep.json
+    02_manual_set_k10cr1_0_angle.json
+    03_scan_setting_reflection.json
+```
+
+Scan files are scan setting files (see above), so each can also be opened with the scan window's **Load**. Manual-set files hold `{"manual_set": {"channel": <channel>, "value": <float>}}`. Characters Windows does not allow in file names are replaced with `_` in the name part; the scan name inside the file is unchanged.
+
+**Load queue setting** asks for a folder and appends its items to the end of the queue, sorted by the leading number (numerically, so `2_` comes before `10_`). Files without a leading number are ignored. Every file is read first; if any one is unreadable, nothing is loaded and the error is logged. Loaded scans go through the same load path as the scan window, so missing device channels are kept and marked unresolved.
+
 ## Autosave
 
 After each elapsed whole-hour boundary, `ScanLogic` signals the GUI to write `<save-directory>/autosave.json`. Autosave uses the same array/`NaN` encoding and synchronizes comments, `plots_per_page`, and log. It overwrites the previous `autosave.json` and does not currently copy it to the external backup path.
