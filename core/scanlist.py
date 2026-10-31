@@ -1,3 +1,4 @@
+import os
 import sys
 import copy
 import time
@@ -9,7 +10,8 @@ import PyQt6.QtWidgets as QtWidgets
 import PyQt6.QtCore as QtCore
 import PyQt6.QtGui as QtGui
 from PyQt6 import uic
-from .scan import Scan
+from .scan import Scan, data_folder
+from .queue_files import read_queue, save_queue
 from .nested_menu import NestedMenu
 from .queue_model import LiveQueueModel, QueueItemState
 from .setup_capture.queue_session import QueueQuestionnaireSession
@@ -1096,6 +1098,8 @@ class ScanList(QtWidgets.QWidget):
         self.logic.sig_queue_stopped.connect(self.on_queue_stopped)
         self.logic.finished.connect(self._on_queue_thread_finished)
         self.pb_new_scan.clicked.connect(self.add_empty_scan_item)
+        self.save_queue_pushButton.clicked.connect(self.when_save_queue_clicked)
+        self.load_queue_pushButton.clicked.connect(self.when_load_queue_clicked)
         self.manual_add_item_pushButton.clicked.connect(self.add_manual_set_item_from_ui)
         self._log_ready = True
 
@@ -1606,6 +1610,115 @@ class ScanList(QtWidgets.QWidget):
         value = float(self.manual_set_value_spinbox.value())
         item = ManualSetItem(channel_name, value, main_window=self.main_window)
         self.list_manual.add_item(item)
+
+    def _queue_dialog_folder(self):
+        if self.main_window is None:
+            return os.getcwd()
+        return data_folder(self.main_window)
+
+    def when_save_queue_clicked(self):
+        default_name = f"queue_{_dt.datetime.now().strftime('%Y%m%d_%H%M')}"
+        folder, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save Queue (a new folder)",
+            os.path.join(self._queue_dialog_folder(), default_name),
+            "Queue folder (*)",
+        )
+        if not folder:
+            self._log_warning("Queue save canceled by user.")
+            return None
+        return self.save_queue(folder)
+
+    def save_queue(self, folder):
+        """Save the queue's scan settings and manual sets, in order, to a new folder."""
+        entries = self.queue_model.ordered_queue_entries()
+        if not entries:
+            self._log_warning("Queue save ignored: the queue is empty.")
+            return None
+        items = []
+        for entry in entries:
+            item = entry.item
+            if isinstance(item, ScanItem):
+                if item.scan.scan_state != "idle":
+                    self._log_warning(
+                        f"Queue save ignored: scan '{item.name}' is running."
+                    )
+                    return None
+                items.append({"scan": item.scan.setting_payload()})
+            else:
+                items.append(
+                    {
+                        "manual_set": {
+                            "channel": item.channel_name,
+                            "value": item.parsed_value(),
+                        }
+                    }
+                )
+        try:
+            saved_folder = save_queue(folder, items)
+        except Exception as exc:
+            self._log_error(f"Queue save failed: {type(exc).__name__}: {exc}")
+            return None
+        self._log_info(f"Queue saved: {saved_folder} ({len(items)} items).")
+        return saved_folder
+
+    def when_load_queue_clicked(self):
+        folder = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "Load Queue",
+            self._queue_dialog_folder(),
+        )
+        if not folder:
+            self._log_warning("Queue load canceled by user.")
+            return 0
+        return self.load_queue(folder)
+
+    def load_queue(self, folder):
+        """Add a saved queue to the end of the queue, in its saved order.
+
+        Every card is built before any is added, so a bad file adds nothing.
+        """
+        items = []
+        try:
+            for saved in read_queue(folder):
+                items.append(self._item_from_saved(saved))
+        except Exception as exc:
+            for item in items:
+                item.deleteLater()
+            self._log_error(f"Queue load failed: {type(exc).__name__}: {exc}")
+            return 0
+
+        added = 0
+        for item in items:
+            if not self.list_queue.add_item(item):
+                break
+            added += 1
+        for item in items[added:]:
+            item.deleteLater()
+        self._log_info(f"Queue loaded: {folder} ({added} of {len(items)} items added).")
+        return added
+
+    def _item_from_saved(self, saved):
+        if "manual_set" in saved:
+            return ManualSetItem(
+                saved["manual_set"]["channel"],
+                saved["manual_set"]["value"],
+                main_window=self.main_window,
+            )
+        item = ScanItem(
+            name=saved["scan"].get("name"),
+            info=self.info,
+            setter_equipment_info=self.setter_equipment_info,
+            main_window=self.main_window,
+            getter_equipment_info=self.getter_equipment_info,
+        )
+        try:
+            item.scan.load_info(saved["scan"], saved["path"])
+        except Exception:
+            item.deleteLater()
+            raise
+        item.scan.emit()
+        return item
 
     def worker_display_name(self, worker):
         if isinstance(worker, ScanItem):

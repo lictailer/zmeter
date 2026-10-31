@@ -58,7 +58,46 @@ or failure is logged; failure of both paths does not add a retry state machine.
 
 Load requires a JSON object. It defaults missing `comments` and `scan_log`, normalizes a non-list log to `[]`, rebuilds the level/plot widgets, rehydrates plot settings, and loads persisted data into line/image plots. Other missing structural fields are not generally migrated.
 
+A file whose `data` is missing or empty loads as a scan setting: `data` becomes `{}`, the log reports `Loaded scan setting`, and the file is not treated as this scan's saved data file, so questionnaire answers are never written next to it.
+
 Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, but a general schema-version migration layer does not exist.
+
+## Scan setting files
+
+**Save setting** in the scan window (below **Load**) writes the current scan configuration without measurement data. The file uses the scan JSON schema above with `data` set to `{}` and `scan_log` set to `[]`. The previous run's `setup` snapshots are left out, and questionnaire answers are dropped; `questionnaire` is kept only as `{"enabled": true, "record": null}` when the questionnaire is switched on. The in-memory scan is not changed.
+
+The save dialog opens in the data folder with `scan_setting_<scan-name>.json` as the default name. There is no serial, so setting files never affect serial discovery. The write is atomic (temporary file, then replace); overwriting an existing setting file is confirmed by the dialog. No backup copy, recovery JSON, or `.setup.json` sidecar is written, and a canceled dialog writes nothing.
+
+Channels that are not in the current device catalog are kept in the loaded scan unchanged. The setter button shows `Unresolved: <channel>`, and Record getters and manual-set channels show `<channel> (unresolved)`. The marks clear when the device's channels are published. Starting a scan with an unresolved channel is not blocked here; it fails during device preparation.
+
+## Saved queues
+
+**save queue** and **load queue** sit under the queue list in the scan list window. A saved queue is a folder:
+
+```text
+my_queue/
+  queue.json
+  01_gate_sweep.json
+  03_field_sweep.json
+```
+
+Each scan in the queue becomes a scan setting file (the format above), so any one of them can also be opened with **Load** in a scan window. The number in a file name is the scan's position in the queue; characters that Windows does not allow in file names become `_`. `queue.json` holds the order. Manual sets are stored in it directly, since they have no settings of their own:
+
+```json
+{
+    "format": "zmeter_queue",
+    "version": 1,
+    "items": [
+        {"scan": "01_gate_sweep.json"},
+        {"manual_set": {"channel": "nidaq_0_AO0", "value": 0.5}},
+        {"scan": "03_field_sweep.json"}
+    ]
+}
+```
+
+Saving asks for the name of a new folder (default `queue_<YYYYMMDD_HHMM>` in the data folder) and never writes into an existing one. Files are written to a temporary folder that is renamed when complete, so a failed save leaves nothing behind. An empty queue, or a queue whose scan is preparing, running, or finalizing, is not saved.
+
+Loading asks for a saved queue folder and adds its items, in saved order, after anything already in the queue. All cards are built before any is added, so a missing or malformed file adds nothing. `queue.json` is the only source of order; renaming the scan files does not reorder the queue, but the names in `queue.json` must match the files.
 
 ## Autosave
 
