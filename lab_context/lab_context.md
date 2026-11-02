@@ -39,6 +39,8 @@ everything below is a hint, not a rule.
 - setting_method groups setters: "A+B,C+D" means A and B move together in
   segment 1, C and D move together in segment 2.
 - default_wait (s) and default_count are timing helpers, not instruments.
+- default_slack_notification sends the operator a Slack ping when set; it is
+  not an instrument and its value means nothing.
 - artificial_channel_* are derived channels, e.g. carrier density n and
   displacement field E built as linear combinations of two gate voltages.
 - The scan name is free text typed by the user; it often hints at the

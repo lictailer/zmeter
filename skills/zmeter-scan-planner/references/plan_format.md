@@ -30,7 +30,9 @@
     up or restore a condition around a sweep.
 - Built-in channels: `default_wait` as a setter waits that many seconds at each
   point; `default_count` as a setter just counts points (use it to repeat lower
-  levels N times). Artificial channels (`artificial_channel_<name>`) are derived
+  levels N times); `default_slack_notification` as a setter sends the operator a
+  Slack ping at each point (use it only where asked, e.g. as a queue
+  manual set to mark a checkpoint). Artificial channels (`artificial_channel_<name>`) are derived
   setters such as carrier density and displacement field built from two gate
   voltages; write to them only when the export lists them.
 - Shift Compensation channels (`compensated_source_<raw channel>`,
