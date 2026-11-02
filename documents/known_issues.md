@@ -134,15 +134,20 @@ remain authoritative; close an item only with the validation named here.
 - **Validation:** Device/UI compatibility tests and migration tests for existing
   workbooks.
 
-## Array-valued getters are a separate project
+## Array getters: limits of the first version
 
-- **Current behavior:** Scan storage, plotting, persistence, and loaders support
-  the maintained scalar getter contract. No partial 1D/2D schema was added by
-  the reconstruction.
-- **Impact:** Spectra, frames, and object-shaped getter payloads are unsupported.
-- **Safe workaround:** Keep array-producing instruments outside the scalar scan
-  path or provide an independently maintained export workflow.
-- **Future fix:** Design array shape metadata, storage, plotting, persistence,
-  loader compatibility, and migration together.
-- **Validation:** New schema decision, round trips, old-loader compatibility,
-  plotting tests, and dedicated hardware-independent array fixtures.
+- **Current behavior:** Array getters (spectra, frames) are supported through
+  fixed levels (see [scan_engine.md](scan_engine.md#array-getters)), with at
+  most 2 axes, only on the innermost user level, and one shared shape per scan.
+- **Impact:** A 3-D getter (for example kinetic series of frames) is refused
+  at declaration. A spectrum and an image cannot be recorded in one scan.
+  Files grow with points x pixels; a 201 x 201 map of 1024-pixel spectra is
+  about 41 million values (several hundred MB of JSON). The check refuses more
+  than 100 million values per getter.
+- **Safe workaround:** Split large maps into several scans; use a level average
+  of the array for a scalar summary; record spectra and images in separate scans.
+- **Future fix:** Raise `MAX_ARRAY_DIMS` together with a plot for higher
+  dimensions; consider a binary sidecar if JSON size becomes a problem.
+- **Validation:** `tests/test_array_getters.py` (spec, sync, engine, plots, Scan
+  UI round trip) and `tests/test_andor_device.py`; hardware checks in
+  `devices/andor/README.md`.

@@ -43,6 +43,15 @@
   correction. Typical uses: sweep the raw source with `compensated_target_*`
   held constant in the same level, or map with `compensated_target_*` axes
   under a slower source level.
+- Array getters: some getters return a whole array per read, for example a
+  spectrum (one value per pixel) or a camera image (rows x columns). The export
+  lists them under `array_getters` with their axes and shape (at most 2 axes).
+  An array getter can only be a getter of level0. ZMeter then adds locked
+  "fixed levels" below the plan's levels, one per array axis (a spectrum adds 1,
+  an image adds 2), and every plan level moves up by that many: plan level0 is
+  saved as level1 (or level2), and averaged getters are renumbered to match.
+  All array getters of one scan must share one shape. One array read counts as
+  one point for the time estimate (plus the exposure time).
 - Range limits: ZMeter refuses to write a setter value outside the configured
   limit, does not write it, and records that point as NaN. Plans must stay inside
   the limits listed in the export.
@@ -112,9 +121,19 @@ The channel names above are examples only; use the names in the export.
       (`"level"` plots against the point index).
     - image: `{"type": "image", "level": N, "z": "<getter of level N>"}`: x is
       level N, y is level N+1 (so N must not be the top level).
+    - array getter (level must be 0): line
+      `{"type": "line", "level": 0, "x": "axis" or "level", "y": "<array getter>"}`
+      draws the latest spectrum against its axis values (`"axis"`, e.g.
+      wavelength) or pixel index (`"level"`); image
+      `{"type": "image", "level": 0, "z": "<array getter>"}` draws a spectrum
+      against level0's points, or a whole camera image.
+    - Level numbers in plots are plan levels; the script renumbers them past
+      the fixed levels.
 - Manual-set item: `{"type": "manual_set", "channel", "value"}`.
 
 The build script refuses the whole plan, writing nothing, when a channel is not
 in the export, a level has no setter or no points, a setting method names a
 missing setter, an averaged getter has no source, a value is outside a range
-limit, or a plot does not match its level.
+limit, a plot does not match its level, an array getter is on a level other
+than level0, array getters of one scan differ in shape, or an array getter is
+averaged (add array averages in the scan window after loading).

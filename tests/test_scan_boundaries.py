@@ -260,7 +260,7 @@ class ScanBoundaryTests(unittest.TestCase):
         written = self.output_root / "0000_boundary_1.json"
         self.assertTrue(written.is_file())
         self.assertEqual(original.read_text(encoding="utf-8"), "{}")
-        self.assertIn('"name": "boundary"', written.read_text(encoding="utf-8"))
+        self.assertIn('"name":"boundary"', written.read_text(encoding="utf-8"))
         self.assertTrue(
             any(str(written) in message for _level, message in result.messages)
         )

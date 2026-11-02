@@ -43,14 +43,16 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/measurement_io.py`, `measurement_widgets.py`, `measurement_records.py` | Checked cross-device coordinator routing, channel selectors and unique atomic data/PNG bundles with numeric local-time run keys; no instrument ownership |
 | `core/shared_runtime/` | Lazy typed VISA/Kinesis ownership, leases, VISA discovery watchdog/retention, diagnostics, shutdown, fake injection, and local vendor manifests |
 | `core/shared_runtime/vendor/thorlabs_kinesis/` | Tracked, manifest-verified Kinesis 1.14.58.26351 runtime and setup instructions |
-| `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |
+| `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction; locked fixed levels for array getters |
+| `core/array_getters.py`, `core/array_levels.py` | Array getters: the `ARRAY_GETTERS` declaration (`ArrayGetter`, at most 2 axes), the `ArrayCatalog` the main window provides, shape validation, and the fixed-level sync with level/average/plot-token renumbering; see `documents/scan_engine.md#array-getters` |
 | `core/all_plot_settings.py`, `core/all_plots.py` | Plot configuration and presentation |
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
 | `core/shift_compensation/` | Shift Compensation: mapping CSV loading and cosine/polynomial fits (`fitting.py`), mappings and the `compensated_source_`/`compensated_target_` scan channels (`logic.py`), set files (`persistence.py`) and the mapping-block window (`window.py`); see `documents/shift_compensation.md` |
 | `core/channel_value_record.py` | Main-window last-value record of channels written/read through `write_info`/`read_info` and the scan setup snapshots; Shift Compensation's source-readback cache |
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
-| `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
+| `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device (including the reference `spectrum`/`frame` array getters), and tests |
 | `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, global amplitude/DC ramping (10 V/s, 100 Hz), scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
+| `devices/andor/` | Lazy `andor` driver (pylablib): Andor SDK2 camera with optional Shamrock spectrograph; `spectrum` and `image` array getters, nm centre wavelength, bounded non-retried snaps, ported from the Mfork |
 | `devices/auto_focus/`, `devices/auto_position/` | Routed focus search and fixed-reference map registration; separate worker/panels, settings contracts and optional/required run bundles |
 | `devices/arduino_steppers/` | Standalone three-motor serial controller and maintained Arduino sketch; routed Z is selected by autofocus |
 | `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
@@ -70,7 +72,7 @@ packaging workflow and the maintained contract in
 
 ## Device integration inventory
 
-Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `mfli`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `attodry`, `mc2000b`, `spectraphysicsx3_laser`, `arduino_steppers`, `auto_focus`, `auto_position`, and `ANC300`. Presence does not establish hardware readiness; see `documents/device_status.md` and device-local READMEs. Legacy autofocus XZ and superseded prototypes live only under `archive/legacy-autofocus/`. `BBD30X` retains its documented optional Kinesis lifecycle limitations.
+Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `andor`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `mfli`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `attodry`, `mc2000b`, `spectraphysicsx3_laser`, `arduino_steppers`, `auto_focus`, `auto_position`, and `ANC300`. Presence does not establish hardware readiness; see `documents/device_status.md` and device-local READMEs. Legacy autofocus XZ and superseded prototypes live only under `archive/legacy-autofocus/`. `BBD30X` retains its documented optional Kinesis lifecycle limitations.
 
 The Phase 2 startup-only registry entries are `four9`, `montana2`, `opticool`,
 `attodry`, `tlpm`, `mc2000b`, `spectraphysicsx3_laser`, `auto_focus`,

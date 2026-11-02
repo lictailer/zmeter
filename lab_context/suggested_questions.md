@@ -66,9 +66,12 @@ Looks like: a waveplate swept 0-360 deg with a lock-in reading, or a map read as
 - Contacts collecting the photocurrent
 
 ## spectroscopy
-Looks like: monochromator, spectrometer, wavelength swept.
+Looks like: monochromator, spectrometer, wavelength swept, an andor spectrum or image getter.
 - Spectral range or grating
 - Accumulation or integration time
+- Spectrometer slit width and filters (e.g. long-pass, notch)
+- Camera read mode: full vertical binning / single track / image
+- Background or dark spectrum taken: yes / no
 
 ## ultrafast
 Looks like: a delay stage or "pump", "probe", "delay" in the scan name.

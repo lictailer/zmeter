@@ -35,7 +35,36 @@ def set_channel_name(value): ...  # bound method: one positional argument
 
 Variadic positional signatures are not exposed. The part after `get_` or `set_` is the channel name. Full runtime names are `<registered_device_label>_<channel>`; the registered label may contain underscores.
 
-Do not expose helper/control methods with these prefixes unless they are valid scan channels. Return a numeric/scalar value suitable for NumPy storage, or explicitly coordinate any broader data contract. Setters must validate units, finite values, and permitted range before hardware action.
+Do not expose helper/control methods with these prefixes unless they are valid scan channels. A getter returns a numeric scalar suitable for NumPy storage unless it is declared as an array getter (below). Setters must validate units, finite values, and permitted range before hardware action.
+
+## Array getters
+
+A getter that returns a whole array per read (a spectrum, a camera frame) must be declared on the logic class:
+
+```python
+from core.array_getters import ArrayGetter
+
+class MyLogic:
+    ARRAY_GETTERS = {
+        "spectrum": ArrayGetter(axes=("pixel",), shape="spectrum_shape",
+                                axis_values="spectrum_axis", units="counts"),
+        "image": ArrayGetter(axes=("row", "column"), shape="image_shape", units="counts"),
+    }
+
+    def get_spectrum(self): ...    # returns an array of shape spectrum_shape()
+    def spectrum_shape(self): ...  # tuple of ints, e.g. (1024,)
+    def spectrum_axis(self): ...   # optional: one value per point (e.g. nm), or None
+```
+
+- The key is the channel name (`get_<key>` must exist). `axes` names each axis; at most `core.array_getters.MAX_ARRAY_DIMS` (2) axes.
+- `shape` names a zero-argument logic method returning the current shape. It is called on the UI thread when a getter is picked and when a scan starts, so it must be fast (no exposure, bounded lock wait) and must raise when the device is offline.
+- `axis_values` (optional) names a method returning the coordinate of each point of the last axis (for a 1-D getter), or a tuple of sequences, one per axis, or `None` for the index. Cache it; it is read at scan start.
+- The getter must return exactly `shape` (anything array-like). A different shape stops the scan with an `ArrayShapeError` naming the channel; do not pad or truncate silently.
+- One call is one acquisition. It must be bounded (timeout from the device's own timing, never retried silently) and abortable by `force_stop`.
+- Array getters are excluded from the router's readable channels and from the scalar channel-value records (recorded as NaN). Keep scalar status values (temperature, exposure) as ordinary getters.
+- Scans place array getters only on the innermost user level and add locked fixed levels for the axes; see [scan_engine.md](scan_engine.md#array-getters).
+
+The mock device's `spectrum` and `frame` getters are the reference implementation.
 
 The startup profile may supply setter/getter allowlists. `None` exposes all valid methods; unknown requested names are ignored. Support profile filtering rather than removing useful public methods for one lab.
 

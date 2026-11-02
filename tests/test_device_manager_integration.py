@@ -100,9 +100,11 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
                 self.window.setter_equipment_info[label],
                 ["channel_A", "channel_B", "ramp_channel_A", "ramp_channel_B"],
             )
+            # spectrum and frame are array getters: scan-only, so the router
+            # catalog below leaves them out of "readable".
             self.assertEqual(
                 self.window.getter_equipment_info[label],
-                ["channel_A", "channel_B", "random_channel"],
+                ["channel_A", "channel_B", "frame", "random_channel", "spectrum"],
             )
             self.assertIs(
                 self.window.equips[label].command_router,

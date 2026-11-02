@@ -113,11 +113,11 @@ assert registry.driver_ids == (
     "mock_device", "ni6423", "nidaq", "pem100", "sp150",
     "hp34401a", "keithley24xx", "sr860", "sr830", "demo_device",
     "bbd30x", "k10cr1", "four9", "montana2", "opticool", "attodry", "tlpm",
-    "mc2000b", "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper", "mfli",
+    "mc2000b", "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper", "andor", "mfli",
 )
 watched = (
     "devices", "pyvisa", "clr", "nidaqmx", "PyDAQmx",
-    "opticool", "sr830", "sr860", "tlpm", "zhinst",
+    "opticool", "sr830", "sr860", "tlpm", "zhinst", "pylablib",
 )
 loaded = sorted(
     name for name in sys.modules

@@ -1,4 +1,5 @@
 from .scan_info import *
+from .array_levels import remap_plot_token
 import re
 
 
@@ -286,6 +287,7 @@ class AllPlotSetting(QtWidgets.QWidget):
         uic.loadUi("core/ui/plot_setting.ui", self)
         self.info = {'line_plots': {},
                      'image_plots': {}, }
+        self._pending_level_remap = None
         if level_info == None:
             self.set_level_info(copy.deepcopy(ScanInfo['levels']))
         else:
@@ -295,16 +297,31 @@ class AllPlotSetting(QtWidgets.QWidget):
         self.pushButton_delete_line.clicked.connect(self.when_delete_line_clicked)
         self.pushButton_delete_image.clicked.connect(self.when_delete_image_clicked)
 
+    def queue_level_remap(self, mapping):
+        """Renumber plot tokens on the next ``set_level_info``.
+
+        Fixed array levels shift the user's levels; ``mapping`` is
+        ``{old level: new level or None}`` from ``core.array_levels``.
+        """
+        self._pending_level_remap = dict(mapping or {})
+
     def set_level_info(self, level_info):
         
         self.level_info = level_info
-        for i in range(self.verticalLayout_image.count()):
-            w = self.verticalLayout_image.itemAt(i).widget()
-            w.set_level_info(self.level_info)
-
-        for i in range(self.verticalLayout_line.count()):
-            w = self.verticalLayout_line.itemAt(i).widget()
-            w.set_level_info(self.level_info)
+        mapping = self._pending_level_remap
+        self._pending_level_remap = None
+        for layout in (self.verticalLayout_image, self.verticalLayout_line):
+            for i in range(layout.count()):
+                w = layout.itemAt(i).widget()
+                if mapping:
+                    remapped = {
+                        key: remap_plot_token(token, mapping, self.level_info)
+                        for key, token in w.info.items()
+                    }
+                    w.set_level_info(self.level_info)
+                    w.set_choices(remapped)
+                else:
+                    w.set_level_info(self.level_info)
 
     def set_level_info_slot(self, info):
         self.set_level_info(info)

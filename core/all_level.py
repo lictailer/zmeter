@@ -1,6 +1,13 @@
 from .scan_info import *
 from .individual_setter import IndividualSetter
 from .nested_menu import NestedMenu
+from .array_getters import EMPTY_CATALOG
+from .array_levels import (
+    FIXED_AXIS_KEY,
+    fixed_level_count,
+    is_fixed_level,
+    sync_fixed_levels,
+)
 import re
 
 
@@ -63,6 +70,48 @@ class IndividualLevel(QtWidgets.QWidget):
         self.settle_time_spinbox.valueChanged.connect(self.when_settle_time_changed)
         self.startWaitTime_spinbox.valueChanged.connect(self.when_start_wait_time_changed)
         
+    # Controls that stay usable on a fixed (array axis) level: the getter
+    # menu (to remove an array getter) and the clean button.
+    _FIXED_LOCKED_WIDGETS = (
+        "master_add_one_pb",
+        "master_delete_one_pb",
+        "setting_method_le",
+        "enable_setting_method_checkBox",
+        "settle_time_spinbox",
+        "startWaitTime_spinbox",
+        "manual_set_before_add_pb",
+        "manual_set_after_add_pb",
+        "manual_set_before_remove_last_pb",
+        "manual_set_after_remove_last_pb",
+        "manual_set_clear_all_pb",
+        "manual_set_value_spinbox",
+        "manual_set_menu",
+    )
+
+    @property
+    def is_fixed(self):
+        return is_fixed_level(getattr(self, "individual_level_info", None))
+
+    def apply_fixed_lock(self):
+        """Lock everything but getter removal on a fixed array-axis level."""
+        fixed = self.is_fixed
+        for name in self._FIXED_LOCKED_WIDGETS:
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.setEnabled(not fixed)
+        for i in range(self.verticalLayout.count()):
+            item = self.verticalLayout.itemAt(i).widget()
+            if isinstance(item, IndividualSetter):
+                item.setEnabled(not fixed)
+
+    def fixed_title(self, level_index):
+        marker = self.individual_level_info.get(FIXED_AXIS_KEY, {})
+        points = len(self.individual_level_info.get("setters", {}).get("setter0", {}).get("destinations", []))
+        return (
+            f"level: {level_index} (fixed: {marker.get('name', 'axis')} axis of "
+            f"{marker.get('channel', '?')}, {points} points)"
+        )
+
     def set_record_equipment_info(self):
         self.getter_nested_menu = NestedMenu()
         self.getter_nested_menu.label.hide()
@@ -292,19 +341,56 @@ class IndividualLevel(QtWidgets.QWidget):
 
 class AllLevelSetting(QtWidgets.QWidget):
     sig_info_changed = QtCore.pyqtSignal(object)
+    # {old level index: new level index or None} after fixed levels were
+    # added or removed; emitted before sig_info_changed.
+    sig_levels_renumbered = QtCore.pyqtSignal(object)
+    sig_warning = QtCore.pyqtSignal(str)
 
-    def __init__(self, all_level_info=None, setter_equipment_info=None, getter_equipment_info=None):
+    def __init__(
+        self,
+        all_level_info=None,
+        setter_equipment_info=None,
+        getter_equipment_info=None,
+        array_catalog=None,
+    ):
         super(AllLevelSetting, self).__init__()
         uic.loadUi("core/ui/scan_setting.ui", self)
         self.add_pb.clicked.connect(self.add_level)
         self.getter_equipment_info = getter_equipment_info or {}
         self.delete_pb.clicked.connect(self.delete_level)
         self.setter_equipment_info = setter_equipment_info or {}
+        self.array_catalog = array_catalog or EMPTY_CATALOG
+        self.last_sync_mapping = {}
         self.all_level_info = {}
         if all_level_info:
             self.set_info(all_level_info)
-        
-        
+
+    def set_array_catalog(self, array_catalog):
+        """Use ``array_catalog`` from now on; the levels are not touched here."""
+        self.array_catalog = array_catalog or EMPTY_CATALOG
+        self._refresh_getter_menus()
+
+    def _apply_fixed_level_sync(self, refresh=False):
+        """Run the fixed-level sync on the model; widgets are not rebuilt."""
+        result = sync_fixed_levels(self.all_level_info, self.array_catalog, refresh=refresh)
+        for message in result.warnings:
+            self.sig_warning.emit(message)
+        if result.changed:
+            self.all_level_info = result.levels
+            if result.renumbered:
+                self.last_sync_mapping = dict(result.mapping)
+                self.sig_levels_renumbered.emit(dict(result.mapping))
+        return result
+
+    def sync_fixed_levels(self, refresh=False):
+        """Sync fixed levels and rebuild the editor when anything changed."""
+        result = self._apply_fixed_level_sync(refresh=refresh)
+        if result.changed:
+            self._rebuild_widgets()
+        return result
+
+    def fixed_level_count(self):
+        return fixed_level_count(self.all_level_info)
 
     def set_info(self, info):
         self.all_level_info = info
@@ -361,8 +447,38 @@ class AllLevelSetting(QtWidgets.QWidget):
                 output.append(getter)
         return output
 
+    def _without_array_getters(self, choices):
+        catalog = self.array_catalog
+        if isinstance(choices, dict):
+            output = {}
+            for device, channels in choices.items():
+                if isinstance(channels, list):
+                    output[device] = [
+                        channel
+                        for channel in channels
+                        if not (
+                            isinstance(channel, str)
+                            and catalog.is_array(f"{device}_{channel}")
+                        )
+                    ]
+                else:
+                    output[device] = channels
+            return output
+        if isinstance(choices, list):
+            return [self._without_array_getters(item) for item in choices]
+        return choices
+
     def _build_getter_menu_for_level(self, level_index):
+        level_info = self.all_level_info.get(f"level{level_index}", {})
+        if is_fixed_level(level_info):
+            # Only the array getters already here, so choosing one removes it.
+            return [
+                getter for getter in level_info.get("getters", []) if getter != "none"
+            ]
         base_choices = copy.deepcopy(self.getter_equipment_info or {})
+        innermost_user = self.fixed_level_count()
+        if level_index != innermost_user:
+            base_choices = self._without_array_getters(base_choices)
 
         if isinstance(base_choices, dict):
             output_choices = base_choices
@@ -444,8 +560,6 @@ class AllLevelSetting(QtWidgets.QWidget):
         
 
     def update_ui(self):
-        clearLayout(self.verticalLayout)
-
         ordered_levels = []
         for level_key, level_info in self.all_level_info.items():
             try:
@@ -459,7 +573,11 @@ class AllLevelSetting(QtWidgets.QWidget):
         for i, (_, level_info) in enumerate(ordered_levels):
             rebuilt_level_info[f"level{i}"] = level_info
         self.all_level_info = rebuilt_level_info
+        self._apply_fixed_level_sync()
+        self._rebuild_widgets()
 
+    def _rebuild_widgets(self):
+        clearLayout(self.verticalLayout)
         for i in range(len(self.all_level_info)):
             level_key = f"level{i}"
             w = IndividualLevel(
@@ -468,7 +586,11 @@ class AllLevelSetting(QtWidgets.QWidget):
                 getter_equipment_info={},
             )
             self.verticalLayout.addWidget(w)
-            w.groupBox.setTitle(f"level: {i}")
+            if w.is_fixed:
+                w.groupBox.setTitle(w.fixed_title(i))
+            else:
+                w.groupBox.setTitle(f"level: {i}")
+            w.apply_fixed_lock()
             w.sig_info_changed.connect(self.update_info)
 
         self._cleanup_stale_average_getters()
@@ -496,6 +618,13 @@ class AllLevelSetting(QtWidgets.QWidget):
         n = self.verticalLayout.count()
         if n == 0:
             return
+        if self.fixed_level_count() > 0 and n - self.fixed_level_count() <= 1:
+            # The fixed levels hang below the innermost user level; remove
+            # the array getter first to delete the last user level.
+            self.sig_warning.emit(
+                "Remove the array getter first: the last user level holds the fixed array levels."
+            )
+            return
         w = self.verticalLayout.itemAt(n-1).widget()
         self.verticalLayout.removeWidget(w)
         w.deleteLater()
@@ -514,6 +643,9 @@ class AllLevelSetting(QtWidgets.QWidget):
                 n = i
                 break
         self.all_level_info[f'level{n}'] = info
+        if self._apply_fixed_level_sync().changed:
+            self._rebuild_widgets()
+            return
         self._cleanup_stale_average_getters()
         self._refresh_getter_menus()
         self._refresh_record_labels()

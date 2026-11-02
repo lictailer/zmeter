@@ -37,6 +37,7 @@ final result.
 | `spectraphysicsx3_laser` | [InSight X3](../devices/spectraphysicsx3_laser/README.md) | Asynchronous pending | Disabled | Fake serial/offscreen tests; basic operation reported by user | Review open-shutter tuning, stabilization, interlocks and unchanged close state |
 | `arduino_steppers` | [arduino_steppers](../devices/arduino_steppers/README.md) | Asynchronous pending | Disabled | Fake protocol/offscreen and host-compiled sketch tests | Arduino IDE build/upload, pin wiring, travel/calibration and missed-step acceptance |
 | `auto_focus` | [auto_focus](../devices/auto_focus/README.md) | Explicit routed Z selection | Disabled | Synthetic source/actuator, persistence and offscreen tests | Setup-specific focus signal, backlash, native/distance units and limits |
+| `andor` | [andor](../devices/andor/README.md) | Bounded synchronous (camera required, spectrograph optional) | Disabled | Ported from the bench-tested Mfork package; fake-pylablib logic/widget/registration tests; integrated hardware scan pending | Bench-test snap/abort, nm calibration and cooler-preserving connect in this repository |
 | `auto_position` | [auto_position](../devices/auto_position/README.md) | Explicit reference/router readiness | Disabled | Synthetic translations, persistence, nested scans and offscreen tests | Verify axis polarity, unique features and accepted shift/quality bounds on setup |
 
 The tracked startup configuration is [device_config.xlsx](../device_config.xlsx).

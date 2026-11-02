@@ -139,6 +139,7 @@ class MonitorScanLifecycleTests(unittest.TestCase):
             "sr830",
             "sr860",
             "tlpm",
+            "andor",
         ):
             with self.subTest(driver_id=driver_id):
                 registration = registry.registration(driver_id)

@@ -32,7 +32,7 @@ the device package README. Completed plans and investigations live under
 | [known_issues.md](known_issues.md) | Confirmed partial behavior, safe workarounds, future fixes, and closure evidence |
 | [architecture.md](architecture.md) | Repository-wide runtime architecture and ownership |
 | [device_contract.md](device_contract.md) | Device integration and lifecycle contract |
-| [scan_engine.md](scan_engine.md) | Scalar scan traversal and runtime contract |
+| [scan_engine.md](scan_engine.md) | Scan traversal and runtime contract, including array getters and fixed levels |
 | [data_format.md](data_format.md) | Persisted data, autosave, backup, and output contract |
 | [shift_compensation.md](shift_compensation.md) | Shift Compensation mappings, compensated scan channels, and user bench checks |
 | [hardware_safety.md](hardware_safety.md) | Hardware-safety and user-executed validation boundary |

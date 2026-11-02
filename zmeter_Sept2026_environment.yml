@@ -146,4 +146,5 @@ dependencies:
       - zhinst-core==26.7.1.4
       - keyring==25.7.0
       - openai==3.36.0
+      - pylablib==1.4.3
 prefix: C:\Users\Taylo\anaconda3\envs\zmeter_Aug2026
