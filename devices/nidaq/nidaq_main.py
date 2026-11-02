@@ -172,22 +172,6 @@ class NIDAQ(QtWidgets.QWidget):
         self.logic.start()
         return True
 
-    def set_AO0(self, val):
-        if self._scan_active:
-            return False
-        self.logic.target_AO["AO0"] = val
-        self.logic.job = "write_AO0"
-        self.logic.start()
-        return True
-
-    def set_AO1(self, val):
-        if self._scan_active:
-            return False
-        self.logic.target_AO["AO1"] = val
-        self.logic.job = "write_AO1"
-        self.logic.start()
-        return True
-
     def monitor(self):
         if self._scan_active or not self.logic.is_initialized:
             return

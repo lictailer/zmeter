@@ -187,13 +187,7 @@ class NIDAQLogic(QtCore.QThread):
         if self.scan_admission_closed:
             self.job = ""
             return
-        if self.job == "write_AO0":
-            self.set_AO0(self.target_AO0)
-
-        elif self.job == "write_AO1":
-            self.set_AO1(self.target_AO1)
-
-        elif self.job == "read_AI":
+        if self.job == "read_AI":
             self.read_AI(self.next_AI_channel)
 
         elif self.job == "read_single_sample_count":
