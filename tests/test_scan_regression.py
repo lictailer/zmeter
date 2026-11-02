@@ -99,8 +99,12 @@ class ScanScalarRegressionTests(unittest.TestCase):
         main_window = _ScalarMainWindow()
         logic = ScanLogic(main_window=main_window)
         payloads = []
+        progress = []
         logic.sig_new_data.connect(payloads.append)
+        logic.sig_update_remaining_points.connect(progress.append)
         logic.initialize_scan_data(_scalar_scan_config())
+        # 2 x 2 points: 4 inner points plus 2 outer points.
+        self.assertEqual(logic.total_points, 6)
 
         self.assertEqual(
             [array.shape for array in logic.level_data_arrays],
@@ -121,6 +125,8 @@ class ScanScalarRegressionTests(unittest.TestCase):
 
         logic.looping(logic.max_level)
 
+        self.assertEqual(logic.completed_points, logic.total_points)
+        self.assertEqual(progress[-1], "6 / 6 (100%)")
         np.testing.assert_array_equal(
             logic.level_data_arrays[0][0], [[11.0, 13.0], [21.0, 23.0]]
         )
