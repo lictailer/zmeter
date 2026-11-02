@@ -29,8 +29,7 @@ compensation CSVs from this alignment notebook"); it picks the skill from the
 | Skill | What it does |
 | --- | --- |
 | [`zmeter-shift-mapping`](zmeter-shift-mapping/SKILL.md) | Turns analysis results (notebooks, shift tables, NumPy files) into the two-column mapping CSVs that the Shift Compensation window loads, one CSV per source → target pair, with zmeter's sign convention. |
-
-Planned: `zmeter-scan-planner` (scan planning from a setup export).
+| [`zmeter-scan-planner`](zmeter-scan-planner/SKILL.md) | Plans a scan or queue from a plain-language request and the `zmeter_system.md` export (Setup capture, Export system info), and writes scan setting files or a queue folder for Load / load queue. |
 
 ## Adding a skill
 

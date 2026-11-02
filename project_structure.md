@@ -56,7 +56,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations, including driver-owned scan/monitor admission, and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
-| `skills/` | Claude Code / Codex agent skills for zmeter work outside the app (`skills/README.md` lists them and how to install); first skill `zmeter-shift-mapping` |
+| `skills/` | Claude Code / Codex agent skills for zmeter work outside the app (`skills/README.md` lists them and how to install); `zmeter-shift-mapping` and `zmeter-scan-planner` |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |
 | `scan_range_limits.json` | Default global scan-output limit configuration |
