@@ -198,6 +198,9 @@ The default local save directory is `data/`.
 - Existing names receive a numeric suffix rather than being overwritten.
 - JSON stores the scan configuration, setting arrays, acquired data, plot settings, comments, and scan log.
 - NumPy arrays are serialized as lists. Current files may contain Python JSON's unquoted `NaN` literal; the loader also accepts the exact string `"NaN"`. See `documents/data_format.md` before changing this compatibility-sensitive representation.
+- **Save setting** in the scan window writes the scan configuration without data as `scan_setting_<scan-name>.json` (no serial). **Load** opens setting files and data files alike; channels whose device is missing are kept and marked unresolved. See `documents/data_format.md`.
+- **save queue** under the queue list writes the queue to a new folder: one scan setting file per scan, named by queue position (`01_<scan-name>.json`), plus `queue.json` with the order and any manual sets. **load queue** adds a saved queue folder to the end of the queue in that order. **clear queue** removes every pending item from the queue after a confirmation; a running item stays.
+- **AI scan planning**: the `skills/zmeter-scan-planner/` folder is a skill for Claude or Codex, installed outside this repository (Claude Code: copy it to `~/.claude/skills/`; Codex: `~/.agents/skills/`; Claude apps: upload it as a zip). In ZMeter, **Export system info** in the Setup capture window writes `zmeter_system.md` (devices, channel names, range limits, data folder, experiment description, remembered questionnaire answers and `lab_context.md`; no device is read). Give that file to the agent; it asks about anything unconfirmed and writes a scan setting file or a queue folder to open with **Load** or **load queue**. Review every planned scan before starting it.
 - Long scans overwrite `autosave.json` in the current save directory at each hourly autosave trigger.
 - The default PPT path is `data/log.pptx`. PPT output requires desktop PowerPoint and may open it visibly.
 - External backup is disabled in the checked-in startup. Current backup handling expects the configured lab backup location and checks for `Z:\` before copying; verify the mapped drive and destination before a measurement.
@@ -245,6 +248,7 @@ devices/                        Flat package namespace for device integrations
 devices/mockDevice/             Hardware-independent simulated instrument and its tests
 devices/<device>/               Device-specific widget, logic, hardware, and UI files
 tests/                          Hardware-independent core regression tests
+skills/zmeter-scan-planner/     AI scan-planning skill for Claude or Codex (installed separately)
 data/                           Default local measurement output
 scan_range_limits.json          Configured scan-output limits
 zmeter_Sept2026_environment.yml  Maintained Conda environment

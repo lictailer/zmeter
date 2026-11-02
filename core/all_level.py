@@ -20,6 +20,16 @@ def is_average_getter_token(token):
     return parse_average_getter_token(token) is not None
 
 
+UNRESOLVED_SUFFIX = " (unresolved)"
+
+
+def mark_unresolved(channel, choice_names):
+    """Display text for a channel; marks names missing from the current catalog."""
+    if channel in choice_names:
+        return channel
+    return f"{channel}{UNRESOLVED_SUFFIX}"
+
+
 class IndividualLevel(QtWidgets.QWidget):
     sig_info_changed = QtCore.pyqtSignal(object)
 
@@ -78,6 +88,8 @@ class IndividualLevel(QtWidgets.QWidget):
     def set_setter_equipment_info(self, setter_equipment_info):
         self.setter_equipment_info = setter_equipment_info
         self.manual_set_menu.set_choices(self.setter_equipment_info or {})
+        if hasattr(self, "individual_level_info"):
+            self.update_manual_set_labels()
         
         for i in range(self.verticalLayout.count()):
             item = self.verticalLayout.itemAt(i).widget()
@@ -87,6 +99,8 @@ class IndividualLevel(QtWidgets.QWidget):
     def set_getter_equipment_info(self, getter_equipment_info):
         self.getter_equipment_info = getter_equipment_info
         self.getter_nested_menu.set_choices(self.getter_equipment_info or {})
+        if hasattr(self, "individual_level_info"):
+            self._show_record_label()
     
     def update_ui(self):
         clearLayout(self.verticalLayout)
@@ -121,7 +135,18 @@ class IndividualLevel(QtWidgets.QWidget):
             self.record_label.setText('Record: (none)')
             return
         self.individual_level_info['getters'] = getters
-        self.record_label.setText('Record: ' + ', '.join(getters))
+        self._show_record_label()
+
+    def _show_record_label(self):
+        """Render the Record line without changing the stored getters."""
+        getters = [g for g in self.individual_level_info['getters'] if g != 'none']
+        if len(getters) == 0:
+            self.record_label.setText('Record: (none)')
+            return
+        choices = self.getter_nested_menu.choice_names
+        self.record_label.setText(
+            'Record: ' + ', '.join(mark_unresolved(g, choices) for g in getters)
+        )
 
     def when_add_clicked(self):
         self.add_master()
@@ -136,9 +161,10 @@ class IndividualLevel(QtWidgets.QWidget):
         if not dict_list:
             return "(empty)"
         text_list = []
+        choices = self.manual_set_menu.choice_names
         for i, mapping in enumerate(dict_list, start=1):
             for key, value in mapping.items():
-                text_list.append(f"{i}. {key}->{value}")
+                text_list.append(f"{i}. {mark_unresolved(key, choices)}->{value}")
         return " | ".join(text_list)
 
     def update_manual_set_labels(self):

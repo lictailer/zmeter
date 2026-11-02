@@ -4,12 +4,14 @@ Questionnaire tab and the queue questionnaire pop-up."""
 from __future__ import annotations
 
 import copy
+import os
 from typing import Mapping
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from . import profile
 from . import questionnaire as qn
+from . import system_export
 
 TAB_TITLE = "Questionnaire"
 UNKNOWN_TEXT = "unknown"
@@ -653,8 +655,15 @@ class SetupCaptureDialog(QtWidgets.QDialog):
             QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
         )
         open_button = QtWidgets.QPushButton("Open folder")
+        self.export_button = QtWidgets.QPushButton("Export system info")
+        self.export_button.setToolTip(
+            "Write a Markdown file for AI scan planning (zmeter-scan-planner skill): "
+            "devices, channel names, range limits, the description above, "
+            "remembered answers and lab_context.md. No device is read."
+        )
         lab_layout.addWidget(folder_label, 1)
         lab_layout.addWidget(open_button)
+        lab_layout.addWidget(self.export_button)
         layout.addWidget(lab_box)
 
         answers_row = QtWidgets.QHBoxLayout()
@@ -684,6 +693,7 @@ class SetupCaptureDialog(QtWidgets.QDialog):
                 QtCore.QUrl.fromLocalFile(str(controller.lab_folder))
             )
         )
+        self.export_button.clicked.connect(self._export_system_info)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
 
@@ -756,19 +766,55 @@ class SetupCaptureDialog(QtWidgets.QDialog):
 
         self.controller.run_job(lambda: qn.test_api_key(key, model, provider, base_url), done)
 
-    def _save(self) -> None:
-        self.controller.settings.data["effort"] = self.effort_comboBox.currentText()
-        self.controller.settings.data["thinking"] = self.thinking_checkBox.isChecked()
-        if self.provider != profile.PROVIDER_ANTHROPIC:
-            self.controller.settings.set_base_url(self.provider, self.base_url_lineEdit.text())
-        self.controller.set_provider_model(self.provider, self.model_lineEdit.text())
+    def _typed_description(self) -> dict:
         description = {}
         for key, edit in self.description_edits.items():
             if isinstance(edit, QtWidgets.QPlainTextEdit):
                 description[key] = edit.toPlainText()
             else:
                 description[key] = edit.text()
-        self.controller.settings.set_description(description)
+        return description
+
+    def _export_system_info(self) -> str | None:
+        """Save the system export for AI scan planning where the user picks."""
+
+        main_window = self.controller.main_window
+        if main_window is None:
+            QtWidgets.QMessageBox.warning(self, "Export system info", "No ZMeter main window.")
+            return None
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export system info",
+            os.path.join(system_export.data_folder(main_window), system_export.DEFAULT_FILE_NAME),
+            "Markdown (*.md);;All Files (*)",
+        )
+        if not path:
+            return None
+        if not os.path.splitext(path)[1]:
+            path += ".md"
+        text = system_export.export_markdown(
+            system_export.system_info(main_window),
+            self._typed_description(),
+            self.controller.last_answers(),
+            profile.lab_context_text(self.controller.lab_folder),
+        )
+        try:
+            system_export.write_export(path, text)
+        except OSError as exc:
+            QtWidgets.QMessageBox.warning(self, "Export system info", f"Export failed: {exc}")
+            return None
+        QtWidgets.QMessageBox.information(
+            self, "Export system info", f"System info written to:\n{path}"
+        )
+        return path
+
+    def _save(self) -> None:
+        self.controller.settings.data["effort"] = self.effort_comboBox.currentText()
+        self.controller.settings.data["thinking"] = self.thinking_checkBox.isChecked()
+        if self.provider != profile.PROVIDER_ANTHROPIC:
+            self.controller.settings.set_base_url(self.provider, self.base_url_lineEdit.text())
+        self.controller.set_provider_model(self.provider, self.model_lineEdit.text())
+        self.controller.settings.set_description(self._typed_description())
         if self.key_lineEdit.text().strip():
             self._save_key()
         self.accept()
