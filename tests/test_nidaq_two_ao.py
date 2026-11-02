@@ -31,6 +31,7 @@ class FakeDAQ:
         self.closed_ao = []
         self.setup_ai = []
         self.closed_ai = []
+        self.read_ai = []
         self.counter_channels = []
         self.counter_close_count = 0
 
@@ -45,6 +46,10 @@ class FakeDAQ:
 
     def close_single_AI_task(self, channel):
         self.closed_ai.append(channel)
+
+    def read_mult_AI_task(self, channel, _count):
+        self.read_ai.append(channel)
+        return {"/DevTest/AI6": 0.6, "/DevTest/AI7": 0.7}.get(channel, 0.0)
 
     def setup_sample_counter(self, chan):
         self.counter_channels.append(chan)
@@ -107,6 +112,18 @@ class NIDAQTwoAOLogicTests(unittest.TestCase):
 
         self.assertEqual(logic.daq.closed_ao, ["/DevTest/AO0", "/DevTest/AO1"])
         self.assertEqual(logic.daq.counter_close_count, 1)
+
+    def test_ao_readback_reads_wired_ai6_and_ai7(self):
+        with mock.patch.object(nidaq_logic, "NIDAQHardWare", FakeDAQ):
+            logic = nidaq_logic.NIDAQLogic()
+        logic.initialize("DevTest")
+
+        self.assertIn("/DevTest/AI6", logic.daq.setup_ai)
+        self.assertIn("/DevTest/AI7", logic.daq.setup_ai)
+        self.assertEqual(logic.get_AO0(), 0.6)
+        self.assertEqual(logic.get_AO1(), 0.7)
+        self.assertEqual(logic.daq.read_ai, ["/DevTest/AI6", "/DevTest/AI7"])
+        self.assertEqual(logic.SNAPSHOT_GETTERS, ("AO0", "AO1"))
 
 
 class NIDAQTwoAOInterfaceTests(unittest.TestCase):

@@ -140,8 +140,8 @@ convention "column 2 = amount to add to the target". See
 - `k10cr1` angles are not wrapped to 0-360. Cosine fits do not care; for a
   polynomial in angle, CSV and readback must use the same convention.
 - The record misses moves made from device panels outside scans.
-- The `nidaq` driver has no AO getter yet; use `ni6423` (AO read back through
-  AI28-AI31) or another target with a real readback.
+- AO targets need a wired readback: `ni6423` reads AO0-AO3 back on
+  AI28-AI31, `nidaq` reads AO0/AO1 back on AI6/AI7.
 
 ## User-executed bench checks
 
