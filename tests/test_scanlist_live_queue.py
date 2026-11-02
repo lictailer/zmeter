@@ -191,6 +191,10 @@ class _QueueUiHarness(ScanList):
         if main_window is not None:
             main_window.scanlist = self
 
+    def _queue_start_problems(self):
+        # Queue mechanics only; the pre-start channel check is in test_channel_check.
+        return []
+
     def _begin_manual_operation(self, item):
         self.manual_begin_counts[id(item)] += 1
         super()._begin_manual_operation(item)

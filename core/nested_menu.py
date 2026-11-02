@@ -16,10 +16,13 @@ def create_menu_for_setter(d, menu, path=()):
                 action.setData("_".join((*path, str(key))))
             else:
                 sub_menu = QtWidgets.QMenu(key, menu)
-                # menus.append(sub_menu)
-                # print(sub_menu.title())
-                menu.addMenu(sub_menu)
                 create_menu_for_setter(value, sub_menu, (*path, str(key)))
+                # A device with no channels (e.g. "default" has no getters)
+                # would show an arrow that opens nothing, so leave it out.
+                if sub_menu.isEmpty():
+                    sub_menu.deleteLater()
+                else:
+                    menu.addMenu(sub_menu)
     else:
             action = menu.addAction(d)
             action.setIconVisibleInMenu(False)

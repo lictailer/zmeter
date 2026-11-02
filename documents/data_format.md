@@ -58,7 +58,52 @@ or failure is logged; failure of both paths does not add a retry state machine.
 
 Load requires a JSON object. It defaults missing `comments` and `scan_log`, normalizes a non-list log to `[]`, rebuilds the level/plot widgets, rehydrates plot settings, and loads persisted data into line/image plots. Other missing structural fields are not generally migrated.
 
+A file whose `data` is missing or empty loads as a scan setting: `data` becomes `{}`, the log reports `Loaded scan setting`, and the file is not treated as this scan's saved data file, so questionnaire answers are never written next to it.
+
 Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, but a general schema-version migration layer does not exist.
+
+## Scan setting files
+
+**Save setting** in the scan window (below **Load**) writes the current scan configuration without measurement data. The file uses the scan JSON schema above with `data` set to `{}` and `scan_log` set to `[]`. The previous run's `setup` snapshots are left out, and questionnaire answers are dropped; `questionnaire` is kept only as `{"enabled": true, "record": null}` when the questionnaire is switched on. The in-memory scan is not changed.
+
+The save dialog opens in the data folder with `scan_setting_<scan-name>.json` as the default name. There is no serial, so setting files never affect serial discovery. The write is atomic (temporary file, then replace); overwriting an existing setting file is confirmed by the dialog. No backup copy, recovery JSON, or `.setup.json` sidecar is written, and a canceled dialog writes nothing.
+
+Channels that are not in the current device catalog are kept in the loaded scan unchanged. The setter button shows `Unresolved: <channel>`, and Record getters and manual-set channels show `<channel> (unresolved)`. The marks clear when the device's channels are published. Loading also writes one warning block to the scan's log listing each unresolved use (`level0 setter A: SR860_0_X`, `level0 getter: ...`, `level1 manual set before: ...`; an average getter counts as resolved when its channel is a getter of the lower level). The block is display only and is not saved in `scan_log`. Starting a single scan with an unresolved channel is not blocked here; it fails during device preparation.
+
+## Saved queues
+
+**save queue** and **load queue** sit under the queue list in the scan list window. A saved queue is a folder:
+
+```text
+my_queue/
+  queue.json
+  01_gate_sweep.json
+  03_field_sweep.json
+```
+
+Each scan in the queue becomes a scan setting file (the format above), so any one of them can also be opened with **Load** in a scan window. The number in a file name is the scan's position in the queue; characters that Windows does not allow in file names become `_`. `queue.json` holds the order. Manual sets are stored in it directly, since they have no settings of their own:
+
+```json
+{
+    "format": "zmeter_queue",
+    "version": 1,
+    "items": [
+        {"scan": "01_gate_sweep.json"},
+        {"manual_set": {"channel": "nidaq_0_AO0", "value": 0.5}},
+        {"scan": "03_field_sweep.json"}
+    ]
+}
+```
+
+Saving asks for the name of a new folder (default `queue_<YYYYMMDD_HHMM>` in the data folder) and never writes into an existing one. Files are written to a temporary folder that is renamed when complete, so a failed save leaves nothing behind. An empty queue, or a queue whose scan is preparing, running, or finalizing, is not saved.
+
+Loading asks for a saved queue folder and adds its items, in saved order, after anything already in the queue. All cards are built before any is added, so a missing or malformed file adds nothing. `queue.json` is the only source of order; renaming the scan files does not reorder the queue, but the names in `queue.json` must match the files.
+
+If the loaded items name channels missing from the current device catalog, a window lists each missing channel once as `Setter: <channel>` or `Getter: <channel>`, where it is used (`#<queue position> <scan name>, level0 setter A; #<position> manual set; ...`), and a menu of setter or getter channels to replace it with. **OK** replaces the chosen channels in the items being loaded only: setter channels, getters and their `levelN_average_<channel>` tokens, manual sets, and plot selections. Items already in the queue and the files on disk are not changed. Cancel, or leaving a row at "leave as is", keeps the channel; the queue loads either way. The queue log then lists the uses that are still unresolved, and each loaded scan's log shows its own block.
+
+## Queue start check
+
+Pressing start in the scan list first checks every pending item, without contacting any device: every channel is in the catalog (scans and manual sets), every level has a setter channel, and every level's setting array builds with at least one point. A level whose setters are all `none` fails the check: the scan engine skips `none` setters, so the level would step through its points setting nothing; use `default_count` or `default_wait` for a level that only repeats or waits. Any problem is shown in a warning and written to the queue log by queue position, and the queue does not start. Limits are not checked here. The scan window's own **Scan** button is unchanged.
 
 ## Autosave
 

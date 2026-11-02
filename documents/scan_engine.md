@@ -38,7 +38,7 @@ Each setter contains `channel`, `explicit`, `linear_setting`, `explicit_setting`
 - The highest numbered level is the outermost, slowest-changing level.
 - `ScanLogic.scan()` starts recursion at the highest level and calls the next lower level after the current level's direct read.
 - Data arrays are shaped `[getter, outermost_points, ..., current_level_points]` and initialized with `NaN`.
-- The displayed total is the product of point counts for all levels. The current implementation increments completed points at every visited level point, including outer levels; for a multilevel scan the numerator can therefore differ from, or exceed, the coordinate-product denominator. This confirmed limitation and its closure evidence are tracked in [known_issues.md](known_issues.md); preserve or deliberately correct it with focused progress tests.
+- Progress counts every visited level point, including outer levels, so the displayed total is the sum over levels of the product of the point counts of that level and all levels above it (an 11 x 11 scan shows 11·11 + 11 = 132 points). The time estimate is that total times the measured average time per point. `tests/test_scan_regression.py` checks that the count ends at the total.
 
 `setting_method` is interpreted by `Brakets`. Without a personalized method, setter destination sequences form aligned rows with `NaN` padding. A `NaN` setter value means “do not write this setter at this point”; it does not remove the point from the loop.
 

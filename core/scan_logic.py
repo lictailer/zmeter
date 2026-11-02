@@ -187,10 +187,14 @@ class ScanLogic(QtCore.QThread):
         self.completed_points = 0
         self.last_auto_hour_triggered = 0
         
-        # Calculate total number of measurement points across all levels
-        self.total_points = 1
-        for level_index in range(len(scan_config['levels'])):
-            self.total_points *= scan_config['levels'][f'level{level_index}']['setting_array'].shape[1]
+        # Total progress steps: completed_points counts every point of every
+        # level, so level k adds the product of the point counts of levels >= k
+        # (an 11 x 11 scan has 11*11 + 11 = 11*12 steps).
+        self.total_points = 0
+        level_runs = 1
+        for level_index in reversed(range(len(scan_config['levels']))):
+            level_runs *= scan_config['levels'][f'level{level_index}']['setting_array'].shape[1]
+            self.total_points += level_runs
         
         # Initialize data structure arrays for each scanning level
         self.level_target_arrays = []      # Parameter values to set at each level

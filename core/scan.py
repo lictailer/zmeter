@@ -10,6 +10,7 @@ from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
 from .all_plot_settings import AllPlotSetting
 from .all_plots import AllPlots
+from .channel_check import catalog_names, count_text, find_unresolved
 from .construct_scan_coordinates import Construct
 from .all_plots import LinePlot
 from .all_plots import ImagePlot
@@ -26,6 +27,7 @@ from .setup_capture.widgets import (
 )
 
 SETUP_FORMAT_VERSION = 2
+SCAN_SETTING_PREFIX = "scan_setting_"
 
 
 _AVERAGE_GETTER_REFERENCE = re.compile(r"^level(\d+)_average_(.+)$")
@@ -126,6 +128,51 @@ class _BoundaryWorker(QtCore.QObject):
 def _write_json_payload(path, payload):
     with open(path, "w", encoding="utf-8") as json_file:
         json.dump(payload, json_file, cls=_ScanJSONEncoder, indent=4)
+
+
+def scan_setting_payload(info):
+    """Scan JSON with no measurement: same schema, empty data and log.
+
+    The previous run's setup snapshots and questionnaire answers describe that
+    run only, so they are left out; the questionnaire on/off choice is kept.
+    """
+    payload = copy.deepcopy(info)
+    payload["data"] = {}
+    payload["scan_log"] = []
+    payload.pop("setup", None)
+    questionnaire = payload.pop("questionnaire", None)
+    if isinstance(questionnaire, dict) and questionnaire.get("enabled"):
+        payload["questionnaire"] = {"enabled": True, "record": None}
+    return payload
+
+
+def _restore_nan(value):
+    if isinstance(value, list):
+        return [_restore_nan(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _restore_nan(item) for key, item in value.items()}
+    if value == "NaN":
+        return np.nan
+    return value
+
+
+def read_scan_file(path):
+    """Read a scan data or setting JSON; the string "NaN" becomes np.nan."""
+    with open(path, "r") as file:
+        info = _restore_nan(json.loads(file.read()))
+    if not isinstance(info, dict):
+        raise ValueError("Loaded file did not contain a scan dictionary.")
+    return info
+
+
+def data_folder(main_window):
+    """The folder in the main window's save path box, used to start file dialogs."""
+    text = main_window.save_info_path.toPlainText().strip()
+    if text:
+        return os.path.normpath(text.strip('"'))
+    if hasattr(main_window, "save_path"):
+        return os.path.normpath(str(main_window.save_path))
+    return os.getcwd()
 
 
 def _write_recovery_payload(snapshot, messages):
@@ -349,7 +396,7 @@ class Scan(QtWidgets.QWidget):
         self.scan_button.clicked.connect(self.when_scan_clicked)
         self.stop_button.clicked.connect(self.when_stop_clicked)
         self.load_button.clicked.connect(self.when_load_clicked)
-        self.save_button.clicked.connect(self.when_save_clicked)
+        self.save_setting_button.clicked.connect(self.when_save_setting_clicked)
 
         self.scan_button_1.clicked.connect(self.when_scan_clicked)
         self.stop_button_1.clicked.connect(self.when_stop_clicked)
@@ -515,7 +562,7 @@ class Scan(QtWidgets.QWidget):
             self.all_level_setting,
             self.all_plot_setting,
             self.load_button,
-            self.save_button,
+            self.save_setting_button,
         ]
         if include_scan_buttons:
             widgets.extend(
@@ -1937,57 +1984,90 @@ class Scan(QtWidgets.QWidget):
             self._log_error(f"Manual save failed: {type(e).__name__}: {e}")
             write_recovery_snapshot(base_name)
 
+    def setting_payload(self):
+        """This scan's configuration without data, as Save setting writes it."""
+        self.update_alllevel_setting_array()
+        self.info["comments"] = self.comments_textEdit.toPlainText()
+        self.info["plots_per_page"] = self.PlotsPerPage.currentText()
+        self._sync_questionnaire_to_info()
+        return scan_setting_payload(self.info)
+
+    def when_save_setting_clicked(self):
+        """Save the scan configuration, without data, to a file the operator picks."""
+        payload = self.setting_payload()
+
+        default_name = f"{SCAN_SETTING_PREFIX}{self.info.get('name') or 'scan'}.json"
+        fileName, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Scan Setting",
+            os.path.join(data_folder(self.main_window), default_name),
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not fileName:
+            self._log_warning("Setting save canceled by user.", persist_current_run=False)
+            return None
+        if not os.path.splitext(fileName)[1]:
+            fileName += ".json"
+
+        temporary_path = f"{fileName}.{os.getpid()}.tmp"
+        try:
+            _write_json_payload(temporary_path, payload)
+            os.replace(temporary_path, fileName)
+        except Exception as exc:
+            if os.path.exists(temporary_path):
+                try:
+                    os.remove(temporary_path)
+                except OSError:
+                    pass
+            self._log_error(
+                f"Setting save failed: {type(exc).__name__}: {exc}",
+                persist_current_run=False,
+            )
+            return None
+        self._log_info(f"Scan setting saved: {fileName}", persist_current_run=False)
+        return fileName
+
     def when_load_clicked(self):
-        def handle_special_values(value):
-            if value == "NaN":
-                return np.nan
-            return value
-
-        def convert_special_values(obj):
-            if isinstance(obj, list):
-                return [convert_special_values(item) for item in obj]
-            elif isinstance(obj, dict):
-                return {key: convert_special_values(val) for key, val in obj.items()}
-            else:
-                return handle_special_values(obj)
-
         default_dir = self.main_window.save_info_path.toPlainText()
         fileName, _ = QFileDialog.getOpenFileName(
             self,
             "Open File",
             default_dir,
-            "All Files (*);;Text Files (*.txt)",
+            "JSON Files (*.json);;All Files (*)",
         )
         if not fileName:
             self._log_warning("Load canceled by user.", persist_current_run=False)
             return
 
         try:
-            with open(fileName, "r") as file:
-                content = file.read()
-
-            loaded_info = convert_special_values(json.loads(content))
-            if not isinstance(loaded_info, dict):
-                raise ValueError("Loaded file did not contain a scan dictionary.")
-
-            self.info = loaded_info
-            self.last_saved_json_path = fileName
-            self.info.setdefault("comments", "")
-            self.info.setdefault("scan_log", [])
-            if not isinstance(self.info.get("scan_log"), list):
-                self.info["scan_log"] = []
-
-            ppp_val = self.info.get("plots_per_page", None)
-            if ppp_val is not None:
-                idx = self.PlotsPerPage.findText(str(ppp_val))
-                if idx != -1:
-                    self.PlotsPerPage.setCurrentIndex(idx)
+            loaded_info = read_scan_file(fileName)
         except Exception as e:
             self._log_error(
                 f"Load failed: {type(e).__name__}: {e}",
                 persist_current_run=False,
             )
             return
+        self.load_info(loaded_info, fileName)
+
+    def load_info(self, loaded_info, fileName):
+        """Show a scan read by read_scan_file from fileName in this window."""
+        self.info = loaded_info
+        # A file without measured data is a scan setting: it loads the same
+        # way, but is not this scan's saved data file.
+        if not self.info.get("data"):
+            self.info["data"] = {}
+        is_setting = not self.info["data"]
+        self.last_saved_json_path = None if is_setting else fileName
+        self.info.setdefault("comments", "")
+        self.info.setdefault("scan_log", [])
+        if not isinstance(self.info.get("scan_log"), list):
+            self.info["scan_log"] = []
+
+        ppp_val = self.info.get("plots_per_page", None)
+        if ppp_val is not None:
+            idx = self.PlotsPerPage.findText(str(ppp_val))
+            if idx != -1:
+                self.PlotsPerPage.setCurrentIndex(idx)
 
         loaded_log_lines = list(self.info.get("scan_log", []))
 
@@ -2052,10 +2132,32 @@ class Scan(QtWidgets.QWidget):
         for line in loaded_log_lines:
             self._append_log_entry(line, include_timestamp=False, persist_current_run=False)
 
-        self._log_info(
-            f"Loaded scan JSON: {fileName} (loaded {len(loaded_log_lines)} log lines).",
+        if is_setting:
+            message = f"Loaded scan setting: {fileName}"
+        else:
+            message = f"Loaded scan JSON: {fileName} (loaded {len(loaded_log_lines)} log lines)."
+        self._log_info(message, persist_current_run=False)
+        self._log_unresolved_channels(os.path.basename(fileName))
+
+    def _log_unresolved_channels(self, source):
+        """Warn, in the log only, about channels missing from the device catalog."""
+        uses = find_unresolved(
+            self.info,
+            catalog_names(self.setter_equipment_info),
+            catalog_names(self.getter_equipment_info),
+        )
+        if not uses:
+            return
+        self._log_warning(
+            f"{count_text(len(uses), 'unresolved channel')} in {source}:",
             persist_current_run=False,
         )
+        for use in uses:
+            self._append_log_entry(
+                f"  {use.place}: {use.channel}",
+                include_timestamp=False,
+                persist_current_run=False,
+            )
 
     def when_setter_equipment_info_change(self,setter_equipment_info):
         self.setter_equipment_info=setter_equipment_info
