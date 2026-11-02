@@ -50,11 +50,11 @@ For each invocation of a level:
 
 1. Execute `manual_set_before` in list order.
 2. For each target index, check pause/stop.
-3. Build the point payload, omit `NaN`, group by device, and write devices in parallel. Writes within one device remain in setter order.
+3. Build the point payload, omit `NaN`, group by device, and write devices in parallel. Writes within one device remain in setter order. Shift Compensation groups run afterwards in their own phases: first `compensated_source_*`, then `compensated_target_*`, so a target correction sees the source value written at this point (see [shift_compensation.md](shift_compensation.md)).
 4. Consume artificial-channel and global-range skip flags.
 5. Apply `start_wait_time` once, before the first non-skipped read for this invocation.
 6. Apply `settle_time` when the level has direct getters.
-7. Read direct getters, grouped in parallel across devices and sequentially within a device. A skipped point stores `NaN` instead.
+7. Read direct getters, grouped in parallel across devices and sequentially within a device. Compensated getters are read after the plain ones, because they read the same devices. A skipped point stores `NaN` instead.
 8. Store direct values and emit a `phase="direct"` data update.
 9. Recurse to the next lower level unless an artificial-channel rejection suppresses it. A split artificial pair across adjacent levels may still recurse so the lower write can complete the pair.
 10. Compute and store averaged getters, then emit `phase="average"` when present.

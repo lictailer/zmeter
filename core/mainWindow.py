@@ -39,6 +39,13 @@ from .device_log import append_device_log, configure_device_log
 from .scan_range_main import ScanRangeWindow
 from .setup_capture.controller import SetupCaptureController
 from .setup_capture.widgets import SetupCaptureDialog
+from .channel_value_record import ChannelValueRecord
+from .shift_compensation.logic import (
+    GROUPS as SHIFT_COMPENSATION_GROUPS,
+    SOURCE_GROUP as SHIFT_COMPENSATION_SOURCE_GROUP,
+    TARGET_GROUP as SHIFT_COMPENSATION_TARGET_GROUP,
+    ShiftCompensationLogic,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,10 +195,14 @@ class MainWindow(QtWidgets.QWidget):
         self._skip_next_scan_read_from_global_limit = False
         self._force_stop_requested = False
         self.scan_range_limits_path = self._default_scan_range_limits_path()
+        # Newest value of each channel written or read through write_info /
+        # read_info (and the scan setup snapshots).
+        self.channel_value_record = ChannelValueRecord()
 
         self.make_equipment_info()
         self.setup_default_channel_info()
         self.setup_artificial_channel_info()
+        self.setup_shift_compensation_info()
         self._catalog_snapshot = self._capture_current_catalog_snapshot(
             initial_device_snapshot.profile_name
         )
@@ -210,6 +221,15 @@ class MainWindow(QtWidgets.QWidget):
         )
         self.open_button_layout.addWidget(self.setup_capture_button)
         self.setup_capture_button.clicked.connect(self.open_setup_capture_dialog)
+        self.shift_compensation_button = QtWidgets.QPushButton("Shift compensation")
+        self.shift_compensation_button.setToolTip(
+            "Fit channel-to-channel shift mappings and publish compensated "
+            "scan channels"
+        )
+        self.open_button_layout.addWidget(self.shift_compensation_button)
+        self.shift_compensation_button.clicked.connect(
+            self.open_shift_compensation_window
+        )
 
         self.scanlist = ScanList(
             info=self.info,
@@ -460,8 +480,10 @@ class MainWindow(QtWidgets.QWidget):
                     *self.equips.values(),
                     *self.open_equipment_buttons,
                     getattr(self, "artificial_channel_2d", None),
+                    getattr(self, "shift_compensation_window", None),
                     getattr(self, "scan_range_window", None),
                     getattr(self, "artificialChanne2D_button", None),
+                    getattr(self, "shift_compensation_button", None),
                     getattr(self, "scan_list_button", None),
                     getattr(self, "scan_range_button", None),
                 )
@@ -1107,6 +1129,177 @@ class MainWindow(QtWidgets.QWidget):
             channel_name
         )
 
+    # shift compensation
+
+    def setup_shift_compensation_info(self):
+        self.shift_compensation_logic = ShiftCompensationLogic(
+            write_channel=self.write_info,
+            read_channel=self.read_info,
+            value_record=self.channel_value_record,
+            parent=self,
+        )
+        self.shift_compensation_logic.sig_log.connect(self.log_system_message)
+        self.update_shift_compensation_scan_info()
+        # The window is built on first open; it needs pyqtgraph and the
+        # channel lists, and nothing else depends on it.
+        self.shift_compensation_window = None
+
+    def _shift_compensation_window_or_create(self):
+        window = getattr(self, "shift_compensation_window", None)
+        if window is None:
+            from .shift_compensation.window import ShiftCompensationWindow
+
+            window = ShiftCompensationWindow(
+                logic=self.shift_compensation_logic,
+                apply_change=self.apply_shift_compensation_change,
+                value_record=self.channel_value_record,
+                parent=None,
+                busy_reason=self._shift_compensation_busy_reason,
+                default_folder=self._serial_folder,
+            )
+            self.shift_compensation_window = window
+            self._refresh_shift_compensation_window(self._catalog_snapshot)
+        return window
+
+    def open_shift_compensation_window(self):
+        self._show_and_focus_window(self._shift_compensation_window_or_create())
+
+    @staticmethod
+    def _shift_compensation_raw_channels(channel_maps):
+        """Full channel names that may be a mapping's source or target."""
+
+        return {
+            f"{label}_{channel}"
+            for label, channels in channel_maps.items()
+            if label not in SHIFT_COMPENSATION_GROUPS and label != "default"
+            for channel in channels
+        }
+
+    def _shift_compensation_callables(self, raw_setters, raw_getters):
+        logic = self.shift_compensation_logic
+        sources, targets = logic.published_channels(raw_setters, raw_getters)
+        setters = {}
+        getters = {}
+        if sources:
+            setters[SHIFT_COMPENSATION_SOURCE_GROUP] = {
+                channel: (lambda val, channel=channel: logic.write_source(channel, val))
+                for channel in sources
+            }
+            getters[SHIFT_COMPENSATION_SOURCE_GROUP] = {
+                channel: (lambda channel=channel: logic.read_source(channel))
+                for channel in sources
+            }
+        if targets:
+            setters[SHIFT_COMPENSATION_TARGET_GROUP] = {
+                channel: (lambda val, channel=channel: logic.write_target(channel, val))
+                for channel in targets
+            }
+            getters[SHIFT_COMPENSATION_TARGET_GROUP] = {
+                channel: (lambda channel=channel: logic.read_target(channel))
+                for channel in targets
+            }
+        return setters, getters
+
+    def update_shift_compensation_scan_info(self):
+        """Add the compensated groups to the start-up catalog maps."""
+
+        for group in SHIFT_COMPENSATION_GROUPS:
+            for maps in (
+                self.setter_equipment_info_for_scanning,
+                self.getter_equipment_info_for_scanning,
+                self.setter_equipment_info,
+                self.getter_equipment_info,
+            ):
+                maps.pop(group, None)
+        raw_setters = self._shift_compensation_raw_channels(
+            self.setter_equipment_info
+        )
+        raw_getters = self._shift_compensation_raw_channels(
+            self.getter_equipment_info
+        )
+        self.shift_compensation_logic.set_available_channels(raw_setters, raw_getters)
+        setters, getters = self._shift_compensation_callables(raw_setters, raw_getters)
+        for group, channel_map in setters.items():
+            self.setter_equipment_info_for_scanning[group] = channel_map
+            self.setter_equipment_info[group] = list(channel_map)
+        for group, channel_map in getters.items():
+            self.getter_equipment_info_for_scanning[group] = channel_map
+            self.getter_equipment_info[group] = list(channel_map)
+
+    def _sync_shift_compensation_catalog(self, snapshot):
+        """After a catalog install: drop broken mappings, refresh the window."""
+
+        logic = getattr(self, "shift_compensation_logic", None)
+        if logic is None:
+            return
+        logic.set_available_channels(
+            self._shift_compensation_raw_channels(snapshot.setter_channels),
+            self._shift_compensation_raw_channels(snapshot.getter_channels),
+        )
+        self._refresh_shift_compensation_window(snapshot)
+
+    def _refresh_shift_compensation_window(self, snapshot):
+        window = getattr(self, "shift_compensation_window", None)
+        if window is None or snapshot is None:
+            return
+        raw = lambda maps: {
+            label: list(channels)
+            for label, channels in maps.items()
+            if label not in SHIFT_COMPENSATION_GROUPS and label != "default"
+        }
+        window.refresh_channel_choices(
+            raw(snapshot.setter_channels),
+            raw(snapshot.getter_channels),
+        )
+
+    def _ensure_shift_compensation_change_allowed(self):
+        if (
+            self._session_shutdown_in_progress
+            or self._shutdown_retry_required
+            or self._session_shutdown_complete
+        ):
+            raise DeviceCatalogBusyError(("application shutdown in progress",))
+        if self._catalog_mutation_in_progress:
+            raise DeviceCatalogBusyError(("catalog replacement in progress",))
+        if (
+            self._runtime_mutation_operation is not None
+            or bool(getattr(self.device_manager, "mutation_in_progress", False))
+        ):
+            raise DeviceCatalogBusyError(("runtime device mutation in progress",))
+        self._ensure_catalog_mutation_idle()
+
+    def _shift_compensation_busy_reason(self) -> str:
+        """Why mapping edits are locked now ("" when they are allowed)."""
+
+        try:
+            self._ensure_shift_compensation_change_allowed()
+        except DeviceCatalogBusyError as exc:
+            return ", ".join(exc.blockers) or "busy"
+        return ""
+
+    def apply_shift_compensation_change(self, mutate):
+        """Run ``mutate()`` on the mapping state and republish the catalog.
+
+        Refused (state restored, exception raised) while a scan or another
+        catalog change is running, or when a queued scan still uses a
+        compensated channel that the change would remove.
+        """
+
+        logic = self.shift_compensation_logic
+        self._ensure_shift_compensation_change_allowed()
+        previous = logic.capture_state()
+        try:
+            result = mutate()
+            staged_snapshot = self._build_catalog_snapshot(
+                self._applied_device_snapshot
+            )
+            self._preflight_catalog_references(staged_snapshot)
+            self.apply_device_snapshot(self._applied_device_snapshot)
+        except Exception:
+            logic.restore_state(previous)
+            raise
+        return result
+
     ## Adding devices and make equipment info
 
     @property
@@ -1158,6 +1351,16 @@ class MainWindow(QtWidgets.QWidget):
                 channel: self._make_artificial_channel_reader(channel)
                 for channel in artificial_channels
             }
+
+        if hasattr(self, "shift_compensation_logic"):
+            compensated_setters, compensated_getters = (
+                self._shift_compensation_callables(
+                    self._shift_compensation_raw_channels(setter_callables),
+                    self._shift_compensation_raw_channels(getter_callables),
+                )
+            )
+            setter_callables.update(compensated_setters)
+            getter_callables.update(compensated_getters)
 
         setter_channels = {
             label: tuple(channels)
@@ -1271,6 +1474,7 @@ class MainWindow(QtWidgets.QWidget):
         self.device_channel_catalog = self._mutable_router_catalog(snapshot)
         self.active_scan_range_limits = dict(snapshot.active_scan_range_limits)
         self._catalog_snapshot = snapshot
+        self._sync_shift_compensation_catalog(snapshot)
 
     @staticmethod
     def _full_channels(channel_maps):
@@ -2396,8 +2600,14 @@ class MainWindow(QtWidgets.QWidget):
     #             equipment[variable](val)
 
     def write_info(self, val, master):
+        """Write ``val`` to channel ``master``.
+
+        Returns True when the write ran, False when it was skipped (NaN),
+        denied by a scan-range limit, or a compensated write was incomplete.
+        """
+
         if self._is_nan_value(val):
-            return
+            return False
 
         for label, setters in self.setter_equipment_info_for_scanning.items():
             # exact prefix match: label followed by an underscore
@@ -2415,15 +2625,25 @@ class MainWindow(QtWidgets.QWidget):
                         )
                         self._log_scan_range("WARNING", message)
                         self.mark_skip_next_scan_read_from_global_limit()
-                        return
+                        return False
                 try:
-                    setters[variable](val)
+                    setter = setters[variable]
                 except KeyError:
                     raise KeyError(
                         f"Variable '{variable}' not found in equipment '{label}'. "
                         f"Check your channel name '{master}'."
-                    )
-                return
+                    ) from None
+                result = setter(val)
+                # Only compensated setters report partial failure; a device
+                # setter's return value carries no meaning here.
+                written = not (
+                    label in SHIFT_COMPENSATION_GROUPS and result is False
+                )
+                if written:
+                    record = getattr(self, "channel_value_record", None)
+                    if record is not None:
+                        record.record_write(master, val)
+                return written
 
         raise KeyError(f"No equipment found that matches channel '{master}'.")
 
@@ -2472,12 +2692,17 @@ class MainWindow(QtWidgets.QWidget):
             if slave.startswith(f"{label}_"):
                 variable = self.get_variable(slave, label)
                 try:
-                    return getters[variable]()        # return the read value
+                    getter = getters[variable]
                 except KeyError:
                     raise KeyError(
                         f"Variable '{variable}' not found in equipment '{label}'. "
                         f"Check your channel name '{slave}'."
                     ) from None
+                value = getter()
+                record = getattr(self, "channel_value_record", None)
+                if record is not None:
+                    record.record_read(slave, value)
+                return value
 
         raise KeyError(f"No equipment found that matches channel '{slave}'.")
     
@@ -2651,6 +2876,8 @@ class MainWindow(QtWidgets.QWidget):
 
             if hasattr(self, "artificial_channel_2d"):
                 self.artificial_channel_2d.close()
+            if getattr(self, "shift_compensation_window", None) is not None:
+                self.shift_compensation_window.close()
             if hasattr(self, "scan_range_window"):
                 self.scan_range_window.close()
 
@@ -2758,6 +2985,8 @@ class MainWindow(QtWidgets.QWidget):
             self.scanlist.shutdown(timeout_ms=timeout_ms)
             if hasattr(self, "artificial_channel_2d"):
                 self.artificial_channel_2d.close()
+            if getattr(self, "shift_compensation_window", None) is not None:
+                self.shift_compensation_window.close()
             if hasattr(self, "scan_range_window"):
                 self.scan_range_window.close()
 

@@ -34,6 +34,7 @@ the device package README. Completed plans and investigations live under
 | [device_contract.md](device_contract.md) | Device integration and lifecycle contract |
 | [scan_engine.md](scan_engine.md) | Scalar scan traversal and runtime contract |
 | [data_format.md](data_format.md) | Persisted data, autosave, backup, and output contract |
+| [shift_compensation.md](shift_compensation.md) | Shift Compensation mappings, compensated scan channels, and user bench checks |
 | [hardware_safety.md](hardware_safety.md) | Hardware-safety and user-executed validation boundary |
 | [testing.md](testing.md) | Validation levels and safe commands |
 | [environment_windows.md](environment_windows.md) | Windows environment and system prerequisites |
