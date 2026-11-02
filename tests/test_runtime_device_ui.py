@@ -973,6 +973,7 @@ class RuntimeManualSealTests(unittest.TestCase):
             _queue_activity_reservation=None,
             _queue_run_started=False,
             _queue_completion_delivered=True,
+            _queue_start_problems=mock.Mock(return_value=[]),
             _log_warning=mock.Mock(),
             _log_info=mock.Mock(),
         )

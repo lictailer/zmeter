@@ -11,6 +11,16 @@ import PyQt6.QtCore as QtCore
 import PyQt6.QtGui as QtGui
 from PyQt6 import uic
 from .scan import Scan, data_folder
+from .channel_check import (
+    catalog_leaf_names,
+    catalog_names,
+    count_text,
+    group_uses,
+    level_problems,
+    queue_uses,
+    replace_channels,
+    use_line,
+)
 from .queue_files import read_queue, save_queue
 from .nested_menu import NestedMenu
 from .queue_model import LiveQueueModel, QueueItemState
@@ -475,6 +485,73 @@ class ManualValueDialog(QtWidgets.QDialog):
             return
         self._value = value
         self.accept()
+
+
+class ChannelFixDialog(QtWidgets.QDialog):
+    """Pick catalog channels for channels a loaded queue names but the catalog lacks."""
+
+    LEAVE_TEXT = "leave as is"
+    MENU_COLUMN_WIDTH = 220
+
+    def __init__(self, groups, setter_catalog, getter_catalog, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Unresolved channels in loaded queue")
+        self.setModal(True)
+        self.rows = []
+
+        self.table = QtWidgets.QTableWidget(len(groups), 3, self)
+        self.table.setHorizontalHeaderLabels(["Missing channel", "Where", "Replace with"])
+        self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setWordWrap(True)
+        for row, ((kind, channel), places) in enumerate(groups.items()):
+            label = QtWidgets.QLabel(f"<b>{kind.capitalize()}</b>: {channel}")
+            label.setContentsMargins(4, 0, 4, 0)
+            self.table.setCellWidget(row, 0, label)
+            self.table.setItem(row, 1, QtWidgets.QTableWidgetItem("; ".join(places)))
+            menu = NestedMenu(order=1)
+            menu.label.hide()
+            menu.set_choices(setter_catalog if kind == "setter" else getter_catalog)
+            menu.button.setText(self.LEAVE_TEXT)
+            self.table.setCellWidget(row, 2, menu)
+            self.rows.append((kind, channel, menu))
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(2, self.MENU_COLUMN_WIDTH)
+        self.table.resizeRowsToContents()
+
+        button_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(
+            QtWidgets.QLabel(
+                "These channels are not in the current device catalog. Pick a "
+                "replacement for the loaded items, or leave them as they are.",
+                self,
+            )
+        )
+        layout.addWidget(self.table)
+        layout.addWidget(button_box)
+        self.resize(900, 400)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # "Where" wraps, so row heights follow its width once the table has resized.
+        QtCore.QTimer.singleShot(0, self.table.resizeRowsToContents)
+
+    def replacements(self):
+        """Return (setter_map, getter_map) from each old channel to the chosen one."""
+        maps = {"setter": {}, "getter": {}}
+        for kind, channel, menu in self.rows:
+            if menu.name:
+                maps[kind][channel] = menu.name
+        return maps["setter"], maps["getter"]
 
 
 class ManualSetItem(QtWidgets.QFrame):
@@ -1100,6 +1177,7 @@ class ScanList(QtWidgets.QWidget):
         self.pb_new_scan.clicked.connect(self.add_empty_scan_item)
         self.save_queue_pushButton.clicked.connect(self.when_save_queue_clicked)
         self.load_queue_pushButton.clicked.connect(self.when_load_queue_clicked)
+        self.clear_queue_pushButton.clicked.connect(self.when_clear_queue_clicked)
         self.manual_add_item_pushButton.clicked.connect(self.add_manual_set_item_from_ui)
         self._log_ready = True
 
@@ -1333,6 +1411,19 @@ class ScanList(QtWidgets.QWidget):
         if pending_count == 0:
             self._log_warning("Queue start ignored: queue is empty.")
             return
+        problems = self._queue_start_problems()
+        if problems:
+            self._log_lines(
+                f"Queue not started: {count_text(len(problems), 'problem')} in pending items:",
+                problems,
+            )
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Queue not started",
+                "Fix these queue items before starting:\n\n"
+                + "\n".join(line.strip() for line in problems),
+            )
+            return
 
         reservation = None
         reserve = getattr(self.main_window, "reserve_runtime_activity", None)
@@ -1372,6 +1463,49 @@ class ScanList(QtWidgets.QWidget):
                 self._log_warning(
                     f"Queue questionnaire unavailable: {type(exc).__name__}: {exc}"
                 )
+
+    @staticmethod
+    def _queue_payload(item):
+        """A queue item in saved-queue form, for the channel checks."""
+        if isinstance(item, ScanItem):
+            return {
+                "scan": {
+                    "name": item.scan.lineEdit.text() or item.name,
+                    "levels": item.scan.all_level_setting.all_level_info,
+                }
+            }
+        return {"manual_set": {"channel": item.channel_name}}
+
+    def _queue_start_problems(self):
+        """Check pending items before a queue run, without contacting any device.
+
+        Every channel must be in the catalog, every level needs a setter channel,
+        and each level's setting array must build with at least one point.
+        """
+        setter_names = catalog_names(self.setter_equipment_info)
+        getter_names = catalog_names(self.getter_equipment_info)
+        problems = []
+        entries = self.queue_model.ordered_queue_entries()
+        for position, entry in enumerate(entries, start=1):
+            if entry.state is not QueueItemState.PENDING:
+                continue
+            payload = self._queue_payload(entry.item)
+            for found in queue_uses([payload], setter_names, getter_names, position):
+                problems.append(f"{use_line(*found)} is not in the device catalog")
+            if "manual_set" in payload:
+                continue
+            name = payload["scan"]["name"]
+            try:
+                entry.item.scan.update_alllevel_setting_array()
+            except Exception as exc:
+                problems.append(
+                    f'  #{position} "{name}": setting array failed '
+                    f"({type(exc).__name__}: {exc})"
+                )
+                continue
+            for place, problem in level_problems(payload["scan"]):
+                problems.append(f'  #{position} "{name}" {place}: {problem}')
+        return problems
 
     def _prepare_queue_questionnaire(self):
         """Mark queued scans before the first one starts (queue box wins)."""
@@ -1677,10 +1811,14 @@ class ScanList(QtWidgets.QWidget):
         """Add a saved queue to the end of the queue, in its saved order.
 
         Every card is built before any is added, so a bad file adds nothing.
+        Channels missing from the device catalog can be replaced first.
         """
+        first_position = len(self.queue_model.ordered_queue_entries()) + 1
         items = []
         try:
-            for saved in read_queue(folder):
+            saved_items = read_queue(folder)
+            self._fix_unresolved_channels(saved_items, first_position)
+            for saved in saved_items:
                 items.append(self._item_from_saved(saved))
         except Exception as exc:
             for item in items:
@@ -1696,7 +1834,76 @@ class ScanList(QtWidgets.QWidget):
         for item in items[added:]:
             item.deleteLater()
         self._log_info(f"Queue loaded: {folder} ({added} of {len(items)} items added).")
+        remaining = queue_uses(
+            [self._queue_payload(item) for item in items[:added]],
+            catalog_names(self.setter_equipment_info),
+            catalog_names(self.getter_equipment_info),
+            first_position,
+        )
+        if remaining:
+            self._log_lines(
+                f"{count_text(len(remaining), 'channel')} still unresolved after queue load:",
+                [use_line(*found) for found in remaining],
+            )
         return added
+
+    def when_clear_queue_clicked(self):
+        pending = [
+            entry.item
+            for entry in self.queue_model.ordered_queue_entries()
+            if entry.state is QueueItemState.PENDING
+        ]
+        if not pending:
+            self._log_warning("Queue clear ignored: no pending items.")
+            return 0
+        answer = QtWidgets.QMessageBox.question(
+            self,
+            "Clear queue",
+            f"Remove {count_text(len(pending), 'pending item')} from the queue?",
+        )
+        if answer != QtWidgets.QMessageBox.StandardButton.Yes:
+            return 0
+        return self.clear_queue(pending)
+
+    def clear_queue(self, items):
+        """Remove pending items through the normal delete path; a running item stays."""
+        for item in items:
+            self.handle_delete_request(item)
+        self._log_info(f"Queue cleared: {count_text(len(items), 'pending item')} removed.")
+        return len(items)
+
+    def _fix_unresolved_channels(self, saved_items, first_position):
+        """Let the operator replace missing channels in the items being loaded.
+
+        Only these items change; items already in the queue and the files do not.
+        Cancel leaves every channel as it is.
+        """
+        found = queue_uses(
+            saved_items,
+            catalog_names(self.setter_equipment_info),
+            catalog_names(self.getter_equipment_info),
+            first_position,
+        )
+        if not found:
+            return
+        dialog = ChannelFixDialog(
+            group_uses(found),
+            self.setter_equipment_info,
+            self.getter_equipment_info,
+            parent=self,
+        )
+        try:
+            if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+                return
+            setter_map, getter_map = dialog.replacements()
+        finally:
+            dialog.deleteLater()
+        for saved in saved_items:
+            if "scan" in saved:
+                replace_channels(saved["scan"], setter_map, getter_map)
+            else:
+                channel = saved["manual_set"]["channel"]
+                saved["manual_set"]["channel"] = setter_map.get(channel, channel)
 
     def _item_from_saved(self, saved):
         if "manual_set" in saved:
@@ -1747,23 +1954,13 @@ class ScanList(QtWidgets.QWidget):
 
     def _log_error(self, message: str):
         self._append_log_entry(message, level="ERROR")
-        
-    @staticmethod
-    def _catalog_leaf_names(value, path=()):
-        if isinstance(value, (list, tuple)):
-            for entry in value:
-                yield from ScanList._catalog_leaf_names(entry, path)
-            return
-        if isinstance(value, dict):
-            for key, child in value.items():
-                next_path = (*path, str(key))
-                if isinstance(child, int):
-                    yield "_".join(next_path)
-                else:
-                    yield from ScanList._catalog_leaf_names(child, next_path)
-            return
-        if value is not None:
-            yield "_".join((*path, str(value)))
+
+    def _log_lines(self, header, lines):
+        """Log a warning header followed by its detail lines, untimestamped."""
+        self._log_warning(header)
+        if self._log_ready:
+            for line in lines:
+                self.logStatus_textEdit.append(line)
 
     def _remember_catalog_channels(
         self,
@@ -1778,7 +1975,7 @@ class ScanList(QtWidgets.QWidget):
             if not isinstance(catalog, dict):
                 continue
             for device_id, choices in catalog.items():
-                for local_channel in self._catalog_leaf_names(choices):
+                for local_channel in catalog_leaf_names(choices):
                     full_channel = f"{device_id}_{local_channel}"
                     current_by_access[access].add(full_channel)
                     self._channel_device_history.setdefault(

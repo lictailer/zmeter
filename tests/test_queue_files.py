@@ -178,6 +178,42 @@ class QueueFileTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             read_queue(str(self.output_root))
 
+    def test_clear_queue_removes_pending_items_after_confirmation(self):
+        scan_list = self._queue_with_two_scans_and_a_manual_set()
+        with mock.patch(
+            "core.scanlist.QtWidgets.QMessageBox.question",
+            return_value=QtWidgets.QMessageBox.StandardButton.No,
+        ):
+            self.assertEqual(scan_list.when_clear_queue_clicked(), 0)
+        self.assertEqual(len(scan_list.queue_model.ordered_queue_entries()), 3)
+
+        with mock.patch(
+            "core.scanlist.QtWidgets.QMessageBox.question",
+            return_value=QtWidgets.QMessageBox.StandardButton.Yes,
+        ):
+            self.assertEqual(scan_list.when_clear_queue_clicked(), 3)
+        self.assertEqual(len(scan_list.queue_model.ordered_queue_entries()), 0)
+        self.assertIn("Queue cleared: 3 pending items removed.", scan_list.logStatus_textEdit.toPlainText())
+
+    def test_clear_queue_keeps_the_current_item(self):
+        scan_list = self._queue_with_two_scans_and_a_manual_set()
+        self.assertTrue(scan_list.queue_model.begin_run())
+        current = scan_list.queue_model.claim_next().item
+        with mock.patch(
+            "core.scanlist.QtWidgets.QMessageBox.question",
+            return_value=QtWidgets.QMessageBox.StandardButton.Yes,
+        ):
+            self.assertEqual(scan_list.when_clear_queue_clicked(), 2)
+        self.assertEqual(
+            [entry.item for entry in scan_list.queue_model.ordered_queue_entries()],
+            [current],
+        )
+        scan_list.queue_model.finish_current(
+            scan_list.queue_model.current_entry.entry_id
+        )
+        scan_list.queue_model.request_stop_now()
+        scan_list.queue_model.claim_next()
+
     def test_canceled_dialogs_change_nothing(self):
         scan_list = self._queue_with_two_scans_and_a_manual_set()
         with mock.patch.object(

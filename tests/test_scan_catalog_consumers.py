@@ -64,6 +64,18 @@ class ScanCatalogConsumerTests(unittest.TestCase):
         self.widgets.append(widget)
         return widget
 
+    def test_device_without_channels_has_no_empty_submenu(self):
+        menu = NestedMenu()
+        self.widgets.append(menu)
+        menu.set_choices({"default": [], "artificial_channel": ["N", "E"]})
+
+        titles = [action.text() for action in menu.menu.actions()]
+
+        self.assertEqual(titles, ["artificial_channel"])
+        self.assertEqual(
+            menu.choice_names, {"artificial_channel_N", "artificial_channel_E"}
+        )
+
     def test_nested_menu_replaces_actions_and_marks_invalid_selection(self):
         menu = self._track(NestedMenu({"device_with_underscores": ["x", "y"]}))
         menu.set_chosen_one("device_with_underscores_x")

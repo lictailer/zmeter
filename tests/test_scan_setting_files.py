@@ -107,7 +107,7 @@ class ScanSettingFileTests(unittest.TestCase):
                 self.assertEqual(
                     self.scan.info["plots"]["line_plots"]["0"]["y"], "L0G1_SR860_0_R"
                 )
-                self.assertIn("Loaded scan setting", self.scan._display_log_history[-1])
+                self.assertIn("Loaded scan setting", "\n".join(self.scan._display_log_history))
 
     def test_missing_channels_are_marked_unresolved_without_rewriting_info(self):
         self._load(self._write("setting.json", _setting_info()))
@@ -210,7 +210,7 @@ class ScanSettingFileTests(unittest.TestCase):
         self._load(path)
         self.assertEqual(self.scan.last_saved_json_path, str(path))
         self.assertTrue(np.isnan(self.scan.info["data"][0][0][1]))
-        self.assertIn("Loaded scan JSON", self.scan._display_log_history[-1])
+        self.assertIn("Loaded scan JSON", "\n".join(self.scan._display_log_history))
 
 
 if __name__ == "__main__":

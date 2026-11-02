@@ -10,6 +10,7 @@ from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
 from .all_plot_settings import AllPlotSetting
 from .all_plots import AllPlots
+from .channel_check import catalog_names, count_text, find_unresolved
 from .construct_scan_coordinates import Construct
 from .all_plots import LinePlot
 from .all_plots import ImagePlot
@@ -2136,6 +2137,27 @@ class Scan(QtWidgets.QWidget):
         else:
             message = f"Loaded scan JSON: {fileName} (loaded {len(loaded_log_lines)} log lines)."
         self._log_info(message, persist_current_run=False)
+        self._log_unresolved_channels(os.path.basename(fileName))
+
+    def _log_unresolved_channels(self, source):
+        """Warn, in the log only, about channels missing from the device catalog."""
+        uses = find_unresolved(
+            self.info,
+            catalog_names(self.setter_equipment_info),
+            catalog_names(self.getter_equipment_info),
+        )
+        if not uses:
+            return
+        self._log_warning(
+            f"{count_text(len(uses), 'unresolved channel')} in {source}:",
+            persist_current_run=False,
+        )
+        for use in uses:
+            self._append_log_entry(
+                f"  {use.place}: {use.channel}",
+                include_timestamp=False,
+                persist_current_run=False,
+            )
 
     def when_setter_equipment_info_change(self,setter_equipment_info):
         self.setter_equipment_info=setter_equipment_info
