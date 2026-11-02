@@ -12,6 +12,11 @@ class NIDAQLogic(QtCore.QThread):
     sig_new_read = QtCore.pyqtSignal(object)
     sig_name = QtCore.pyqtSignal(object)
     AO_CHANNELS = ("AO0", "AO1")
+    AI_CHANNELS = ("AI0", "AI1", "AI2", "AI3", "AI4", "AI5", "AI6", "AI7")
+    # AO readback: each output is wired back to one analog input.
+    AO_READBACK_MAP = {"AO0": "AI6", "AO1": "AI7"}
+    # Read-only getters recorded by setup capture at scan start and end.
+    SNAPSHOT_GETTERS = ("AO0", "AO1")
 
     def __init__(self):
         QtCore.QThread.__init__(self)
@@ -59,7 +64,7 @@ class NIDAQLogic(QtCore.QThread):
             channel: 0.0 for channel in self.AO_channels
         }  # used for coupled channels like rotator
 
-        self.AI_channels = ["AI0", "AI1", "AI2", "AI3"]
+        self.AI_channels = list(self.AI_CHANNELS)
         for ch in self.AI_channels:
             ch = "/" + self.dev_name + "/" + ch
             self.daq.setup_single_AI_task(ch)
@@ -158,6 +163,22 @@ class NIDAQLogic(QtCore.QThread):
     def get_AI6(self):
         return self.read_AI("AI6")
 
+    def get_AI7(self):
+        return self.read_AI("AI7")
+
+    def read_AO(self, ch):
+        """Read output ``ch`` back through its wired AI (see AO_READBACK_MAP)."""
+        ai = self.AO_READBACK_MAP[ch]
+        read = self.daq.read_mult_AI_task("/" + self.dev_name + "/" + ai, self.accumulate_count_num)
+        self.sig_new_read.emit([ch, read])
+        return read
+
+    def get_AO0(self):
+        return self.read_AO("AO0")
+
+    def get_AO1(self):
+        return self.read_AO("AO1")
+
     def assign_next_AI_channel(self, channel):
         self.next_AI_channel = channel
 
@@ -166,13 +187,7 @@ class NIDAQLogic(QtCore.QThread):
         if self.scan_admission_closed:
             self.job = ""
             return
-        if self.job == "write_AO0":
-            self.set_AO0(self.target_AO0)
-
-        elif self.job == "write_AO1":
-            self.set_AO1(self.target_AO1)
-
-        elif self.job == "read_AI":
+        if self.job == "read_AI":
             self.read_AI(self.next_AI_channel)
 
         elif self.job == "read_single_sample_count":
@@ -180,6 +195,14 @@ class NIDAQLogic(QtCore.QThread):
 
         elif self.job == "write_AO":
             self.setup_AO(self.next_channel, self.target_AO[self.next_channel])
+            self.read_AO(self.next_channel)
+
+        elif self.job == "read_AO":
+            self.read_AO(self.next_channel)
+
+        elif self.job == "read_all_AO":
+            for ch in self.AO_channels:
+                self.read_AO(ch)
 
         self.reset_flags()
         self.job = ""

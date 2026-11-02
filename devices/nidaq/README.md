@@ -18,9 +18,13 @@ Focused regression tests replace the logic and DAQ layers with fakes; there is n
 Current `.logic` discovery exposes:
 
 - setters: `AO0`, `AO1` in volts;
-- getters: `AI0` through `AI6` and `sample_count`.
+- getters: `AI0` through `AI7`, `sample_count`, and `AO0`, `AO1` (output readback).
 
-AO0 and AO1 are the complete analog-output interface in both the logic and widget. The widget lists AI0 through AI7, but only AI0 through AI6 have exact scan getters. Treat that input mismatch as a current interface boundary, not implied support.
+AO0 and AO1 are the complete analog-output interface in both the logic and widget. The `AO0`/`AO1` getters read the outputs back through a wired loopback, AO0 on AI6 and AO1 on AI7 (`AO_READBACK_MAP` in the logic). Direction decides the operation: setting `AO0` writes the output, getting `AO0` reads AI6. The wiring must match the lab installation; without it these getters return whatever is on AI6/AI7. They are also the default setup-capture snapshot getters, and they can serve as target readbacks in Shift Compensation.
+
+In the panel, each AO row has a `read` button and a readback label, as on `ni6423`. The label is refreshed on connect, after every `go`/`+`/`-`, and on `read`; it shows the AI6/AI7 value, not the last commanded value.
+
+`initialize` creates AI tasks for AI0 through AI7, so the device must expose eight analog inputs.
 
 AI acquisition averages a configurable sample count, clamped to 1 through 2047. The sample counter uses a configurable accumulation time. The module also contains lower-level clock/counter helpers that are not scan-visible.
 
@@ -38,4 +42,4 @@ Agents must not initialize NI hardware, create tasks, write or read channels, ro
 
 Hardware-independent syntax check: `python -B -m py_compile devices/nidaq/nidaq_hardware.py devices/nidaq/nidaq_logic.py devices/nidaq/nidaq_main.py`. Focused regression check: `python -B -m unittest tests.test_nidaq_two_ao -v`. No general simulated PyDAQmx backend is present.
 
-**User-executed hardware test:** with a reviewed breakout disconnected from the experiment, initialize the explicit NI device; write 0 V and +0.1 V to AO0 and AO1 separately; read a grounded AI and a known reference; acquire the sample counter from a known source for the configured window; stop monitoring; terminate; and confirm every task can be recreated after cleanup. Do not test clock helpers until their terminal routing and load are documented.
+**User-executed hardware test:** with a reviewed breakout disconnected from the experiment, initialize the explicit NI device; write 0 V and +0.1 V to AO0 and AO1 separately; with AO0 wired to AI6 and AO1 to AI7, confirm the `AO0`/`AO1` getters return the written values; read a grounded AI and a known reference; acquire the sample counter from a known source for the configured window; stop monitoring; terminate; and confirm every task can be recreated after cleanup. Do not test clock helpers until their terminal routing and load are documented.
