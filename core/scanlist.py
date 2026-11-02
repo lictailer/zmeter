@@ -25,6 +25,7 @@ from .queue_files import read_queue, save_queue
 from .nested_menu import NestedMenu
 from .queue_model import LiveQueueModel, QueueItemState
 from .setup_capture.queue_session import QueueQuestionnaireSession
+from .slack_notify import SLACK_NOTIFICATION_CHANNEL
 
 
 class ScanListShutdownTimeoutError(TimeoutError):
@@ -226,6 +227,14 @@ class ScanItem(QtWidgets.QLabel):
         self.stop.emit(self)
 
     def start_queue(self):
+        try:
+            self._run_queued_scan()
+        finally:
+            # Finalization has used the mark (or the start failed); a later
+            # manual run of this scan sends its own Slack message again.
+            self.scan._slack_queue_run = False
+
+    def _run_queued_scan(self):
         # Use the same flow as pressing the Scan button, then block until done
         # so queue execution remains strictly sequential.
         self._scan_start_accepted = False
@@ -263,6 +272,8 @@ class ScanItem(QtWidgets.QLabel):
     @QtCore.pyqtSlot()
     def _start_scan_from_queue(self):
         self.set_queue_state(QueueItemState.CURRENT)
+        # The queue sends one Slack message at its end instead.
+        self.scan._slack_queue_run = True
         scan_list = getattr(getattr(self, "main_window", None), "scanlist", None)
         if bool(getattr(scan_list, "_shutdown_sealed", False)) or bool(
             getattr(self.scan, "_shutdown_requested", False)
@@ -1179,6 +1190,13 @@ class ScanList(QtWidgets.QWidget):
         self.load_queue_pushButton.clicked.connect(self.when_load_queue_clicked)
         self.clear_queue_pushButton.clicked.connect(self.when_clear_queue_clicked)
         self.manual_add_item_pushButton.clicked.connect(self.add_manual_set_item_from_ui)
+        self.slack_notify_pushButton = QtWidgets.QPushButton("+ Notify", self)
+        self.slack_notify_pushButton.setToolTip(
+            "Add a default_slack_notification manual set. Drag it into the "
+            "queue as a Slack checkpoint (sends a ZMeter notification)."
+        )
+        self.horizontalLayout_6.addWidget(self.slack_notify_pushButton)
+        self.slack_notify_pushButton.clicked.connect(self.add_slack_notification_item)
         self._log_ready = True
 
     def _bind_queue_entry(self, item, entry):
@@ -1437,6 +1455,7 @@ class ScanList(QtWidgets.QWidget):
                 raise RuntimeError("queue became empty before the run began")
             self._queue_run_started = True
             self._queue_completion_delivered = False
+            self._begin_slack_queue_run()
             self.logic.start()
         except Exception:
             if (
@@ -1602,6 +1621,7 @@ class ScanList(QtWidgets.QWidget):
         error_message = str(payload.get("error_message", "")).strip()
 
         item_label = self.worker_display_name(worker)
+        self._count_slack_queue_item(worker, failed)
         if failed:
             if error_message:
                 self._log_error(
@@ -1625,6 +1645,66 @@ class ScanList(QtWidgets.QWidget):
             self._log_warning("Queue stopped by stop request.")
         else:
             self._log_warning(f"Queue stopped: {reason}")
+        self._send_slack_queue_end(reason)
+
+    # Slack: the queue sends one message at its end.
+
+    def _slack_notifier(self):
+        return getattr(self.main_window, "slack_notifier", None)
+
+    def _begin_slack_queue_run(self):
+        self._slack_queue_stats = {
+            "started": time.monotonic(),
+            "done": 0,
+            "failed": [],
+        }
+        notifier = self._slack_notifier()
+        if notifier is not None:
+            notifier.queue_started()
+
+    @staticmethod
+    def _slack_item_label(worker):
+        if isinstance(worker, ScanItem):
+            return str(worker.name)
+        if isinstance(worker, ManualSetItem):
+            return f"manual set {worker.channel_name} = {worker.value_text()}"
+        return type(worker).__name__
+
+    def _count_slack_queue_item(self, worker, failed):
+        stats = getattr(self, "_slack_queue_stats", None)
+        if stats is None:
+            return
+        stats["done"] += 1
+        if failed:
+            stats["failed"].append(self._slack_item_label(worker))
+
+    def _send_slack_queue_end(self, reason):
+        stats = getattr(self, "_slack_queue_stats", None)
+        self._slack_queue_stats = None
+        notifier = self._slack_notifier()
+        if stats is None or notifier is None:
+            return
+        try:
+            notifier.queue_finished(
+                reason=str(reason),
+                done=stats["done"],
+                total=stats["done"] + int(self.queue_model.pending_count),
+                failed=list(stats["failed"]),
+                elapsed_seconds=time.monotonic() - stats["started"],
+            )
+        except Exception as exc:
+            self._log_warning(f"Slack queue message skipped: {type(exc).__name__}: {exc}")
+
+    def add_slack_notification_item(self):
+        """Add a default_slack_notification manual set (a queue checkpoint)."""
+        if bool(getattr(self, "_shutdown_sealed", False)) or bool(
+            getattr(self, "_runtime_mutation_sealed", False)
+        ):
+            return
+        item = ManualSetItem(
+            SLACK_NOTIFICATION_CHANNEL, 1.0, main_window=self.main_window
+        )
+        self.list_manual.add_item(item)
 
     @QtCore.pyqtSlot()
     def _on_queue_thread_finished(self):

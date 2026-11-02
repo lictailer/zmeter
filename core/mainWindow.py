@@ -39,6 +39,9 @@ from .device_log import append_device_log, configure_device_log
 from .scan_range_main import ScanRangeWindow
 from .setup_capture.controller import SetupCaptureController
 from .setup_capture.widgets import SetupCaptureDialog
+from .slack_notify.notifier import SlackNotifier
+from .slack_notify.settings import SlackTokenStore
+from .slack_notify.widgets import SlackPanel
 from .channel_value_record import ChannelValueRecord
 from .shift_compensation.logic import (
     GROUPS as SHIFT_COMPENSATION_GROUPS,
@@ -199,6 +202,9 @@ class MainWindow(QtWidgets.QWidget):
         # read_info (and the scan setup snapshots).
         self.channel_value_record = ChannelValueRecord()
 
+        # Slack messages; the default_slack_notification setter needs it.
+        self.slack_notifier = SlackNotifier(log=self.log_system_message, parent=self)
+
         self.make_equipment_info()
         self.setup_default_channel_info()
         self.setup_artificial_channel_info()
@@ -230,6 +236,13 @@ class MainWindow(QtWidgets.QWidget):
         self.shift_compensation_button.clicked.connect(
             self.open_shift_compensation_window
         )
+        self.slack_token_store = SlackTokenStore()
+        self.slack_panel = SlackPanel(
+            self.slack_notifier, self.slack_token_store, parent=self
+        )
+        self.slack_label = QtWidgets.QLabel("Slack")
+        self.gridLayout.addWidget(self.slack_label, 4, 0)
+        self.gridLayout.addWidget(self.slack_panel, 4, 1)
 
         self.scanlist = ScanList(
             info=self.info,
@@ -896,13 +909,19 @@ class MainWindow(QtWidgets.QWidget):
             self.artificial_channel_logic.artificial_channels
         )
 
-    def setup_default_channel_info(self):
-        self.setter_equipment_info_for_scanning["default"] = {
+    def _default_setter_callables(self):
+        """Built-in ``default_*`` setters: timing helpers and the Slack ping."""
+        return {
             "wait": self._set_default_wait,
             "count": self._set_default_count,
+            "slack_notification": self.slack_notifier.channel_written,
         }
+
+    def setup_default_channel_info(self):
+        setters = self._default_setter_callables()
+        self.setter_equipment_info_for_scanning["default"] = setters
         self.getter_equipment_info_for_scanning["default"] = {}
-        self.setter_equipment_info["default"] = ["wait", "count"]
+        self.setter_equipment_info["default"] = list(setters)
         self.getter_equipment_info["default"] = []
 
     def _set_default_wait(self, val):
@@ -1334,10 +1353,7 @@ class MainWindow(QtWidgets.QWidget):
             setter_callables[equipment_label] = setters
             getter_callables[equipment_label] = getters
 
-        setter_callables["default"] = {
-            "wait": self._set_default_wait,
-            "count": self._set_default_count,
-        }
+        setter_callables["default"] = self._default_setter_callables()
         getter_callables["default"] = {}
 
         if hasattr(self, "artificial_channel_logic"):
