@@ -229,7 +229,20 @@
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="last_set_pos_label">
+      <widget class="QPushButton" name="getAO0_button">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>read</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="AO0read_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Minimum">
          <horstretch>0</horstretch>
@@ -243,7 +256,7 @@
         </size>
        </property>
        <property name="text">
-        <string>last set to:</string>
+        <string/>
        </property>
        <property name="textInteractionFlags">
         <set>Qt::TextInteractionFlag::TextSelectableByKeyboard|Qt::TextInteractionFlag::TextSelectableByMouse</set>
@@ -427,7 +440,20 @@
       </widget>
      </item>
      <item>
-      <widget class="QLabel" name="last_set_pos_label_2">
+      <widget class="QPushButton" name="getAO1_button">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>read</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="AO1read_label">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Minimum">
          <horstretch>0</horstretch>
@@ -441,7 +467,7 @@
         </size>
        </property>
        <property name="text">
-        <string>last set to:</string>
+        <string/>
        </property>
        <property name="textInteractionFlags">
         <set>Qt::TextInteractionFlag::TextSelectableByKeyboard|Qt::TextInteractionFlag::TextSelectableByMouse</set>

@@ -48,6 +48,7 @@ class NIDAQ(QtWidgets.QWidget):
         else:
             pass
         self.logic.initialize(device)
+        self.read_all_AO()
         return True
 
     def connect_sig_slot(self):
@@ -59,10 +60,11 @@ class NIDAQ(QtWidgets.QWidget):
         self.minus_button_2.clicked.connect(lambda: self.when_pm_button_clicked(1, "m"))
         self.plus_button.clicked.connect(lambda: self.when_pm_button_clicked(0, "p"))
         self.plus_button_2.clicked.connect(lambda: self.when_pm_button_clicked(1, "p"))
+        self.getAO0_button.clicked.connect(lambda: self.when_read_AO_clicked(0))
+        self.getAO1_button.clicked.connect(lambda: self.when_read_AO_clicked(1))
 
         self.logic.sig_name.connect(self.setup_name_label)
         self.logic.sig_new_read.connect(self.update_read_display)
-        self.logic.sig_new_write.connect(self.update_AO_label)
 
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.monitor)
@@ -75,6 +77,7 @@ class NIDAQ(QtWidgets.QWidget):
             return False
         name = self.dev_name_lineEdit.text()
         self.logic.initialize(name)
+        self.read_all_AO()
         return True
 
     def when_close_button_clicked(self):
@@ -94,6 +97,10 @@ class NIDAQ(QtWidgets.QWidget):
 
     def update_read_display(self, sig):
         channel, val = sig
+        if channel in self.logic.AO_READBACK_MAP:
+            labels = {"AO0": self.AO0read_label, "AO1": self.AO1read_label}
+            labels[channel].setText(f"{val:+.5f} V")
+            return
         self.read_log[channel][0:-1] = self.read_log[channel][1:]
         self.read_log[channel][-1] = val
         pen1 = pg.mkPen((255, 255, 255), width=3)
@@ -107,13 +114,22 @@ class NIDAQ(QtWidgets.QWidget):
             self.input1_label.setText(f"{val:+.5f}")
 
     ######################################
-    def update_AO_label(self, info):
-        labels = [
-            self.last_set_pos_label,
-            self.last_set_pos_label_2,
-        ]
-        id, d = info
-        labels[id].setText(f"last set to: {d:+.4f} V")
+    def when_read_AO_clicked(self, AO_index):
+        if self._scan_active or not self.logic.is_initialized:
+            return False
+        self.logic.wait()
+        self.logic.setup_channel(self.logic.AO_channels[AO_index])
+        self.logic.job = "read_AO"
+        self.logic.start()
+        return True
+
+    def read_all_AO(self):
+        if self._scan_active or not self.logic.is_initialized:
+            return False
+        self.logic.wait()
+        self.logic.job = "read_all_AO"
+        self.logic.start()
+        return True
 
     def when_go_button_clicked(self, AO_index):
         if self._scan_active:

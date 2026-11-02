@@ -22,6 +22,8 @@ Current `.logic` discovery exposes:
 
 AO0 and AO1 are the complete analog-output interface in both the logic and widget. The `AO0`/`AO1` getters read the outputs back through a wired loopback, AO0 on AI6 and AO1 on AI7 (`AO_READBACK_MAP` in the logic). Direction decides the operation: setting `AO0` writes the output, getting `AO0` reads AI6. The wiring must match the lab installation; without it these getters return whatever is on AI6/AI7. They are also the default setup-capture snapshot getters, and they can serve as target readbacks in Shift Compensation.
 
+In the panel, each AO row has a `read` button and a readback label, as on `ni6423`. The label is refreshed on connect, after every `go`/`+`/`-`, and on `read`; it shows the AI6/AI7 value, not the last commanded value.
+
 `initialize` creates AI tasks for AI0 through AI7, so the device must expose eight analog inputs.
 
 AI acquisition averages a configurable sample count, clamped to 1 through 2047. The sample counter uses a configurable accumulation time. The module also contains lower-level clock/counter helpers that are not scan-visible.

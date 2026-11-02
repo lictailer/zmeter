@@ -66,9 +66,12 @@ class FakeWidgetLogic(QtCore.QObject):
     def __init__(self):
         super().__init__()
         self.AO_channels = ["AO0", "AO1"]
+        self.AO_READBACK_MAP = {"AO0": "AI6", "AO1": "AI7"}
         self.target_AO = {"AO0": 0.0, "AO1": 0.0}
         self.next_channel = "AO0"
         self.job = ""
+        self.is_initialized = True
+        self.jobs = []
 
     def wait(self):
         return True
@@ -80,10 +83,11 @@ class FakeWidgetLogic(QtCore.QObject):
         self.target_AO[channel] = value
 
     def start(self):
-        if self.job == "write_AO":
-            channel_index = self.AO_channels.index(self.next_channel)
-            self.sig_new_write.emit(
-                [channel_index, self.target_AO[self.next_channel]]
+        # Fake loopback: the readback equals the last written target.
+        self.jobs.append(self.job)
+        if self.job in ("write_AO", "read_AO"):
+            self.sig_new_read.emit(
+                [self.next_channel, self.target_AO[self.next_channel]]
             )
 
     def initialize(self, _device):
@@ -125,6 +129,15 @@ class NIDAQTwoAOLogicTests(unittest.TestCase):
         self.assertEqual(logic.daq.read_ai, ["/DevTest/AI6", "/DevTest/AI7"])
         self.assertEqual(logic.SNAPSHOT_GETTERS, ("AO0", "AO1"))
 
+        reads = []
+        logic.sig_new_read.connect(reads.append)
+        logic.daq.write_single_AO_task = lambda _channel, _value: None
+        logic.setup_channel("AO1")
+        logic.assign_AO_target("AO1", 0.7)
+        logic.job = "write_AO"
+        logic.run()
+        self.assertEqual(reads, [["AO1", 0.7]])
+
 
 class NIDAQTwoAOInterfaceTests(unittest.TestCase):
     @classmethod
@@ -165,13 +178,13 @@ class NIDAQTwoAOInterfaceTests(unittest.TestCase):
             self.widget.pos_to_go_doubleSpinBox_2,
         ]
         steps = [self.widget.step_doubleSpinBox, self.widget.step_doubleSpinBox_2]
-        labels = [self.widget.last_set_pos_label, self.widget.last_set_pos_label_2]
+        labels = [self.widget.AO0read_label, self.widget.AO1read_label]
 
         for index, channel in enumerate(("AO0", "AO1")):
             targets[index].setValue(0.25 + index)
             self.widget.when_go_button_clicked(index)
             self.assertEqual(self.widget.logic.next_channel, channel)
-            self.assertIn("last set to:", labels[index].text())
+            self.assertEqual(labels[index].text(), f"{0.25 + index:+.5f} V")
 
             steps[index].setValue(0.1)
             before_step = self.widget.logic.target_AO[channel]
@@ -179,6 +192,14 @@ class NIDAQTwoAOInterfaceTests(unittest.TestCase):
             self.assertAlmostEqual(
                 self.widget.logic.target_AO[channel], before_step + 0.1
             )
+
+    def test_read_buttons_show_ao_readback(self):
+        self.widget.logic.target_AO["AO1"] = -0.5
+        self.widget.getAO1_button.click()
+
+        self.assertEqual(self.widget.logic.jobs[-1], "read_AO")
+        self.assertEqual(self.widget.logic.next_channel, "AO1")
+        self.assertEqual(self.widget.AO1read_label.text(), "-0.50000 V")
 
 
 if __name__ == "__main__":

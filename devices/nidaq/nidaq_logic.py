@@ -168,7 +168,10 @@ class NIDAQLogic(QtCore.QThread):
 
     def read_AO(self, ch):
         """Read output ``ch`` back through its wired AI (see AO_READBACK_MAP)."""
-        return self.read_AI(self.AO_READBACK_MAP[ch])
+        ai = self.AO_READBACK_MAP[ch]
+        read = self.daq.read_mult_AI_task("/" + self.dev_name + "/" + ai, self.accumulate_count_num)
+        self.sig_new_read.emit([ch, read])
+        return read
 
     def get_AO0(self):
         return self.read_AO("AO0")
@@ -198,6 +201,14 @@ class NIDAQLogic(QtCore.QThread):
 
         elif self.job == "write_AO":
             self.setup_AO(self.next_channel, self.target_AO[self.next_channel])
+            self.read_AO(self.next_channel)
+
+        elif self.job == "read_AO":
+            self.read_AO(self.next_channel)
+
+        elif self.job == "read_all_AO":
+            for ch in self.AO_channels:
+                self.read_AO(ch)
 
         self.reset_flags()
         self.job = ""
