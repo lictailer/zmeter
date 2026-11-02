@@ -19,7 +19,7 @@ start_zmeter.py
                  -> core.scan_logic.ScanLogic
 ```
 
-The checked-in root `device_config.xlsx` workbook supplies the ordered device rows to the lazy reviewed registry. `start_zmeter.py` contains no device-specific imports or connection values. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; `core/scan_logic_old.py` is retained source but is not on the active path.
+The checked-in root `device_config.xlsx` workbook supplies the ordered device rows to the lazy reviewed registry. `start_zmeter.py` contains no device-specific imports or connection values. `core/scan.py` imports the active `ScanLogic` directly from `core.scan_logic`; the retired `scan_logic_old.py` is kept in `archive/legacy-scan-engine/` and is not on the active path.
 
 ## Maintained layout
 
@@ -55,13 +55,13 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/arduino_steppers/` | Standalone three-motor serial controller and maintained Arduino sketch; routed Z is selected by autofocus |
 | `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations, including driver-owned scan/monitor admission, and optional UI/dependencies |
-| `tests/` | Hardware-independent core regression tests |
+| `tests/` | Hardware-independent core regression tests (left out of release ZIPs by `.gitattributes`) |
 | `skills/` | Claude Code / Codex agent skills for zmeter work outside the app (`skills/README.md` lists them and how to install); `zmeter-shift-mapping` and `zmeter-scan-planner` |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |
 | `scan_range_limits.json` | Default global scan-output limit configuration |
 | `zmeter_Sept2026_environment.yml` | Current Windows Conda environment, including openpyxl, Python.NET, and the pinned optional MFLI Core dependency |
-| `archive/` | Retired documentation/code evidence; not current authority |
+| `archive/` | Retired documentation/code evidence; not current authority (left out of release ZIPs by `.gitattributes`) |
 
 The standalone deployment installer is maintained in
 `https://github.com/lictailer/zmeter-deploy`. ZMeter retains its release-

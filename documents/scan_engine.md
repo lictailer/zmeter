@@ -2,7 +2,7 @@
 
 ## Active path
 
-`core/scan.py` imports `ScanLogic` directly from `core/scan_logic.py`. The active worker is `core.scan_logic.ScanLogic`; `core/scan_logic_old.py` is not the active engine. Verify this import path before any scan-engine change.
+`core/scan.py` imports `ScanLogic` directly from `core/scan_logic.py`. The active worker is `core.scan_logic.ScanLogic`; the retired `scan_logic_old.py` now lives in `archive/legacy-scan-engine/` and is not the active engine. Verify this import path before any scan-engine change.
 
 ## Scan dictionary
 
