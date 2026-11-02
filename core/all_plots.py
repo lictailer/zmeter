@@ -322,6 +322,7 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.data_shape = [y_datashape, x_datashape]
 
         self.data = np.full((self.data_shape[0],self.data_shape[1]),np.nan)
+        self.outer_context_key = None
 
         # Image plot panel
         self.image = pg.ImageItem()
@@ -508,9 +509,11 @@ class ImagePlot(pg.GraphicsLayoutWidget):
 
 
     def update_image(self,new_data,current_target_index):
-        # A new outer point (next frame) does not clear the image: each new
-        # pixel overwrites its own position, so the previous frame stays
-        # visible until it is replaced.
+        outer_context_key = tuple(current_target_index[self.y_level_number + 1:])
+        if self.outer_context_key != outer_context_key:
+            self.outer_context_key = outer_context_key
+            self.data = np.full((self.data_shape[0], self.data_shape[1]), np.nan)
+
         current_y=current_target_index[self.x_level_number]
         current_x=current_target_index[self.y_level_number]
         reversed_current_target_index=[]

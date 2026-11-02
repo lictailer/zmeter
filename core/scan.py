@@ -1632,10 +1632,10 @@ class Scan(QtWidgets.QWidget):
                 if isinstance(w,LinePlot):
                     if not should_update_plot(w):
                         continue
-                    # Keep the previous sweep on screen: each new point
-                    # overwrites its own position, so the old curve stays
-                    # visible while outer setters move.
-                    w.data=new_data
+                    if(current_target_index[w.setter_level_number]==0):
+                        w.y_coordinates=np.full(w.setting_info_length, np.nan)
+                    w.data=new_data                
+                    # plot_line method now handles clearing and preserves v_line position
                     w.plot_line(current_target_index)
                 if isinstance(w,ImagePlot):
                     if not should_update_plot(w):

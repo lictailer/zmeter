@@ -96,8 +96,6 @@ Changing rejection or artificial-pair behavior requires focused tests for writes
 
 ## Progress, logging, autosave, and output
 
-Live plots are rebuilt empty at scan start and are never cleared during the run. Each `sig_new_data` point overwrites only its own position in a line plot (the point index on the plot's level) or an image plot (the pixel for the plot's two levels), so the previous sweep or frame stays on screen while outer setters move and is replaced point by point. Points not yet measured in the current sweep therefore still show the previous sweep's values.
-
 The worker emits remaining/total time and finished/total points after completed points. `Scan` maintains a bounded display history and persists the current `scan_log`. Each elapsed whole-hour boundary triggers `autosave.json`, overwriting the previous autosave in the configured save directory. See [data_format.md](data_format.md) for output details.
 
 ## Compatibility and required tests
