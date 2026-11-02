@@ -50,6 +50,22 @@ Request: "Repeat the gate sweep at 3.4, 10, 20 and 50 K."
 - Ask about wait time after reaching each temperature and whether the gate
   should return to zero before each temperature change.
 
+## Spectra versus gate (array getter)
+
+Request: "Take a PL spectrum at each back-gate voltage."
+
+- The spectrum getter (for example `andor_0_spectrum`) goes on level0 with the
+  gate as level0's setter; ZMeter adds the pixel axis as a locked fixed level
+  below it. Do not put the spectrum on an outer level: the script refuses it.
+- Each gate point costs one exposure (times the number of accumulations) plus
+  readout. Ask for exposure time, accumulations, centre wavelength and grating,
+  and set them with manual-set items or `manual_set_before` when the export has
+  those setter channels (`andor_0_exposure_time`, `andor_0_center_wavelength`).
+- Useful plots: a line plot of the latest spectrum against its axis
+  (`"x": "axis"`) and an image of the spectrum against the gate.
+- A camera image getter adds two fixed levels (rows and columns); files grow
+  quickly, so check the total size (points times pixels) with the user.
+
 ## Long maps
 
 A 201 x 201 map at 0.3 s per point takes about 3.4 hours. If a map is that long

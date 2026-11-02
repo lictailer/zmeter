@@ -29,6 +29,8 @@ On stop or failure, preserve the last confirmed completed waypoint. Do not repor
 - **Force stop** must promptly interrupt bounded device operations where supported and remain asserted until the lifecycle deliberately clears it. Current `MainWindow` clears its global force-stop flag in `start_equipments()` after scan cleanup.
 - **Abort/error** must stop further unsafe writes, retain confirmed state, report contextual failure, reset transient skip/control flags, and run cleanup.
 
+An array getter read (a camera exposure) is one bounded acquisition: its timeout comes from the device's own timing, it is never retried silently (a retry exposes the detector again), and force stop aborts the exposure without disconnecting or changing the cooler. Cooled cameras must not be switched off by a reconnect; see [devices/andor/README.md](../devices/andor/README.md).
+
 Stop handling must be idempotent and safe when disconnected, partially initialized, already stopped, or invoked during shutdown. Do not confuse a software flag with verified physical safe state.
 
 A queued manual setter runs outside the GUI thread, so Queue Stop remains

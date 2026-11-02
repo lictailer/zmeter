@@ -22,7 +22,7 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
         self.assertEqual(tuple(c.value for c in self.devices[1]), DEVICE_HEADERS)
         self.assertEqual(self.devices.max_row, 201)
         self.assertEqual(list(self.devices.tables), ["FlatDeviceConfigTable"])
-        self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].ref, "A1:H31")
+        self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].ref, "A1:H32")
         self.assertEqual(self.devices.tables["FlatDeviceConfigTable"].tableStyleInfo.name, "TableStyleLight1")
 
     def test_existing_rows_keep_current_profile_without_autoconnect(self):
@@ -63,20 +63,34 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
     def test_guide_covers_every_registry_driver_and_alias(self):
         registry = build_default_registry()
         expected = set(registry.driver_ids) | {alias for spec in registry.config_specs.values() for alias in spec.aliases}
-        accepted = [self.workbook["Guide"].cell(r, 4).value for r in range(4, 29)]
+        accepted = [self.workbook["Guide"].cell(r, 4).value for r in range(4, 30)]
         self.assertEqual(set(accepted), expected)
         self.assertEqual(len(accepted), len(set(accepted)))
         for row in range(2, 202):
             formula = self.devices.cell(row, 8).value
             self.assertIn(f"COUNTA(A{row}:G{row})=0", formula)
-            self.assertIn("$D$4:$D$28", formula)
+            self.assertIn("$D$4:$D$29", formula)
             self.assertIn("UNKNOWN DRIVER", formula)
             self.assertIn("INVALID CONNECT FLAG", formula)
+
+    def test_andor_row_is_disabled_with_explicit_channels(self):
+        self.assertEqual([self.devices.cell(32, col).value for col in range(1, 5)],
+                         ["andor", "andor", False, False])
+        profile = load_profile(WORKBOOK_PATH, driver_specs=build_default_registry().config_specs)
+        andor = {device.id: device for device in profile.devices}["andor"]
+        self.assertFalse(andor.enabled)
+        self.assertFalse(andor.connect_on_start)
+        self.assertEqual(andor.connection["address"], "0,0")
+        self.assertEqual(andor.scan_channels.setters, ("temperature", "exposure_time", "center_wavelength"))
+        self.assertEqual(
+            andor.scan_channels.getters,
+            ("temperature", "exposure_time", "center_wavelength", "spectrum", "image"),
+        )
 
     def test_cached_checks_match_native_boolean_flags(self):
         cached = load_workbook(WORKBOOK_PATH, data_only=True)
         self.addCleanup(cached.close)
-        for row in range(2, 32):
+        for row in range(2, 33):
             self.assertIsInstance(self.devices.cell(row, 3).value, bool)
             self.assertIsInstance(self.devices.cell(row, 4).value, bool)
             self.assertEqual(cached["Devices"].cell(row, 8).value, "ENABLED" if row == 31 else "DISABLED")

@@ -29,6 +29,7 @@ Each level contains:
 | `settle_time` | Seconds after write and before read when direct getters exist; default `0.0` |
 | `start_wait_time` | One-time seconds before the first non-skipped read in each invocation of that level loop; default `0.0` |
 | `manual_set_before` / `manual_set_after` | Ordered lists of `{full_channel: value}` writes; default `[]` |
+| `fixed_axis` | Present only on a fixed level (array axis): `{"channel", "axis", "name", "units"}`; see [Array getters](#array-getters) |
 
 Each setter contains `channel`, `explicit`, `linear_setting`, `explicit_setting`, and `destinations`. Linear settings currently retain `start`, `end`, `step`, `mid`, `span`, `points`, and `destinations`. The UI derives the chosen `destinations` and rebuilds `setting_array` before plotting, starting, and saving.
 
@@ -38,7 +39,7 @@ Each setter contains `channel`, `explicit`, `linear_setting`, `explicit_setting`
 - The highest numbered level is the outermost, slowest-changing level.
 - `ScanLogic.scan()` starts recursion at the highest level and calls the next lower level after the current level's direct read.
 - Data arrays are shaped `[getter, outermost_points, ..., current_level_points]` and initialized with `NaN`.
-- Progress counts every visited level point, including outer levels, so the displayed total is the sum over levels of the product of the point counts of that level and all levels above it (an 11 x 11 scan shows 11·11 + 11 = 132 points). The time estimate is that total times the measured average time per point. `tests/test_scan_regression.py` checks that the count ends at the total.
+- Progress counts every visited user-level point, including outer levels (fixed array levels are not counted; see [Array getters](#array-getters)), so the displayed total is the sum over levels of the product of the point counts of that level and all levels above it (an 11 x 11 scan shows 11·11 + 11 = 132 points). The time estimate is that total times the measured average time per point. `tests/test_scan_regression.py` checks that the count ends at the total.
 
 `setting_method` is interpreted by `Brakets`. Without a personalized method, setter destination sequences form aligned rows with `NaN` padding. A `NaN` setter value means “do not write this setter at this point”; it does not remove the point from the loop.
 
@@ -71,6 +72,18 @@ Any write, read, or manual-action exception becomes a runtime error containing o
 - Averaging uses `numpy.nanmean` over the completed lower-level slice. An unresolved or entirely `NaN` source produces `NaN`.
 
 The UI removes stale averaged tokens when source getters change. Keep token parsing, menu construction, data shape, plot selection, save/load, and tests synchronized.
+
+## Array getters
+
+A getter declared in a device's `ARRAY_GETTERS` (see [device_contract.md](device_contract.md#array-getters)) returns a whole array per read, at most 2 axes (`core.array_getters.MAX_ARRAY_DIMS`; raising it needs plotting work only, the storage is generic).
+
+- **Fixed levels.** Picking an array getter on the innermost user level inserts one locked level per array axis below it, and the user's levels move up. The last array axis becomes `level0` (a spectrum adds `level0` = pixel; an image adds `level0` = column and `level1` = row). A fixed level has the setter `none` with the axis values as destinations, a `fixed_axis` marker, the array getters on fixed `level0` only, and `["none"]` on the other fixed levels. In the UI it is greyed out except the getter menu and Clean.
+- **Sync.** `core.array_levels.sync_fixed_levels` adds, keeps, rebuilds or removes fixed levels so they match the getters, and returns a level mapping used to renumber averaged-getter tokens and plot tokens (`levelN`, `LxSy_`, `LxGy_`). It runs when getters change, when a level is added or deleted, when a setting file is loaded or a queue item is built, and at scan start with `refresh=True` (axis values re-read). It does not run when the device catalog is republished. Removing the last array getter removes every fixed level. Array getters on outer user levels, or with a shape different from the first one, are dropped with a warning. A device that is offline keeps the saved fixed levels. A file that already holds data keeps its levels exactly as saved.
+- **Engine.** `ScanLogic` validates that fixed levels are contiguous from `level0`, that fixed `level0` holds only direct getters and the other fixed levels none, and that at least one user level exists. When recursion reaches the lowest user level, `read_array_block()` makes one read per array getter, validates the shape (`ArrayShapeError` names the channel), stores the block into the fixed levels' data slices, and emits `phase="block"` with `fixed_levels`. The fixed levels themselves are not looped: no writes, waits or per-pixel progress. An artificial-channel skip leaves the block `NaN`.
+- **Progress and time.** `total_points` counts user levels only, so a 21-point gate sweep recording a 1024-pixel spectrum counts 21 points; the time per point includes the exposure.
+- **Averages.** `level0_average_<array>` on a user level averages the whole block (all fixed levels below) for each point of that level.
+- **Plots.** A line plot on fixed `level0` (x `L0S0_none` for axis values or `level0` for the index) redraws the latest array; an image with x on a fixed level fills a row per user point, or a whole frame when y is also fixed.
+- **Limits.** `channel_check.array_size_problems` refuses a scan whose stored values would exceed 100 million per getter.
 
 ## Parallel I/O and channel resolution
 

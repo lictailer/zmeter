@@ -1,4 +1,4 @@
-# ZMeter lab context  (version 0.5, 2026-10-26)
+# ZMeter lab context  (version 0.6, 2026-11-02)
 
 <!-- The AI model reads this whole file before writing each setup record.
 Sections 1-5 hold general knowledge that fits most labs; treat them as
@@ -41,6 +41,13 @@ everything below is a hint, not a rule.
 - default_wait (s) and default_count are timing helpers, not instruments.
 - artificial_channel_* are derived channels, e.g. carrier density n and
   displacement field E built as linear combinations of two gate voltages.
+- Array getters (e.g. andor_0_spectrum, andor_0_image) return a whole
+  spectrum or camera frame per point. ZMeter adds locked "fixed levels"
+  below them, one per array axis (pixel or wavelength; row and column), so
+  the user's first swept level is then level1 or level2. A fixed level's
+  setter is "none" and its values are the axis (e.g. wavelength in nm); it is
+  not something the user swept. level0_average_<spectrum> on a higher level
+  is the spectrum's mean over all pixels (an integrated signal).
 - The scan name is free text typed by the user; it often hints at the
   experiment, temperature (3p4K = 3.4 K) or configuration.
 
@@ -62,6 +69,10 @@ everything below is a hint, not a rule.
 - pem100: photoelastic modulator (polarization modulation, often with a
   lock-in at the PEM frequency).
 - sp150: monochromator (wavelength selection).
+- andor: Andor CCD camera with a Shamrock spectrograph. spectrum = counts
+  per pixel column (PL, Raman, reflection or SHG spectra); image = camera
+  frame; exposure_time (s), center_wavelength (nm, spectrograph grating
+  position), temperature (detector cooler, deg C; usually -60 to -80).
 - montana2, opticool, four9: cryostat / temperature controllers.
 - nema11_stepper, arduino_steppers, auto_focus: focus or positioning motors.
 - mock_device, demo_device: simulators, not real hardware.

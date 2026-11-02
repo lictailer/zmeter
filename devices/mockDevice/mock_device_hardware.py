@@ -56,6 +56,21 @@ class MockDeviceHardware:
     def read_random_channel(self) -> float:
         return self.simulator.read_random_channel()
 
+    def read_spectrum(self) -> list[float]:
+        return self.simulator.read_spectrum()
+
+    def read_frame(self) -> list[list[float]]:
+        return self.simulator.read_frame()
+
+    def spectrum_axis(self) -> list[float]:
+        return self.simulator.spectrum_axis()
+
+    def spectrum_shape(self) -> tuple[int]:
+        return (self.simulator.SPECTRUM_PIXELS,)
+
+    def frame_shape(self) -> tuple[int, int]:
+        return tuple(self.simulator.FRAME_SHAPE)
+
     def ramp_channel_A(
         self,
         target: float,

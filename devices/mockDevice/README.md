@@ -15,8 +15,10 @@ The checked-in startup profile creates two instances. Use this package for safe 
 | `channel_A`, `channel_B` | get/set | Direct set and noisy read around stored value |
 | `random_channel` | get | Deterministic pseudo-random scalar sequence |
 | `ramp_channel_A`, `ramp_channel_B` | set | 0.01-unit steps at 0.001 seconds per step; returns the actual final value |
+| `spectrum` | get | **Array getter**, 1-D, 64 points: a peak at 516 + `channel_A` nm on a 500 to 531.5 nm axis (0.5 nm steps) |
+| `frame` | get | **Array getter**, 2-D, 8 x 12 (`row`, `column`), a Gaussian spot moved in columns by `channel_A` and in rows by `channel_B` |
 
-All setters reject non-finite values. Optional range rejection enforces `[-10, 10]`; when disabled, that simulated range is intentionally not enforced.
+The array getters are declared in `MockDeviceLogic.ARRAY_GETTERS` and are the reference for array-getter devices (see [device_contract.md](../../documents/device_contract.md#array-getters)). All setters reject non-finite values. Optional range rejection enforces `[-10, 10]`; when disabled, that simulated range is intentionally not enforced.
 
 ## Lifecycle and fault model
 

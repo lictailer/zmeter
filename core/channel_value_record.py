@@ -31,10 +31,17 @@ class ChannelValue:
 
 
 def _plain_number(value):
-    """Return a float for numeric values, the value itself otherwise."""
+    """Return a float for numeric values, the value itself otherwise.
+
+    An array read (a spectrum or camera frame) is recorded as NaN: the record
+    keeps scalars only, and holding every frame would keep it in memory.
+    """
 
     if isinstance(value, bool):
         return value
+    if isinstance(value, (list, tuple)) or getattr(value, "ndim", 0) > 0:
+        if len(value) != 1 or getattr(value, "size", 1) != 1:
+            return float("nan")
     try:
         number = float(value)
     except (TypeError, ValueError):

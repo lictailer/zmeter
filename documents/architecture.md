@@ -103,6 +103,8 @@ For cross-device operations, use the injected `DeviceCommandRouter`/`DeviceComma
 
 The scan editor constructs ordered level dictionaries and setting arrays. At start, `Scan` reserves runtime activity, seals editable settings, performs GUI-owned monitor changes, and prepares device lifecycle callbacks plus NumPy result-array initialization on its boundary worker. Only successful preparation returns to the GUI thread for plot setup and `ScanLogic` start; any partial failure restores the exact captured participating devices before releasing the reservation. The worker begins at the highest level, recurses toward `level0`, emits data updates to `Scan`, and triggers progress and hourly autosave signals.
 
+Array getters (spectra, frames) are declared by devices in `ARRAY_GETTERS`; `MainWindow.array_catalog` answers which channels are arrays and their live shape, and `core/array_levels.py` keeps the scan's locked fixed levels (one per array axis) in step with the getters. The worker reads an array block once per innermost user point. See [scan_engine.md](scan_engine.md#array-getters).
+
 `Scan` stores emitted arrays in the active scan dictionary and updates only affected plots when emission metadata is present. On finish or error, `ScanLogic` emits a terminal result. `Scan` enters `finalizing`, captures required widget pixels on the GUI thread, then restores the captured devices and performs PPT, JSON, recovery, and backup I/O from an immutable snapshot on the boundary worker. The activity reservation is released and queue/restart admission reopens only after that worker completes. A failed/canceled primary JSON save still attempts a platform-local recovery JSON; persisted schema and serial rules are unchanged. See [scan_engine.md](scan_engine.md) and [data_format.md](data_format.md).
 
 ## Extension and coupling rules
@@ -125,6 +127,7 @@ The scan editor constructs ordered level dictionaries and setting arrays. At sta
 | Queue behavior | `core/scanlist.py`, `core/queue_model.py` | scan lifecycle and shutdown |
 | Scan UI, plots, save/load | `core/scan.py`, plot/level widgets | scan engine, data format |
 | Traversal, timing, grouped I/O | `core/scan_logic.py` | scan tests and safety |
+| Array getters, fixed levels | `core/array_getters.py`, `core/array_levels.py`, `core/scan_logic.py` (`read_array_block`) | scan engine, data format, device contract |
 | Device behavior | target device widget/logic/hardware | device README and contract |
 | Current module map/runtime path | `project_structure.md` | verify against code/tests |
 

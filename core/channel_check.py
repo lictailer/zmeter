@@ -14,6 +14,8 @@ from collections import namedtuple
 
 import numpy as np
 
+from .array_levels import is_fixed_level
+
 ChannelUse = namedtuple("ChannelUse", "kind channel place")
 
 _SENTINELS = {"", "none", "void"}
@@ -190,9 +192,38 @@ def level_problems(info):
     problems = []
     for level_key, level in levels:
         channels = [s.get("channel") for s in (level.get("setters") or {}).values()]
-        if all(_is_sentinel(channel) for channel in channels):
+        # A fixed array-axis level is filled by one array read; it never sets.
+        if is_fixed_level(level):
+            pass
+        elif all(_is_sentinel(channel) for channel in channels):
             problems.append((level_key, "no setter channel"))
         array = np.asarray(level.get("setting_array", []), dtype=float)
         if array.ndim != 2 or array.shape[1] == 0:
             problems.append((level_key, "setting array is empty"))
+    problems.extend(array_size_problems(levels))
     return problems
+
+
+# Above this many stored array values a scan JSON passes ~1 GB.
+MAX_ARRAY_SCAN_VALUES = 100_000_000
+
+
+def array_size_problems(levels):
+    """A scan whose array getters would store too many values for JSON."""
+    point_counts = []
+    for _level_key, level in levels:
+        array = np.asarray(level.get("setting_array", []), dtype=float)
+        if array.ndim != 2 or array.shape[1] == 0:
+            return []
+        point_counts.append(int(array.shape[1]))
+    if not levels or not is_fixed_level(levels[0][1]):
+        return []
+    getters = [g for g in levels[0][1].get("getters", []) if g != "none"]
+    values = len(getters) * int(np.prod(point_counts, dtype=np.int64))
+    if values <= MAX_ARRAY_SCAN_VALUES:
+        return []
+    return [(
+        "scan",
+        f"array getters would store {values:,} values (about {values * 10 / 1e9:.1f} GB "
+        "of JSON); use fewer points, binning or a smaller read area",
+    )]
