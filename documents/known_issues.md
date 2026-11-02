@@ -107,21 +107,6 @@ remain authoritative; close an item only with the validation named here.
 - **Validation:** Disposable non-lab presentation, expected slide update,
   process/handle cleanup, and unchanged JSON output.
 
-## Multilevel scan progress can exceed its displayed denominator
-
-- **Current behavior:** The denominator is the coordinate-product point count,
-  while completed progress increments at every visited level point, including
-  outer levels.
-- **Impact:** A multilevel scan can display a numerator that differs from or
-  exceeds the denominator even though traversal and stored scalar data remain
-  correct.
-- **Safe workaround:** Treat the progress count as an estimate and use scan
-  indices/data for completion evidence.
-- **Future fix:** Choose and migrate to one explicit progress definition without
-  changing traversal or persistence.
-- **Validation:** Focused nested-level progress/signal tests and manual mock GUI
-  confirmation.
-
 ## Backup availability still includes a `Z:\` gate
 
 - **Current behavior:** Backup configuration and a retained `Z:\` availability
