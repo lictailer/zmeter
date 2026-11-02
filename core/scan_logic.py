@@ -24,6 +24,11 @@ from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import re
 
+from .shift_compensation.logic import SOURCE_GROUP, TARGET_GROUP
+
+# Write phases after the plain writes of one scan point (see multi_thread_write).
+COMPENSATED_WRITE_ORDER = (SOURCE_GROUP, TARGET_GROUP)
+
 # Example scan configuration structure showing the expected data format
 ScanInfo = {
     "levels": {
@@ -616,7 +621,10 @@ class ScanLogic(QtCore.QThread):
                     return device_name, variable
             if channel_name.startswith("artificial_channel_"):
                 return "artificial_channel", channel_name[len("artificial_channel_"):]
-            elif channel_name.startswith("default_"):
+            for group in COMPENSATED_WRITE_ORDER:
+                if channel_name.startswith(f"{group}_"):
+                    return group, channel_name[len(group) + 1:]
+            if channel_name.startswith("default_"):
                 return "default", channel_name[len("default_"):]
         
         # If no pattern matches, return the whole string as device name with empty remaining part
@@ -667,22 +675,39 @@ class ScanLogic(QtCore.QThread):
     def multi_thread_read(self, device_channels, level_index, target_index):
         if len(device_channels) == 0:
             return {}
-        with ThreadPoolExecutor(max_workers=len(device_channels)) as executor:
-            futures = [
-                executor.submit(
-                    self.read_single_device_all_channels,
-                    device,
-                    channel_list,
-                    level_index,
-                    target_index,
-                )
-                for device, channel_list in device_channels.items()
-            ]
-            # Combine all dictionary results into a single dictionary
-            combined_results = {}
-            for future in futures:
-                result_dict = future.result()
-                combined_results.update(result_dict)
+        # Compensated getters read the same devices as the plain getters, so
+        # they run afterwards instead of in parallel with them.
+        phases = [
+            {
+                device: channels
+                for device, channels in device_channels.items()
+                if device not in COMPENSATED_WRITE_ORDER
+            },
+            {
+                device: channels
+                for device, channels in device_channels.items()
+                if device in COMPENSATED_WRITE_ORDER
+            },
+        ]
+        combined_results = {}
+        for phase in phases:
+            if not phase:
+                continue
+            with ThreadPoolExecutor(max_workers=len(phase)) as executor:
+                futures = [
+                    executor.submit(
+                        self.read_single_device_all_channels,
+                        device,
+                        channel_list,
+                        level_index,
+                        target_index,
+                    )
+                    for device, channel_list in phase.items()
+                ]
+                # Combine all dictionary results into a single dictionary
+                for future in futures:
+                    result_dict = future.result()
+                    combined_results.update(result_dict)
         return combined_results
 
     def build_nan_measurements(self, device_channels):
@@ -770,19 +795,36 @@ class ScanLogic(QtCore.QThread):
         if len(writing_device_channels) == 0:
             return
 
-        with ThreadPoolExecutor(max_workers=len(writing_device_channels)) as executor:
-            futures = [
-                executor.submit(
-                    self.write_single_device_all_channels,
-                    device,
-                    channel_value_list,
-                    level_index,
-                    target_index,
-                )
-                for device, channel_value_list in writing_device_channels.items()
-            ]
-            for future in futures:
-                future.result()
+        # Shift-compensation groups run after the plain writes of the point:
+        # compensated sources next, compensated targets last, so a target
+        # correction always sees the source value written at this point.
+        phases = [
+            {
+                device: channels
+                for device, channels in writing_device_channels.items()
+                if device not in COMPENSATED_WRITE_ORDER
+            }
+        ]
+        for group in COMPENSATED_WRITE_ORDER:
+            if group in writing_device_channels:
+                phases.append({group: writing_device_channels[group]})
+
+        for phase in phases:
+            if not phase:
+                continue
+            with ThreadPoolExecutor(max_workers=len(phase)) as executor:
+                futures = [
+                    executor.submit(
+                        self.write_single_device_all_channels,
+                        device,
+                        channel_value_list,
+                        level_index,
+                        target_index,
+                    )
+                    for device, channel_value_list in phase.items()
+                ]
+                for future in futures:
+                    future.result()
 
     def generate_file_for_save(self):
         """
@@ -867,6 +909,12 @@ class ScanLogic(QtCore.QThread):
             snapshot = run.take()
         except Exception as exc:
             snapshot = {"devices": {}, "error": f"{type(exc).__name__}: {exc}"}
+        record = getattr(getattr(self, "main_window", None), "channel_value_record", None)
+        if record is not None:
+            try:
+                record.record_snapshot(snapshot)
+            except Exception:  # noqa: BLE001 - the record is advisory
+                pass
         self.sig_setup_snapshot.emit(kind, snapshot)
 
     def run(self):

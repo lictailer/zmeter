@@ -17,6 +17,7 @@ The top-level fields are:
 | `comments` | Operator text |
 | `scan_log` | Ordered strings for the current run log |
 | `plots_per_page` | Persisted UI selection, stored as text |
+| `shift_compensation` | Output files only (since the Shift Compensation feature): the Shift Compensation record written at scan start; see below. Not part of the scan settings and ignored on load |
 
 Each level stores ordered `setters`, `setting_method`, ordered `getters`, `setting_array`, `settle_time`, `start_wait_time`, `manual_set_before`, and `manual_set_after`. Each setter stores its full scan channel, explicit/linear selection, both setting descriptions, and selected destinations. See [scan_engine.md](scan_engine.md) for execution semantics.
 
@@ -26,6 +27,51 @@ Plot entries use string indices:
 - image plot: `{ "x": "levelN", "y": "levelN+1", "z": <getter-token> }`.
 
 Selector tokens currently include `levelN`, `L<level>S<setter>_<channel>`, and `L<level>G<getter>_<channel-or-average-token>`. These are persisted interfaces, not merely display text.
+
+## Shift Compensation record and files
+
+Every scan output JSON written by a version with Shift Compensation carries a
+`shift_compensation` object, taken at scan start and added to the output
+snapshot only (the scan's `info` dictionary does not get it, so loading or
+re-saving scan settings never carries a stale record):
+
+```json
+{
+  "recorded_at": "2026-11-02T14:03:11",
+  "scan": {"name": "qwp_map", "serial": "0071"},
+  "channels": {
+    "source": ["compensated_source_k10cr1_0_angle"],
+    "target": ["compensated_target_ni6423_AO0", "compensated_target_ni6423_AO1"]
+  },
+  "readback_cache": "<rule text>",
+  "active": [<mapping>, ...]
+}
+```
+
+`active` is `[]` when no mapping was active. Each `<mapping>` is:
+
+| Key | Meaning |
+| --- | --- |
+| `id`, `name`, `csv_name` | Mapping identity and the CSV file name it was loaded from |
+| `points.source`, `points.shift` | The CSV columns (source value, amount added to the target) |
+| `channels.source_set`, `source_read`, `target_set`, `target_read` | Full raw channel names |
+| `model` | `cosine` or `polynomial` |
+| `options` | `period`, `free_period`, `order` as chosen in the window |
+| `fit` | `{model, options, params, rms, r2, n_points}`; cosine `params` are `A`, `P`, `C`, `D` of `A cos(2πx/P + C) + D`, polynomial `params.coefficients` are ascending powers |
+| `x_ref` | Reference source value, or `null` for the first CSV source value |
+| `active` | Active flag |
+
+The window's **Save set...** file uses the same mapping objects:
+`{"format": "zmeter.shift_compensation_set", "version": 1, "saved_at": ...,
+"mappings": [...]}`, written atomically. Loading rejects another format or
+version, keeps the saved Active flags and re-checks each against the current
+catalog; a mapping that fails the checks loads inactive with a note.
+
+Mapping CSVs (input only) have one optional header row and two numeric
+columns: source value in source-readback units, and the amount to add to
+the target in target-setter units. `skills/zmeter-shift-mapping/` writes
+them; `tests/test_shift_mapping_skill.py` keeps the skill and the loader in
+step.
 
 ## Array and `NaN` encoding
 

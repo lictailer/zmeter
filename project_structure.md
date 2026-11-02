@@ -46,6 +46,8 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |
 | `core/all_plot_settings.py`, `core/all_plots.py` | Plot configuration and presentation |
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
+| `core/shift_compensation/` | Shift Compensation: mapping CSV loading and cosine/polynomial fits (`fitting.py`), mappings and the `compensated_source_`/`compensated_target_` scan channels (`logic.py`), set files (`persistence.py`) and the mapping-block window (`window.py`); see `documents/shift_compensation.md` |
+| `core/channel_value_record.py` | Main-window last-value record of channels written/read through `write_info`/`read_info` and the scan setup snapshots; Shift Compensation's source-readback cache |
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
 | `devices/mockDevice/` | Hardware-independent simulator, three-layer reference device, and tests |
 | `devices/mfli/` | Maintained lazy `mfli` driver: worker-owned Zurich Core client, 25 scalar scan channels, global amplitude/DC ramping (10 V/s, 100 Hz), scan/monitor coordination, managed panel and standalone `MFLI_main.py`, pure address/interface helpers |
@@ -54,6 +56,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations, including driver-owned scan/monitor admission, and optional UI/dependencies |
 | `tests/` | Hardware-independent core regression tests |
+| `skills/` | Claude Code / Codex agent skills for zmeter work outside the app (`skills/README.md` lists them and how to install); `zmeter-shift-mapping` and `zmeter-scan-planner` |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |
 | `scan_range_limits.json` | Default global scan-output limit configuration |

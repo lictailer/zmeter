@@ -795,6 +795,7 @@ class Scan(QtWidgets.QWidget):
         self.info["plots_per_page"] = self.PlotsPerPage.currentText()
         self._sync_scan_log_to_info()
         json_payload = copy.deepcopy(self.info)
+        self._add_shift_compensation_record(json_payload)
 
         json_name = f"{base}.json"
         json_path = None
@@ -1289,6 +1290,15 @@ class Scan(QtWidgets.QWidget):
                         )
                     )
                 continue
+            if channel.startswith(("compensated_source_", "compensated_target_")):
+                compensation_logic = getattr(
+                    self.main_window, "shift_compensation_logic", None
+                )
+                if compensation_logic is not None:
+                    physical_channels.extend(
+                        compensation_logic.physical_channels(channel)
+                    )
+                continue
             physical_channels.append(channel)
 
         resolve = getattr(
@@ -1406,11 +1416,14 @@ class Scan(QtWidgets.QWidget):
             self.logic.reset_flags()
             self.logic.go_scan = True
             self._prepare_setup_capture(self._participating_device_ids)
+            compensation_lines = self._begin_shift_compensation_record()
             self.update_all_plots()
             self._set_scan_state("running")
             self.logic.start()
             self._log_info("Scan started.")
             self._log_info(self._build_start_summary())
+            for line in compensation_lines:
+                self._log_info(line)
         except Exception as exc:
             self._begin_start_rollback(exc)
 
@@ -2238,6 +2251,35 @@ class Scan(QtWidgets.QWidget):
         if items:
             title += f" ({len(items)})"
         self.ScanTab.setTabText(index, title)
+
+    def _begin_shift_compensation_record(self):
+        """Mark compensation sources stale and keep this run's record.
+
+        The record goes into the saved JSON as ``shift_compensation``
+        (``"active": []`` when no mapping is active).  Returns the lines for
+        the scan log.
+        """
+        self._shift_compensation_record = None
+        logic = getattr(self.main_window, "shift_compensation_logic", None)
+        if logic is None:
+            return []
+        scan_name = str(self.info.get("name", "") or "")
+        serial = ""
+        try:
+            serial = f"{self.main_window.scanlist.serial.value():04d}"
+        except Exception:  # noqa: BLE001 - test fakes have no scan list
+            pass
+        self._shift_compensation_record = logic.begin_scan(
+            scan_name=scan_name, serial=serial
+        )
+        return list(logic.summary_lines())
+
+    def _add_shift_compensation_record(self, json_payload):
+        """Put this run's Shift Compensation record into the output JSON only."""
+        record = getattr(self, "_shift_compensation_record", None)
+        if record is not None:
+            json_payload["shift_compensation"] = copy.deepcopy(record)
+        return json_payload
 
     def _prepare_setup_capture(self, device_ids):
         """Build this run's snapshot plan on the UI thread; never blocks a scan."""
