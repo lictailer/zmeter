@@ -27,7 +27,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | --- | --- |
 | `start_zmeter.py` | Thin command-line workbook selection and application/session orchestration |
 | `device_config.xlsx` | Default Excel-only device configuration beside the launcher |
-| `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy Phase 1/2 registration adapters, generation/call gates, session-only runtime mutation, device ownership, truthful scan-lifecycle completion, and lifecycle reports |
+| `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy registration adapters for every driver including the mock (`registrations.py`; the core `registry.py` never imports `devices`), generation/call gates, session-only runtime mutation, device ownership, truthful scan-lifecycle completion, and lifecycle reports |
 | `core/device_catalog.py` | Immutable rebuilt channel/catalog snapshots and typed refusal errors |
 | `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queue/manual/past item widgets, queue orchestration, per-item manual-set workers, UI state transitions, and runtime-mutation seals |
@@ -59,7 +59,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations, including driver-owned scan/monitor admission, and optional UI/dependencies |
 | `zcore/`, `zcore/data/`, `zui/` | Empty packages for the v2 transition ([ADR 003](documents/decisions/003-v2-architecture.md)); not on the active runtime path. `zcore` holds Qt-free, hardware-free code (file formats in `zcore/data/`); `zui` holds the Qt interface. `zcore` never imports `PyQt6`, `core`, `devices`, or `zui` |
-| `tests/` | Hardware-independent core regression tests, including `tests/test_layering.py` (import rules for `core/` and `zcore/`; left out of release ZIPs by `.gitattributes`) |
+| `tests/` | Hardware-independent core regression tests, including `tests/test_layering.py` (import rules for `core/`, `zcore/` and the core device registry; left out of release ZIPs by `.gitattributes`) |
 | `skills/` | Claude Code / Codex agent skills for zmeter work outside the app (`skills/README.md` lists them and how to install); `zmeter-shift-mapping` and `zmeter-scan-planner` |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |

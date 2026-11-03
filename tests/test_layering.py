@@ -8,6 +8,9 @@ Rules:
    relative imports that leave the package.
 2. Nothing under ``core/`` or ``zcore/`` imports an optional vendor library at
    module top level (imports inside functions are allowed).
+3. ``core/device_management/registry.py`` does not import ``devices``, not even
+   inside a function or through an ``import_module`` string; device
+   registrations, the mock device's included, live in ``registrations.py``.
 """
 
 import ast
@@ -117,6 +120,33 @@ def check_top_level_vendor_source(source, rel_path):
     return problems
 
 
+REGISTRY_PATH = Path("core/device_management/registry.py")
+
+
+def check_registry_source(source, rel_path=REGISTRY_PATH):
+    """Violations of rule 3 for the core registry module."""
+    rel_path = Path(rel_path)
+    tree = ast.parse(source)
+    problems = []
+    for lineno, level, module, names in _iter_imports(tree, False):
+        targets, leaves = _absolute_targets(rel_path, level, module, names)
+        if leaves:
+            problems.append(f"{rel_path}:{lineno}: relative import leaves the package")
+        for target in targets:
+            if _matches(target, ("devices",)):
+                problems.append(f"{rel_path}:{lineno}: imports {target}")
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and _matches(node.value, ("devices",))
+        ):
+            problems.append(
+                f"{rel_path}:{node.lineno}: names device module {node.value!r}"
+            )
+    return problems
+
+
 def _python_files(subdir):
     root = REPO_ROOT / subdir
     if not root.is_dir():
@@ -141,6 +171,10 @@ class LayeringRulesOnRepository(unittest.TestCase):
         self.assertEqual(
             _collect(["core", "zcore"], check_top_level_vendor_source), []
         )
+
+    def test_core_registry_does_not_import_devices(self):
+        path = REPO_ROOT / REGISTRY_PATH
+        self.assertEqual(check_registry_source(path.read_text(encoding="utf-8")), [])
 
     def test_new_packages_exist(self):
         for name in ("zcore/__init__.py", "zcore/data/__init__.py", "zui/__init__.py"):
@@ -222,6 +256,27 @@ class LayeringRulesDetectViolations(unittest.TestCase):
             [],
         )
         self.assertEqual(self.vendor("f = lambda: __import__('cv2')\n"), [])
+
+    def test_registry_device_imports_are_reported(self):
+        for source in (
+            "import devices.mockDevice.mock_device_main",
+            "from devices.mockDevice.mock_device_main import MockDevice",
+            "def f():\n    from devices.mockDevice import mock_device_main\n",
+            "def f():\n    import_module('devices.mockDevice.mock_device_main')\n",
+            "from ... import devices",
+        ):
+            with self.subTest(source=source):
+                self.assertTrue(check_registry_source(source))
+
+    def test_registry_allowed_sources(self):
+        for source in (
+            "from .registrations import mock_device_registration",
+            "from .models import DeviceConfig",
+            "import devices_helper",
+            "x = 'Return registrations without importing any device package.'",
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(check_registry_source(source), [])
 
     def test_vendor_look_alike_names_are_allowed(self):
         self.assertEqual(self.vendor("import cv2helper\nimport clrx\n"), [])

@@ -167,7 +167,7 @@ print("Qt options and strict launcher options separated")
                 ),
             )
             with mock.patch(
-                "core.device_management.registry._create_mock_device",
+                "core.device_management.registrations.import_module",
                 side_effect=AssertionError("disabled factory must stay lazy"),
             ) as factory:
                 profile, manager = create_profile_session(services, profile_path)
