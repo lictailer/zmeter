@@ -14,6 +14,7 @@ from .array_getters import EMPTY_CATALOG
 from .array_levels import array_channels, remap_plots
 from .channel_check import catalog_names, count_text, find_unresolved
 from .construct_scan_coordinates import Construct
+from .scan_file_info import scan_format_version, stamp_scan_payload
 import os, shutil
 from .append_to_ppt import add_slide_with_png_bytes, add_slide_with_qpixmap
 from .setup_capture import runtime as setup_runtime
@@ -163,11 +164,16 @@ def _restore_nan(value):
 
 
 def read_scan_file(path):
-    """Read a scan data or setting JSON; the string "NaN" becomes np.nan."""
+    """Read a scan data or setting JSON; the string "NaN" becomes np.nan.
+
+    A file without ``format_version`` is read as version 1. A file with a
+    newer version than this ZMeter supports raises ``ValueError``.
+    """
     with open(path, "r") as file:
         info = _restore_nan(json.loads(file.read()))
     if not isinstance(info, dict):
         raise ValueError("Loaded file did not contain a scan dictionary.")
+    scan_format_version(info)
     return info
 
 
@@ -859,6 +865,7 @@ class Scan(QtWidgets.QWidget):
         self._sync_scan_log_to_info()
         json_payload = copy.deepcopy(self.info)
         self._add_shift_compensation_record(json_payload)
+        json_payload = stamp_scan_payload(json_payload)
 
         json_name = f"{base}.json"
         json_path = None
@@ -1856,7 +1863,12 @@ class Scan(QtWidgets.QWidget):
         def write_json_snapshot(path):
             self._sync_scan_log_to_info()
             with open(path, "w", encoding="utf-8") as json_file:
-                json.dump(self.info, json_file, cls=CustomEncoder, separators=(",", ":"))
+                json.dump(
+                    stamp_scan_payload(self.info),
+                    json_file,
+                    cls=CustomEncoder,
+                    separators=(",", ":"),
+                )
 
         def write_recovery_snapshot(original_name):
             temporary_path = None
@@ -1980,7 +1992,7 @@ class Scan(QtWidgets.QWidget):
 
     def when_save_setting_clicked(self):
         """Save the scan configuration, without data, to a file the operator picks."""
-        payload = self.setting_payload()
+        payload = stamp_scan_payload(self.setting_payload())
 
         default_name = f"{SCAN_SETTING_PREFIX}{self.info.get('name') or 'scan'}.json"
         fileName, _ = QFileDialog.getSaveFileName(
@@ -2497,7 +2509,12 @@ class Scan(QtWidgets.QWidget):
 
         try:
             with open(fileName, 'w') as json_file:
-                json.dump(self.info, json_file, cls=CustomEncoder, separators=(",", ":"))
+                json.dump(
+                    stamp_scan_payload(self.info),
+                    json_file,
+                    cls=CustomEncoder,
+                    separators=(",", ":"),
+                )
             self._log_info(f"Autosave succeeded: {fileName}")
         except Exception as e:
             self._log_error(f"Autosave failed: {type(e).__name__}: {e}")

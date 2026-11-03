@@ -290,6 +290,12 @@ class ScanBoundaryTests(unittest.TestCase):
 
         self.assertEqual(snapshot.json_name, "0000_renamed at completion.json")
         self.assertEqual(snapshot.json_payload["name"], "renamed at completion")
+        # The output snapshot (primary, backup and recovery copies) is stamped;
+        # the in-memory scan info is not.
+        self.assertEqual(list(snapshot.json_payload)[:2], ["format_version", "software"])
+        self.assertEqual(snapshot.json_payload["format_version"], 1)
+        self.assertNotIn("format_version", self.scan.info)
+        self.assertNotIn("software", self.scan.info)
         self.assertEqual(
             snapshot.json_payload["comments"], "latest operator comment"
         )

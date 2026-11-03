@@ -10,6 +10,8 @@ The top-level fields are:
 
 | Field | Type/meaning |
 | --- | --- |
+| `format_version` | Integer scan JSON format version, currently `1`; written first. A file without it was written before the field existed and is read as version 1. See [Format version and software](#format-version-and-software) |
+| `software` | Which ZMeter code wrote the file; written second. See [Format version and software](#format-version-and-software) |
 | `name` | String scan name |
 | `levels` | Mapping of contiguous `level0` ... `levelN` objects |
 | `data` | Initially empty; during/after a run, a list of acquired arrays indexed by level |
@@ -27,6 +29,38 @@ Plot entries use string indices:
 - image plot: `{ "x": "levelN", "y": "levelN+1", "z": <getter-token> }`.
 
 Selector tokens currently include `levelN`, `L<level>S<setter>_<channel>`, and `L<level>G<getter>_<channel-or-average-token>`. These are persisted interfaces, not merely display text.
+
+## Format version and software
+
+Every scan JSON that ZMeter writes starts with `format_version` and
+`software`: the scan output file and its backup and recovery copies, the
+manual **Save** file and its recovery copy, `autosave.json`, scan setting
+files, and the scan files of a saved queue (`queue.json` keeps its own
+`format`/`version`). `core/scan_file_info.py` adds both fields when the file
+is written; the scan's in-memory `info` does not get them. A loaded file
+that is saved again gets the current values, because the new file describes
+the run and code that wrote it.
+
+`software` is read once per process from files on disk, without running git:
+
+| Install | `software` |
+| --- | --- |
+| Release ZIP (root `deployment-manifest.json`) | `{"source": "release", "version", "tag", "channel", "commit"}` from the manifest |
+| Developer clone (`.git`, no manifest) | `{"source": "git", "branch", "commit"}` from `.git/HEAD` and the ref file or `packed-refs`; `branch` is `null` for a detached HEAD, `commit` is `null` on a branch without commits |
+| Neither, or any read error | `{"source": "unknown"}`; saving is never blocked |
+
+The commit of a developer clone is the checked-out commit; uncommitted edits
+are not recorded.
+
+Reading: a file without `format_version` is version 1. A file whose
+`format_version` is newer than this ZMeter supports, or is not a positive
+integer, is refused on load with a message; nothing is guessed. No such file
+exists yet.
+
+Version rule: bump `SCAN_FORMAT_VERSION` when a persisted key is added with
+a new meaning, renamed or removed, or when the meaning of an existing value
+changes. Readers keep accepting every older version. Adding an optional key
+that older readers can ignore does not need a bump.
 
 ## Shift Compensation record and files
 
@@ -110,7 +144,7 @@ Load requires a JSON object. It defaults missing `comments` and `scan_log`, norm
 
 A file whose `data` is missing or empty loads as a scan setting: `data` becomes `{}`, the log reports `Loaded scan setting`, and the file is not treated as this scan's saved data file, so questionnaire answers are never written next to it.
 
-Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, but a general schema-version migration layer does not exist.
+Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, files without `format_version` are read as version 1, and files with a newer `format_version` are refused; a migration layer between format versions does not exist yet (there is only version 1).
 
 ## Scan setting files
 
