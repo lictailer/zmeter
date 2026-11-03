@@ -125,8 +125,14 @@ The scalar scan and persistence contracts have dedicated hardware-independent
 characterization suites:
 
 ```powershell
-python -B -m unittest -v tests.test_scan_regression tests.test_scan_persistence
+python -B -m unittest -v tests.test_scan_regression tests.test_scan_persistence tests.test_scan_file_info
 ```
+
+`tests.test_scan_file_info` covers `format_version` and `software`: the
+release-manifest, git (loose ref, `packed-refs`, detached HEAD, worktree) and
+unknown cases from fake files, the stamp order, legacy files without the
+fields, and refusal of a newer version. The persistence, boundary, setting-file
+and queue-file suites check that each writer stamps its file.
 
 They cover nested scalar shape/dtype/order, grouped reads and writes, averaged
 getters, signal metadata, pause/resume/stop, queue order, the hourly autosave
