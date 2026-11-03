@@ -3,6 +3,7 @@
 ## Hard boundary
 
 Coding agents may run only checks confirmed to be hardware-independent. They must never execute commands that could discover, connect to, configure, home, ramp, move, source, trigger, read/write, disconnect, reset, or otherwise affect a real instrument. “Run the tests” is not authorization for hardware use. Hardware procedures are reviewed and executed by the user.
+The only exception is the test-PC bench test in [hardware_safety.md](hardware_safety.md), which needs the user's per-session authorization.
 
 Before every command, inspect its imports, fixtures, discovery, setup, environment variables, and startup path. Do not run a broad suite merely because its name says “test.” Use temporary output and keep all JSON, PPT, autosave, backups, screenshots, and caches away from lab data directories.
 
@@ -13,9 +14,14 @@ Before every command, inspect its imports, fixtures, discovery, setup, environme
 | Static | `py_compile`, import inspection, UI XML parsing | Syntax/structure is acceptable to the selected tool/runtime | Runtime behavior, GUI behavior, drivers, or hardware |
 | Hardware-independent | Unit tests for scan logic, schemas, helpers | Covered pure/core behavior matches assertions | Full GUI integration or physical instruments |
 | Simulation/GUI | `mockDevice`, offscreen Qt widgets | Simulated lifecycle, signals, and integration work in that environment | Vendor stack, addresses, timing, limits, or real devices |
+| Agent-executed bench (test PC, no sample) | Committed `tests/bench/bench_*.py` scripts run by an agent on the test PC under per-session user authorization | Only the specifically observed behavior of the allowlisted instruments with open or dummy-load outputs | Behavior under a sample, on the lab PC, or of other models; it never replaces the user-executed bench |
 | Hardware bench | User-run connection/read/write/timeout/abort/shutdown | Only the specifically observed bench behavior | Other models, labs, ranges, or failure modes |
 
 Always label evidence precisely. A lower level never implies a higher one.
+
+## Bench tests
+
+Bench tests live in `tests/bench/` and are named `bench_*.py`, so the standard `test_*.py` discovery never runs them. A skip gate also requires `ZMETER_BENCH=1` and an allowlist file outside the repository on the test PC. An agent may run them only under the conditions in [hardware_safety.md](hardware_safety.md) ("Agent bench tests on the test PC") and a per-session authorization from the user. `tests/bench/` and the gate do not exist yet; they are added with the first bench test.
 
 ## Environment
 
