@@ -1,6 +1,5 @@
 import sys
 from PyQt6 import QtWidgets, QtCore, QtGui, uic
-from .scan_info import *
 
 
 

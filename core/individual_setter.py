@@ -1,5 +1,12 @@
 from .nested_menu import NestedMenu
-from .scan_info import *
+import copy
+import sys
+
+import numpy as np
+from PyQt6 import QtCore, QtWidgets, uic
+
+from .scan_info import ScanInfo
+from .widget_helpers import is_float
 
 
 class LinearSetting(QtWidgets.QWidget):

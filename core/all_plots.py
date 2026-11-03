@@ -1,4 +1,15 @@
-from .scan_info import *
+import copy
+import math
+import re
+
+import numpy as np
+import pyqtgraph as pg
+from PyQt6 import QtCore, QtWidgets, uic
+
+from .plot_config import configure_pyqtgraph
+from .scan_info import ScanInfo
+
+configure_pyqtgraph()
 
 
 LINE_PEN = pg.mkPen(color=(240, 255, 255), width=2)

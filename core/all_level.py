@@ -1,4 +1,11 @@
-from .scan_info import *
+import copy
+import sys
+
+from PyQt6 import QtCore, QtWidgets, uic
+
+from .brakets import Brakets
+from .scan_info import ScanInfo
+from .widget_helpers import clearLayout
 from .individual_setter import IndividualSetter
 from .nested_menu import NestedMenu
 from .array_getters import EMPTY_CATALOG

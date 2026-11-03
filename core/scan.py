@@ -5,7 +5,11 @@ import json
 import re
 import time
 import traceback
-from .scan_info import *
+import sys
+
+import numpy as np
+from PyQt6 import QtCore, QtWidgets, uic
+from PyQt6.QtWidgets import QFileDialog
 from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
 from .all_plot_settings import AllPlotSetting

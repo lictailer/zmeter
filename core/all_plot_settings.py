@@ -1,4 +1,9 @@
-from .scan_info import *
+import copy
+import sys
+
+from PyQt6 import QtCore, QtWidgets, uic
+
+from .scan_info import ScanInfo
 from .array_levels import remap_plot_token
 import re
 

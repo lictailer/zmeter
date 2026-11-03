@@ -18,7 +18,6 @@ import numpy as np
 from PyQt6 import QtCore, QtWidgets, uic
 import datetime
 import time
-from scipy.io import savemat
 import random
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
