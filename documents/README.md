@@ -21,6 +21,8 @@ the device package README. Completed plans and investigations live under
 | Run validation | [testing.md](testing.md) | affected hardware-independent tests |
 | Configure Windows or dependencies | [environment_windows.md](environment_windows.md) | environment YAML and optional runtime documentation |
 | Install a published release | [release_deployment.md](release_deployment.md) | standalone installer repository and release workflow |
+| Name new code or check a renamed term | [naming.md](naming.md) | [ADR 003](decisions/003-v2-architecture.md) |
+| Understand the v2 transition rules | [ADR 003](decisions/003-v2-architecture.md) | [architecture.md](architecture.md) |
 | Record a durable design choice | [decisions/README.md](decisions/README.md) | affected code, tests, and canonical contracts |
 
 ## Current documents
@@ -37,6 +39,7 @@ the device package README. Completed plans and investigations live under
 | [shift_compensation.md](shift_compensation.md) | Shift Compensation mappings, compensated scan channels, and user bench checks |
 | [hardware_safety.md](hardware_safety.md) | Hardware-safety and user-executed validation boundary |
 | [testing.md](testing.md) | Validation levels and safe commands |
+| [naming.md](naming.md) | Naming reference and staged renaming schedule for the v2 transition |
 | [environment_windows.md](environment_windows.md) | Windows environment and system prerequisites |
 | [release_deployment.md](release_deployment.md) | Published-release installer and packaging boundary |
 | [CODEX_CONTRIBUTION_WORKFLOW_TUTORIAL.md](CODEX_CONTRIBUTION_WORKFLOW_TUTORIAL.md) | Maintainer documentation workflow guide |

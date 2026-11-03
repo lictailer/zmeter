@@ -28,7 +28,9 @@ Before editing:
 
 Keep changes minimal and coherent. Avoid unrelated cleanup. Prefer clear code a human maintainer can readily inspect and modify.
 
-Compatibility is deliberate, not automatic. For ordinary internal code or API changes, do not retain legacy behavior when it complicates the fix, duplicates paths, obscures intent, or impairs maintenance. Avoid shims, adapters, fallbacks, duplicate implementations, and dead interfaces without a concrete current need. Before breaking a persisted format, user workflow, hardware-facing contract, external integration, or other relied-upon interface, identify the impact and document or implement the migration decision.
+Compatibility is deliberate, not automatic. For ordinary internal code or API changes, do not retain legacy behavior when it complicates the fix, duplicates paths, obscures intent, or impairs maintenance. Avoid shims, adapters, fallbacks, duplicate implementations, and dead interfaces without a concrete current need. Before breaking a persisted format, user workflow, hardware-facing contract, external integration, or other relied-upon interface, identify the impact and document or implement the migration decision. Transition interfaces listed in `documents/decisions/003-v2-architecture.md` are allowed until their stated removal condition; anything not listed there is still forbidden.
+
+Everything committed to the repository (code, comments, documents, commit messages, pull request text) is in English.
 
 ## Architectural principles
 
