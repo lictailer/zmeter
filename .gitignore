@@ -18,6 +18,8 @@ __pycache__/
 
 # Project data (ignore folder itself and all contents)
 data/
+# The zcore data-format package is code, not measurement data
+!/zcore/data/
 
 # Temporary Microsoft Excel owner files
 ~$*.xlsx
