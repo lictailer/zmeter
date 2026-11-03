@@ -212,8 +212,11 @@ class StampTests(unittest.TestCase):
         self.assertIs(stamped["data"], data)
 
     def test_format_version_of_loaded_files(self):
+        self.assertEqual(SCAN_FORMAT_VERSION, 2)
         self.assertEqual(scan_format_version({}), 1)
         self.assertEqual(scan_format_version({"format_version": 1}), 1)
+        # v1.0-beta.5 already wrote format_version 2 into scans that ran.
+        self.assertEqual(scan_format_version({"format_version": 2}), 2)
         for bad in (0, -1, True, "1", 1.0, None):
             with self.subTest(bad=bad):
                 with self.assertRaises(ValueError):
@@ -241,6 +244,18 @@ class ScanFileRoundTripTests(_TempRoot):
         self.assertEqual(info["software"], software_info())
         self.assertEqual(info["levels"], LEGACY_SCAN["levels"])
         self.assertTrue(math.isnan(info["data"]["L0G0_mock_device_0_y"][1]))
+
+    def test_v1_0_beta_5_file_with_format_version_2_loads(self):
+        beta5 = dict(
+            LEGACY_SCAN,
+            format_version=2,
+            setup={"snapshot_start": None, "snapshot_end": None,
+                   "changed_during_scan": [], "description": {}},
+        )
+        path = self.write("beta5.json", json.dumps(beta5))
+        info = read_scan_file(path)
+        self.assertEqual(scan_format_version(info), 2)
+        self.assertIn("setup", info)
 
     def test_newer_file_is_refused(self):
         newer = dict(LEGACY_SCAN, format_version=SCAN_FORMAT_VERSION + 1)

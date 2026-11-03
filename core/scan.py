@@ -28,7 +28,6 @@ from .setup_capture.widgets import (
     sync_questionnaire_to_info,
 )
 
-SETUP_FORMAT_VERSION = 2
 # Live plots and progress labels are redrawn at most this often during a
 # scan, however fast points arrive (about 20 redraws per second).
 LIVE_REDRAW_INTERVAL_MS = 50
@@ -2273,7 +2272,6 @@ class Scan(QtWidgets.QWidget):
         self._saved_this_run = False
         self.setup_run_count += 1
         controller = self._setup_controller()
-        self.info["format_version"] = SETUP_FORMAT_VERSION
         setup = {
             "snapshot_start": None,
             "snapshot_end": None,

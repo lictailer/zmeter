@@ -7,6 +7,9 @@ carries two top-level fields:
 ``format_version``
     Integer version of the scan JSON layout, ``SCAN_FORMAT_VERSION``. A file
     without it was written before this field existed and is read as version 1.
+    Version 2 began with v1.0-beta.5, whose setup capture added the ``setup``
+    and ``questionnaire`` keys and wrote ``format_version: 2`` into scans that
+    ran; from this module on every written scan file carries the field.
 ``software``
     Which ZMeter code wrote the file, from ``software_info()``.
 
@@ -22,7 +25,9 @@ import json
 import re
 from pathlib import Path
 
-SCAN_FORMAT_VERSION = 1
+# 1: no format_version key (before v1.0-beta.5).
+# 2: v1.0-beta.5 and later (setup capture keys; stamped on every write).
+SCAN_FORMAT_VERSION = 2
 
 MANIFEST_NAME = "deployment-manifest.json"
 REPO_ROOT = Path(__file__).resolve().parents[1]

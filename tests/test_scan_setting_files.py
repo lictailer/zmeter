@@ -168,8 +168,7 @@ class ScanSettingFileTests(unittest.TestCase):
             default_path, os.path.join(str(self.output_root), "scan_setting_gate_sweep.json")
         )
         saved = json.loads(target.read_text(encoding="utf-8"))
-        # A loaded value is replaced: the file describes the code that wrote it.
-        self.assertEqual(saved["format_version"], 1)
+        self.assertEqual(saved["format_version"], 2)
         self.assertIn("source", saved["software"])
         self.assertEqual(saved["data"], {})
         self.assertEqual(saved["scan_log"], [])

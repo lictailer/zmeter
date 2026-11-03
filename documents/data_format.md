@@ -10,7 +10,7 @@ The top-level fields are:
 
 | Field | Type/meaning |
 | --- | --- |
-| `format_version` | Integer scan JSON format version, currently `1`; written first. A file without it was written before the field existed and is read as version 1. See [Format version and software](#format-version-and-software) |
+| `format_version` | Integer scan JSON format version, currently `2`; written first. A file without it is read as version 1. See [Format version and software](#format-version-and-software) |
 | `software` | Which ZMeter code wrote the file; written second. See [Format version and software](#format-version-and-software) |
 | `name` | String scan name |
 | `levels` | Mapping of contiguous `level0` ... `levelN` objects |
@@ -51,6 +51,16 @@ the run and code that wrote it.
 
 The commit of a developer clone is the checked-out commit; uncommitted edits
 are not recorded.
+
+Versions:
+
+| `format_version` | Files |
+| --- | --- |
+| absent (read as 1) | Written before v1.0-beta.5; also v1.0-beta.5 files written from a scan window that had not run a scan (for example a setting file of a new scan) |
+| `2` | v1.0-beta.5 files written from a scan window that had run a scan or loaded a version 2 file: setup capture put the field into the scan's `info` at run start, next to its `setup` and `questionnaire` keys. Every scan file written since `software` was added, stamped at write time |
+
+Versions 1 and 2 have the same keys apart from the optional setup-capture
+keys, so readers treat them alike.
 
 Reading: a file without `format_version` is version 1. A file whose
 `format_version` is newer than this ZMeter supports, or is not a positive
@@ -144,7 +154,7 @@ Load requires a JSON object. It defaults missing `comments` and `scan_log`, norm
 
 A file whose `data` is missing or empty loads as a scan setting: `data` becomes `{}`, the log reports `Loaded scan setting`, and the file is not treated as this scan's saved data file, so questionnaire answers are never written next to it.
 
-Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, files without `format_version` are read as version 1, and files with a newer `format_version` are refused; a migration layer between format versions does not exist yet (there is only version 1).
+Current compatibility is therefore limited: old files missing `comments`, `scan_log`, or `plots_per_page` are tolerated, files without `format_version` are read as version 1, and files with a newer `format_version` are refused; a migration layer between format versions does not exist yet (versions 1 and 2 need none).
 
 ## Scan setting files
 

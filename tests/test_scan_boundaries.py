@@ -293,7 +293,7 @@ class ScanBoundaryTests(unittest.TestCase):
         # The output snapshot (primary, backup and recovery copies) is stamped;
         # the in-memory scan info is not.
         self.assertEqual(list(snapshot.json_payload)[:2], ["format_version", "software"])
-        self.assertEqual(snapshot.json_payload["format_version"], 1)
+        self.assertEqual(snapshot.json_payload["format_version"], 2)
         self.assertNotIn("format_version", self.scan.info)
         self.assertNotIn("software", self.scan.info)
         self.assertEqual(
