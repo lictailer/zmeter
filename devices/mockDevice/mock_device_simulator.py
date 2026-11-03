@@ -34,6 +34,12 @@ class MockDeviceSimulator:
     READ_NOISE_SIGMA = 0.001
     RANDOM_MEAN = 0.0
     RANDOM_SIGMA = 1.0
+    # Array getters: a 1-D spectrum and a 2-D frame (see core.array_getters).
+    SPECTRUM_PIXELS = 64
+    SPECTRUM_START_NM = 500.0
+    SPECTRUM_STEP_NM = 0.5
+    FRAME_SHAPE = (8, 12)
+    ARRAY_NOISE_SIGMA = 1.0
     RAMP_STEP = 0.01
     RAMP_INTERVAL_SECONDS = 0.001
     MAX_LOG_ENTRIES = 500
@@ -145,6 +151,54 @@ class MockDeviceSimulator:
             return value
         except Exception as exc:
             self._log_failure("GET_RANDOM_CHANNEL", exc)
+            raise
+
+    def spectrum_axis(self) -> list[float]:
+        return [
+            self.SPECTRUM_START_NM + self.SPECTRUM_STEP_NM * i
+            for i in range(self.SPECTRUM_PIXELS)
+        ]
+
+    def read_spectrum(self) -> list[float]:
+        """Gaussian peak whose centre follows channel A (1 nm per unit)."""
+        try:
+            self._begin_scan_operation("GET_SPECTRUM")
+            with self._lock:
+                centre = self.SPECTRUM_START_NM + 16.0 + self._channel_values["A"]
+                values = [
+                    1000.0 * math.exp(-0.5 * ((x - centre) / 2.0) ** 2)
+                    + self._measurement_random.gauss(0.0, self.ARRAY_NOISE_SIGMA)
+                    for x in self.spectrum_axis()
+                ]
+                self._log(f"GET_SPECTRUM pixels={len(values)} centre={centre:.6g}")
+            return values
+        except Exception as exc:
+            self._log_failure("GET_SPECTRUM", exc)
+            raise
+
+    def read_frame(self) -> list[list[float]]:
+        """Gaussian spot; channel A moves it in columns, channel B in rows."""
+        try:
+            self._begin_scan_operation("GET_FRAME")
+            rows, columns = self.FRAME_SHAPE
+            with self._lock:
+                row_centre = (rows - 1) / 2 + self._channel_values["B"]
+                column_centre = (columns - 1) / 2 + self._channel_values["A"]
+                frame = [
+                    [
+                        100.0
+                        * math.exp(
+                            -0.5 * ((r - row_centre) ** 2 + (c - column_centre) ** 2) / 1.5**2
+                        )
+                        + self._measurement_random.gauss(0.0, self.ARRAY_NOISE_SIGMA)
+                        for c in range(columns)
+                    ]
+                    for r in range(rows)
+                ]
+                self._log(f"GET_FRAME shape={rows}x{columns}")
+            return frame
+        except Exception as exc:
+            self._log_failure("GET_FRAME", exc)
             raise
 
     def ramp_channel(

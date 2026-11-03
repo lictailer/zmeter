@@ -8,6 +8,7 @@ The project is used by a small number of laboratories and maintained by a small 
 
 - Builds multi-level nested scans in which higher-numbered levels change more slowly than lower-numbered levels.
 - Discovers scan-facing device getters and setters through each device's logic layer.
+- Records array getters (spectra, camera frames; up to 2 axes) at each point of the innermost level, with the array axes added as locked fixed levels.
 - Supports linear and explicit setting sequences, multi-setter patterns, settle delays, one-time start waits, and manual actions before or after a scan level.
 - Groups device operations during scan execution while keeping the Qt interface responsive.
 - Displays configurable line and image plots during acquisition.
@@ -159,6 +160,7 @@ The flat `devices/` package contains integrations or experimental work for sever
 | Lock-in amplifiers | `sr830` (official maintained implementation), `sr860` |
 | Cryostats/environment control | `opticool`, `montana2`, `four9`, `attodry` |
 | Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `mc2000b`, `spectraphysicsx3_laser` |
+| Cameras and spectrographs | `andor` (Andor CCD + Shamrock, array getters) |
 | Positioning/autofocus | `arduino_steppers`, `auto_focus`, `auto_position`, `ANC300` (unregistered) |
 
 The [MS integration notes](documents/ms_lab_integration.md) list changes from
@@ -181,7 +183,7 @@ A typical operator workflow is:
 2. Confirm device connection state and safe initial values.
 3. Open or create a scan in the Scan List window.
 4. Add scan levels. `level0` is the innermost/fastest level; higher-numbered levels form slower outer loops.
-5. Assign setters, destinations, getters, timing, and optional manual before/after actions.
+5. Assign setters, destinations, getters, timing, and optional manual before/after actions. Picking an array getter (for example a spectrum) on the innermost level adds greyed-out fixed levels below it, one per array axis; removing the getter removes them.
 6. Configure line or image plots.
 7. Review point count, ranges, units, output paths, stop behavior, and backup state.
 8. Start the scan and monitor progress and the scan log.
@@ -197,7 +199,7 @@ The default local save directory is `data/`.
 - JSON filenames begin with a four-digit serial and scan name, for example `0007_gate_sweep.json`.
 - Existing names receive a numeric suffix rather than being overwritten.
 - JSON stores the scan configuration, setting arrays, acquired data, plot settings, comments, and scan log.
-- NumPy arrays are serialized as lists. Current files may contain Python JSON's unquoted `NaN` literal; the loader also accepts the exact string `"NaN"`. See `documents/data_format.md` before changing this compatibility-sensitive representation.
+- JSON is written compact (no indentation) because array getters make files large. NumPy arrays are serialized as lists. Current files may contain Python JSON's unquoted `NaN` literal; the loader also accepts the exact string `"NaN"`. See `documents/data_format.md` before changing this compatibility-sensitive representation.
 - **Save setting** in the scan window writes the scan configuration without data as `scan_setting_<scan-name>.json` (no serial). **Load** opens setting files and data files alike; channels whose device is missing are kept and marked unresolved. See `documents/data_format.md`.
 - **save queue** under the queue list writes the queue to a new folder: one scan setting file per scan, named by queue position (`01_<scan-name>.json`), plus `queue.json` with the order and any manual sets. **load queue** adds a saved queue folder to the end of the queue in that order. **clear queue** removes every pending item from the queue after a confirmation; a running item stays.
 - **AI scan planning**: the `skills/zmeter-scan-planner/` folder is a skill for Claude or Codex, installed outside this repository (Claude Code: copy it to `~/.claude/skills/`; Codex: `~/.agents/skills/`; Claude apps: upload it as a zip). In ZMeter, **Export system info** in the Setup capture window writes `zmeter_system.md` (devices, channel names, range limits, data folder, experiment description, remembered questionnaire answers and `lab_context.md`; no device is read). Give that file to the agent; it asks about anything unconfirmed and writes a scan setting file or a queue folder to open with **Load** or **load queue**. Review every planned scan before starting it.

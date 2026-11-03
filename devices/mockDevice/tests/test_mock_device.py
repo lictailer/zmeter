@@ -195,6 +195,8 @@ class MockDeviceLogicTests(unittest.TestCase):
                 "get_channel_A",
                 "get_channel_B",
                 "get_random_channel",
+                "get_spectrum",
+                "get_frame",
                 "set_ramp_channel_A",
                 "set_ramp_channel_B",
             },

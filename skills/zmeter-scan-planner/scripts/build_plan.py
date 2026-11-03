@@ -12,6 +12,11 @@ queue.json and one scan setting file per scan (open it with Load queue in the
 Scan List). Any problem stops the script before anything is written, and an
 existing file or folder is never overwritten.
 
+Array getters (spectra, camera images; listed under array_getters in the
+export) may only be getters of plan level0. The written file then starts with
+ZMeter's locked fixed levels, one per array axis, and every plan level moves up
+by that many levels, exactly as picking the getter in a scan window does.
+
 Standard library only: this copies ZMeter's file format instead of importing
 it. The zmeter repository's tests load this script's output with ZMeter's own
 code, so the copy is checked against the real format.
@@ -32,6 +37,8 @@ QUEUE_FORMAT = "zmeter_queue"
 QUEUE_VERSION = 1
 SCAN_SETTING_PREFIX = "scan_setting_"
 PLOTS_PER_PAGE = "4"
+MAX_ARRAY_DIMS = 2
+FIXED_AXIS_KEY = "fixed_axis"
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 NAN = float("nan")
 
@@ -62,6 +69,34 @@ def read_system(path):
 
 def _names(channels):
     return {name for names in (channels or {}).values() for name in names}
+
+
+def array_getters(system):
+    """{channel: {"axes": [...], "shape": [...], "units": str}} from the export."""
+    output = {}
+    for entry in system.get("array_getters") or []:
+        if isinstance(entry, dict) and entry.get("channel"):
+            output[entry["channel"]] = entry
+    return output
+
+
+def _shape(entry):
+    shape = entry.get("shape") if isinstance(entry, dict) else None
+    if (
+        isinstance(shape, list)
+        and 1 <= len(shape) <= MAX_ARRAY_DIMS
+        and all(isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in shape)
+    ):
+        return tuple(shape)
+    return None
+
+
+def scan_array_getters(scan, arrays):
+    """The array getters of the scan's level0, in plan order."""
+    levels = scan.get("levels") or []
+    first = levels[0] if levels and isinstance(levels[0], dict) else {}
+    getters = first.get("getters") or []
+    return [g for g in getters if isinstance(g, str) and g in arrays] if isinstance(getters, list) else []
 
 
 # ------------------------------------------------------------------ checks --
@@ -136,7 +171,8 @@ def _check_manual_sets(entries, where, setter_names, limits, problems):
         _check_manual_set(entry, f"{where} #{index + 1}", setter_names, limits, problems)
 
 
-def _check_scan(scan, where, setter_names, getter_names, limits, problems):
+def _check_scan(scan, where, setter_names, getter_names, limits, problems, arrays=None):
+    arrays = arrays or {}
     if not str(scan.get("name") or "").strip():
         problems.append(f"{where}: needs a name")
     levels = scan.get("levels")
@@ -176,12 +212,22 @@ def _check_scan(scan, where, setter_names, getter_names, limits, problems):
             average = _AVERAGE_TOKEN.match(getter) if isinstance(getter, str) else None
             if average:
                 source = int(average.group(1))
-                if source >= number or average.group(2) not in direct[source]:
+                if average.group(2) in arrays:
+                    problems.append(
+                        f"{place}: {getter} averages an array getter; the planner does not write "
+                        "array averages (add it in the scan window after loading)"
+                    )
+                elif source >= number or average.group(2) not in direct[source]:
                     problems.append(
                         f"{place}: {getter} needs {average.group(2)} as a getter of a lower level{source}"
                     )
             elif getter not in getter_names:
                 problems.append(f"{place}: getter {getter!r} is not a getter channel in the export")
+            elif getter in arrays and number != 0:
+                problems.append(
+                    f"{place}: {getter} is an array getter; it can only be a getter of level0 "
+                    "(the innermost level)"
+                )
             else:
                 own.add(getter)
         direct.append(own)
@@ -191,11 +237,25 @@ def _check_scan(scan, where, setter_names, getter_names, limits, problems):
                 problems.append(f"{place}: {key} must be a number of seconds, 0 or more")
         for key in ("manual_set_before", "manual_set_after"):
             _check_manual_sets(level.get(key, []), f"{place} {key}", setter_names, limits, problems)
+    shapes = {}
+    for getter in scan_array_getters(scan, arrays):
+        shape = _shape(arrays[getter])
+        if shape is None:
+            problems.append(
+                f"{where}: the export has no usable shape for array getter {getter} "
+                f"(at most {MAX_ARRAY_DIMS} axes; connect the device and export again)"
+            )
+        else:
+            shapes[getter] = shape
+    if len(set(shapes.values())) > 1:
+        listed = ", ".join(f"{g} {list(s)}" for g, s in shapes.items())
+        problems.append(f"{where}: array getters of one scan must share one shape ({listed})")
     for index, plot in enumerate(scan.get("plots", []) or []):
-        _check_plot(plot, f"{where} plot {index}", levels, problems)
+        _check_plot(plot, f"{where} plot {index}", levels, problems, arrays)
 
 
-def _check_plot(plot, where, levels, problems):
+def _check_plot(plot, where, levels, problems, arrays=None):
+    arrays = arrays or {}
     if not isinstance(plot, dict) or plot.get("type") not in ("line", "image"):
         problems.append(f"{where}: type must be 'line' or 'image'")
         return
@@ -205,6 +265,13 @@ def _check_plot(plot, where, levels, problems):
         return
     level = levels[number]
     getters = level.get("getters") or []
+    channel = plot.get("y") if plot["type"] == "line" else plot.get("z")
+    if channel in arrays:
+        if number != 0 or channel not in getters:
+            problems.append(f"{where}: {channel} is an array getter; plot it at level 0, where it is a getter")
+        elif plot["type"] == "line" and plot.get("x") not in ("axis", "level"):
+            problems.append(f"{where}: x of an array line plot must be 'axis' (its axis values) or 'level' (index)")
+        return
     if plot["type"] == "line":
         channels = [s.get("channel") for s in level.get("setters") or [] if isinstance(s, dict)]
         if plot.get("x") != "level" and plot.get("x") not in channels:
@@ -226,6 +293,7 @@ def check_plan(plan, system):
         limit["channel"]: (limit.get("low"), limit.get("high"))
         for limit in system.get("limits", [])
     }
+    arrays = array_getters(system)
     problems = []
     items = plan.get("items") if isinstance(plan, dict) else None
     if not isinstance(items, list) or not items:
@@ -234,7 +302,10 @@ def check_plan(plan, system):
         where = f"item {position}"
         kind = item.get("type") if isinstance(item, dict) else None
         if kind == "scan":
-            _check_scan(item, f"{where} ({item.get('name') or 'scan'})", setter_names, getter_names, limits, problems)
+            _check_scan(
+                item, f"{where} ({item.get('name') or 'scan'})",
+                setter_names, getter_names, limits, problems, arrays,
+            )
         elif kind == "manual_set":
             _check_manual_set(item, f"{where} (manual set)", setter_names, limits, problems)
         else:
@@ -313,14 +384,81 @@ def _setter_entry(setter):
     }
 
 
-def _level_entry(level):
+def _shift_getter(getter, shift):
+    average = _AVERAGE_TOKEN.match(getter)
+    if average is None or not shift:
+        return getter
+    return f"level{int(average.group(1)) + shift}_average_{average.group(2)}"
+
+
+def _level_getters(level, arrays, shift):
+    """A user level's getters without array getters, averages moved up by shift."""
+    getters = [_shift_getter(g, shift) for g in level.get("getters") or [] if g not in arrays]
+    return getters or ["none"]
+
+
+def _fixed_level(channel, axis, name, count, units, getters):
+    """One locked fixed level (as ZMeter's core/array_levels.build_fixed_level).
+
+    Its values are pixel indices; ZMeter replaces them with the device's axis
+    calibration (for example wavelengths) when the scan starts.
+    """
+    values = [float(i) for i in range(count)]
+    last = max(count - 1, 0)
+    return {
+        "setters": {
+            "setter0": {
+                "channel": "none",
+                "explicit": True,
+                "linear_setting": {
+                    "start": 0,
+                    "end": last,
+                    "step": 1,
+                    "mid": last / 2,
+                    "span": last,
+                    "points": count,
+                    "destinations": list(range(count)),
+                },
+                "explicit_setting": list(values),
+                "destinations": list(values),
+            }
+        },
+        "setting_method": "",
+        "getters": list(getters),
+        "setting_array": [list(values)],
+        "settle_time": 0.0,
+        "start_wait_time": 0.0,
+        "manual_set_before": [],
+        "manual_set_after": [],
+        FIXED_AXIS_KEY: {"channel": channel, "axis": axis, "name": name, "units": units},
+    }
+
+
+def fixed_levels(scan, arrays):
+    """The fixed levels a scan's array getters need (lowest first)."""
+    tokens = scan_array_getters(scan, arrays)
+    if not tokens:
+        return []
+    entry = arrays[tokens[0]]
+    shape = _shape(entry)
+    axes = list(entry.get("axes") or [])
+    axes += [f"axis{i}" for i in range(len(axes), len(shape))]
+    output = []
+    for level_index in range(len(shape)):
+        axis = len(shape) - 1 - level_index
+        getters = tokens if level_index == 0 else ["none"]
+        output.append(_fixed_level(tokens[0], axis, axes[axis], shape[axis], str(entry.get("units") or ""), getters))
+    return output
+
+
+def _level_entry(level, arrays=None, shift=0):
     setters = level["setters"]
     method = (level.get("setting_method") or "").replace(" ", "")
     destinations = {LETTERS[i]: _setter_values(setter) for i, setter in enumerate(setters)}
     return {
         "setters": {f"setter{i}": _setter_entry(setter) for i, setter in enumerate(setters)},
         "setting_method": method,
-        "getters": list(level.get("getters") or []),
+        "getters": _level_getters(level, arrays or {}, shift),
         "setting_array": setting_array(method, destinations),
         "settle_time": float(level.get("settle_time", 0.0)),
         "start_wait_time": float(level.get("start_wait_time", 0.0)),
@@ -329,36 +467,58 @@ def _level_entry(level):
     }
 
 
-def _plots(scan):
+def _plots(scan, arrays=None):
+    arrays = arrays or {}
     line_plots, image_plots = {}, {}
     levels = scan["levels"]
+    array_tokens = scan_array_getters(scan, arrays)
+    shift = len(fixed_levels(scan, arrays))
     for plot in scan.get("plots") or []:
+        channel = plot["y"] if plot["type"] == "line" else plot["z"]
+        if channel in arrays:
+            token = f"L0G{array_tokens.index(channel)}_{channel}"
+            if plot["type"] == "line":
+                x = "L0S0_none" if plot["x"] == "axis" else "level0"
+                line_plots[str(len(line_plots))] = {"x": x, "y": token}
+            else:
+                image_plots[str(len(image_plots))] = {"x": "level0", "y": "level1", "z": token}
+            continue
         number = plot["level"]
-        getters = levels[number].get("getters") or []
+        level = number + shift
+        getters = _level_getters(levels[number], arrays, shift)
         if plot["type"] == "line":
             if plot["x"] == "level":
-                x = f"level{number}"
+                x = f"level{level}"
             else:
                 channels = [s["channel"] for s in levels[number]["setters"]]
-                x = f"L{number}S{channels.index(plot['x'])}_{plot['x']}"
-            y = f"L{number}G{getters.index(plot['y'])}_{plot['y']}"
+                x = f"L{level}S{channels.index(plot['x'])}_{plot['x']}"
+            y_token = _shift_getter(plot["y"], shift)
+            y = f"L{level}G{getters.index(y_token)}_{y_token}"
             line_plots[str(len(line_plots))] = {"x": x, "y": y}
         else:
-            z = f"L{number}G{getters.index(plot['z'])}_{plot['z']}"
-            image_plots[str(len(image_plots))] = {"x": f"level{number}", "y": f"level{number + 1}", "z": z}
+            z_token = _shift_getter(plot["z"], shift)
+            z = f"L{level}G{getters.index(z_token)}_{z_token}"
+            image_plots[str(len(image_plots))] = {"x": f"level{level}", "y": f"level{level + 1}", "z": z}
     return {"line_plots": line_plots, "image_plots": image_plots}
 
 
-def scan_setting(scan):
-    """A scan in the form ZMeter's Save setting writes (no data, empty log)."""
+def scan_setting(scan, arrays=None):
+    """A scan in the form ZMeter's Save setting writes (no data, empty log).
+
+    ``arrays`` is ``array_getters(system)``; array getters of level0 become
+    fixed levels below the plan's levels.
+    """
+    arrays = arrays or {}
+    fixed = fixed_levels(scan, arrays)
+    user = [_level_entry(level, arrays, len(fixed)) for level in scan["levels"]]
     comments = str(scan.get("comments") or "").strip()
     minutes = scan.get("estimated_minutes")
     if _number(minutes):
         comments = (comments + "\n" if comments else "") + f"Estimated duration: about {minutes:g} min (planner estimate)."
     return {
-        "levels": {f"level{i}": _level_entry(level) for i, level in enumerate(scan["levels"])},
+        "levels": {f"level{i}": level for i, level in enumerate(fixed + user)},
         "data": {},
-        "plots": _plots(scan),
+        "plots": _plots(scan, arrays),
         "name": str(scan["name"]).strip(),
         "plots_per_page": PLOTS_PER_PAGE,
         "comments": comments,
@@ -375,14 +535,15 @@ def _file_stem(name):
 
 def _write_json(path, payload):
     with open(path, "w", encoding="utf-8") as file:
-        json.dump(payload, file, indent=4)
+        json.dump(payload, file, separators=(",", ":"))
 
 
-def write_plan(plan, out_folder):
+def write_plan(plan, out_folder, system=None):
     """Write the plan's files into out_folder; returns the path written."""
     items = plan["items"]
+    arrays = array_getters(system or {})
     if len(items) == 1 and items[0]["type"] == "scan":
-        payload = scan_setting(items[0])
+        payload = scan_setting(items[0], arrays)
         path = os.path.join(out_folder, f"{SCAN_SETTING_PREFIX}{_file_stem(payload['name'])}.json")
         if os.path.exists(path):
             raise FileExistsError(f"{path} already exists")
@@ -407,7 +568,7 @@ def write_plan(plan, out_folder):
         entries = []
         for position, item in enumerate(items, start=1):
             if item["type"] == "scan":
-                payload = scan_setting(item)
+                payload = scan_setting(item, arrays)
                 file_name = f"{position:0{width}d}_{_file_stem(payload['name'])}.json"
                 _write_json(os.path.join(temporary, file_name), payload)
                 entries.append({"scan": file_name})
@@ -448,7 +609,7 @@ def main(argv=None):
     if not out_folder:
         exported = system.get("data_folder") or ""
         out_folder = exported if exported and os.path.isdir(exported) else os.getcwd()
-    path = write_plan(plan, out_folder)
+    path = write_plan(plan, out_folder, system)
     print(f"Written: {path}")
     return 0
 

@@ -4,6 +4,23 @@ from .scan_info import *
 LINE_PEN = pg.mkPen(color=(240, 255, 255), width=2)
 
 
+def _token_level(token):
+    """Level number of a plot token: ``levelN`` or ``LnS..``/``LnG..``."""
+    token = str(token or "")
+    match = re.match(r"^level(\d+)$", token) or re.match(r"^L(\d+)[SG]\d+_", token)
+    if match is None:
+        raise ValueError(f"Not a level plot token: {token!r}")
+    return int(match.group(1))
+
+
+def _outer_block_index(current_target_index, fixed_levels):
+    """Data index of the user levels (outermost first) for an array block."""
+    return tuple(
+        current_target_index[level]
+        for level in range(len(current_target_index) - 1, fixed_levels - 1, -1)
+    )
+
+
 def _emit_scan_log(widget, level, message, *, persist_current_run=False):
     root = widget.window() if hasattr(widget, "window") else None
     if root is None or not hasattr(root, "_append_log_entry"):
@@ -62,11 +79,11 @@ class LinePlot(QtWidgets.QWidget):
                 for setter_setting_info in setting_info:
                     temp_point.append(setter_setting_info[index])
                 self.setting_info.append(temp_point)
-            self.setter_level_number=int(self.x_name[-1])
+            self.setter_level_number=_token_level(self.x_name)
             self.x_coordinates=np.arange(self.setting_info_length, dtype=float)
 
         else:
-            self.setter_level_number=int(self.x_name[1])
+            self.setter_level_number=_token_level(self.x_name)
             self.setting_info=setting_info
             self.setting_info_length=len(self.setting_info)
             self.x_coordinates = np.asarray(self.setting_info, dtype=float)
@@ -168,6 +185,24 @@ class LinePlot(QtWidgets.QWidget):
         self.y_coordinates[point_index] = self.data[self.setter_level_number][self.getter_number][index_tuple]
         self.needs_redraw = True
 
+    def update_block(self, data, current_target_index, fixed_levels):
+        """Replace the whole line from one array read (fixed levels).
+
+        Drawn by the scan's redraw timer, like single points.
+        """
+        if self.getter_level_number >= fixed_levels:
+            return
+        outer = _outer_block_index(current_target_index, fixed_levels)
+        block = np.asarray(
+            data[self.getter_level_number][self.getter_number][outer], dtype=float
+        )
+        while block.ndim > 1:
+            block = block[-1]
+        if block.shape != (self.setting_info_length,):
+            return
+        self.y_coordinates = block.copy()
+        self.needs_redraw = True
+
     def redraw(self):
         self.needs_redraw = False
         self._show_line()
@@ -241,8 +276,8 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.xy_label = self.addLabel('', row=1, col=0)
         self.z_label = self.addLabel('', row=2, col=0)
         
-        self.x_level_number=int(self.x_name[-1])
-        self.y_level_number=int(self.y_name[-1])
+        self.x_level_number=_token_level(self.x_name)
+        self.y_level_number=_token_level(self.y_name)
 
         getter_match = re.match(r"L(\d+)G(\d+)_", self.z_name or "")
         if getter_match:
@@ -497,13 +532,40 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.needs_redraw = False
         self._safe_set_image(self.data)
 
+    def update_block(self, new_data, current_target_index, fixed_levels):
+        """Fill a row (spectrum vs. a user level) or a whole frame at once."""
+        if self.x_level_number >= fixed_levels:
+            return
+        outer_context_key = tuple(current_target_index[self.y_level_number + 1:])
+        if self.outer_context_key != outer_context_key:
+            self.outer_context_key = outer_context_key
+            self.data = np.full((self.data_shape[0], self.data_shape[1]), np.nan)
+        outer = _outer_block_index(current_target_index, fixed_levels)
+        block = np.asarray(
+            new_data[self.getter_level_number][self.getter_number][outer], dtype=float
+        )
+        if self.y_level_number < fixed_levels:
+            while block.ndim > 2:
+                block = block[-1]
+            if block.shape != self.data.shape:
+                return
+            self.data = block.copy()
+        else:
+            while block.ndim > 1:
+                block = block[-1]
+            if block.shape != (self.data.shape[1],):
+                return
+            self.data[current_target_index[self.y_level_number], :] = block
+        self.needs_redraw = True
+
     def load_image(self, data, target_index):
         temp = data[self.x_level_number][self.getter_number]
 
-        # Properly walk down the levels
+        # Walk down the levels above y, outermost first (data axes run from
+        # the highest level to the lowest).
         target_index = target_index[self.y_level_number+1:]
 
-        for idx in target_index:
+        for idx in reversed(target_index):
             temp = temp[idx]
         
         self.data = np.array(temp)
@@ -662,13 +724,13 @@ class AllPlots(QtWidgets.QWidget):
             
             return setting_array[int(setter_number)]
         else:
-            level=f'level{x_name[-1]}'
+            level=f'level{_token_level(x_name)}'
             setting_array=self.level_info[level]['setting_array']
             return setting_array
         
     def get_setting_info_image(self,coordinate):
         x_name=coordinate['x']
-        x_level=f'level{x_name[-1]}'
+        x_level=f'level{_token_level(x_name)}'
         x_setting_array=self.level_info[x_level]['setting_array']
         x_setters=[]
         for setter,setter_info in self.level_info[x_level]['setters'].items():
@@ -678,7 +740,7 @@ class AllPlots(QtWidgets.QWidget):
             x_setting_dict[setter] = x_setting_array[i]
 
         y_name=coordinate['y']
-        y_level=f'level{y_name[-1]}'
+        y_level=f'level{_token_level(y_name)}'
         y_setting_array=self.level_info[y_level]['setting_array']
         y_setters=[]
         for setter,setter_info in self.level_info[y_level]['setters'].items():

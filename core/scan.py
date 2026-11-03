@@ -10,6 +10,8 @@ from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
 from .all_plot_settings import AllPlotSetting
 from .all_plots import AllPlots, ImagePlot, LinePlot
+from .array_getters import EMPTY_CATALOG
+from .array_levels import array_channels, remap_plots
 from .channel_check import catalog_names, count_text, find_unresolved
 from .construct_scan_coordinates import Construct
 import os, shutil
@@ -129,7 +131,9 @@ class _BoundaryWorker(QtCore.QObject):
 
 def _write_json_payload(path, payload):
     with open(path, "w", encoding="utf-8") as json_file:
-        json.dump(payload, json_file, cls=_ScanJSONEncoder, indent=4)
+        # Compact: array getters make the data large, and indentation
+        # nearly triples the file size.
+        json.dump(payload, json_file, cls=_ScanJSONEncoder, separators=(",", ":"))
 
 
 def scan_setting_payload(info):
@@ -431,12 +435,12 @@ class Scan(QtWidgets.QWidget):
         for checkbox in self._levels_lock_checkboxes:
             checkbox.toggled.connect(self._apply_levels_lock)
 
-        self.all_level_setting = AllLevelSetting(all_level_info=info['levels'],setter_equipment_info=setter_equipment_info,getter_equipment_info=getter_equipment_info)
+        self.all_level_setting = self._new_level_setting(info)
         # print(equipment_info)
-        self.all_plot_setting = AllPlotSetting(level_info=info['levels'])
+        self.all_plot_setting = AllPlotSetting(level_info=self.all_level_setting.all_level_info)
         self.verticalLayout_2.addWidget(self.all_plot_setting)
         self.graphing_plots = [
-            AllPlots(level_info=info['levels'], page_number=i)
+            AllPlots(level_info=self.all_level_setting.all_level_info, page_number=i)
             for i in range(3)
         ]
         self.plots1_layout.addWidget(self.graphing_plots[0])
@@ -484,6 +488,7 @@ class Scan(QtWidgets.QWidget):
         self._replace_current_scan_log(self.info.get("scan_log", []))
 
         self.populate()
+        self._connect_array_level_signals()
         self.all_level_setting.sig_info_changed.connect(self.when_all_level_setting_infochanged)
         self.all_plot_setting.sig_info_changed.connect(self.when_all_plot_setting_infochanged)
         self.all_level_setting.sig_info_changed.connect(self.all_plot_setting.set_level_info_slot)
@@ -505,6 +510,43 @@ class Scan(QtWidgets.QWidget):
         else:
             self.logic.sig_scan_finished.connect(self.scan_finished)
         self._init_questionnaire_tab()
+
+    def _array_catalog(self):
+        catalog = getattr(self.main_window, "array_catalog", None)
+        return catalog if catalog is not None else EMPTY_CATALOG
+
+    def _new_level_setting(self, info):
+        """Build the level editor for ``info`` and keep its plots in step.
+
+        A scan that already holds data keeps its levels exactly as saved (the
+        data layout depends on them); the array catalog only applies to later
+        edits.  Otherwise fixed array levels are synced on load and the plot
+        tokens follow any renumbering.
+        """
+        has_data = bool(info.get("data"))
+        catalog = self._array_catalog()
+        level_setting = AllLevelSetting(
+            all_level_info=info["levels"],
+            setter_equipment_info=self.setter_equipment_info,
+            getter_equipment_info=self.getter_equipment_info,
+            array_catalog=None if has_data else catalog,
+        )
+        if has_data:
+            level_setting.set_array_catalog(catalog)
+        info["levels"] = level_setting.all_level_info
+        mapping = level_setting.last_sync_mapping
+        if mapping and isinstance(info.get("plots"), dict):
+            info["plots"] = remap_plots(info["plots"], mapping, info["levels"])
+        return level_setting
+
+    def _connect_array_level_signals(self):
+        self.all_level_setting.sig_levels_renumbered.connect(
+            self.all_plot_setting.queue_level_remap
+        )
+        self.all_level_setting.sig_warning.connect(self._on_level_warning)
+
+    def _on_level_warning(self, message):
+        self._log_warning(message, persist_current_run=False)
 
     @property
     def outputs_finalized(self) -> bool:
@@ -1280,11 +1322,20 @@ class Scan(QtWidgets.QWidget):
             else:
                 getter_counts.append(len(getters))
 
-        return (
+        summary = (
             f"Start summary | name={self.info.get('name', 'no name')} | levels={level_count} | "
             f"points_per_level={points_per_level} | total_points={total_points} | "
             f"setters_per_level={setter_counts} | getters_per_level={getter_counts}"
         )
+        fixed_levels = int(getattr(self.logic, "fixed_level_count", 0) or 0)
+        if fixed_levels:
+            arrays = array_channels(self.info.get("levels", {}))
+            shape = tuple(getattr(self.logic, "array_block_shape", ()) or ())
+            summary += (
+                f" | fixed_levels={fixed_levels} | array_getters={arrays} | "
+                f"array_shape={list(shape)} (one read per point; total_points counts user levels)"
+            )
+        return summary
 
     def _get_elapsed_seconds(self):
         if self._run_start_time is not None:
@@ -1392,6 +1443,9 @@ class Scan(QtWidgets.QWidget):
         try:
             self._last_start_error = None
             self._start_cancel_requested = False
+            # Re-read array getter shapes and axes (read mode or centre
+            # wavelength may have changed since the levels were edited).
+            self.all_level_setting.sync_fixed_levels(refresh=True)
             self._set_scan_state("preparing")
             self._outputs_finalized = False
             self._set_scan_configuration_locked(True)
@@ -1675,7 +1729,11 @@ class Scan(QtWidgets.QWidget):
 
         source_level = None
         changed_getter_indices = None
+        phase = None
+        fixed_levels = 0
         if isinstance(emit_metadata, dict):
+            phase = emit_metadata.get("phase")
+            fixed_levels = int(emit_metadata.get("fixed_levels", 0) or 0)
             source_level = emit_metadata.get("source_level")
             changed_getter_indices = emit_metadata.get("changed_getter_indices")
             if changed_getter_indices is not None:
@@ -1689,6 +1747,16 @@ class Scan(QtWidgets.QWidget):
             if getter_level is None or getter_index is None:
                 return True
             return getter_level == source_level and getter_index in changed_getter_indices
+
+        if phase == "block":
+            # One array read filled the fixed levels: record whole rows or
+            # frames; the redraw timer draws them.
+            for gp in self.graphing_plots:
+                for w in gp.plot_widgets():
+                    if should_update_plot(w):
+                        w.update_block(new_data, current_target_index, fixed_levels)
+            self._schedule_live_redraw()
+            return
 
         for gp in self.graphing_plots:
             for w in gp.plot_widgets():
@@ -1788,7 +1856,7 @@ class Scan(QtWidgets.QWidget):
         def write_json_snapshot(path):
             self._sync_scan_log_to_info()
             with open(path, "w", encoding="utf-8") as json_file:
-                json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
+                json.dump(self.info, json_file, cls=CustomEncoder, separators=(",", ":"))
 
         def write_recovery_snapshot(original_name):
             temporary_path = None
@@ -2002,11 +2070,7 @@ class Scan(QtWidgets.QWidget):
         self.all_plot_setting.setParent(None)
         self.all_plot_setting.deleteLater()
 
-        self.all_level_setting = AllLevelSetting(
-            all_level_info=self.info["levels"],
-            setter_equipment_info=self.setter_equipment_info,
-            getter_equipment_info=self.getter_equipment_info,
-        )
+        self.all_level_setting = self._new_level_setting(self.info)
         self.all_plot_setting = AllPlotSetting(level_info=self.info["levels"])
         self.verticalLayout_2.addWidget(self.all_plot_setting)
         self.scrollArea.setWidget(self.all_level_setting)
@@ -2018,6 +2082,7 @@ class Scan(QtWidgets.QWidget):
         self._apply_levels_lock()
 
         self.populate()
+        self._connect_array_level_signals()
         self.all_level_setting.sig_info_changed.connect(self.when_all_level_setting_infochanged)
         self.all_plot_setting.sig_info_changed.connect(self.when_all_plot_setting_infochanged)
         self.all_level_setting.sig_info_changed.connect(self.all_plot_setting.set_level_info_slot)
@@ -2432,7 +2497,7 @@ class Scan(QtWidgets.QWidget):
 
         try:
             with open(fileName, 'w') as json_file:
-                json.dump(self.info, json_file, cls=CustomEncoder, indent=4)
+                json.dump(self.info, json_file, cls=CustomEncoder, separators=(",", ":"))
             self._log_info(f"Autosave succeeded: {fileName}")
         except Exception as e:
             self._log_error(f"Autosave failed: {type(e).__name__}: {e}")

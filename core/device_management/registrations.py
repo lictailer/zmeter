@@ -743,6 +743,34 @@ def nema11_stepper_registration() -> DriverRegistration:
     )
 
 
+def _andor_connect(instance, connection, timeout_ms: int) -> bool:
+    """Bounded connect: camera (required) and spectrograph (optional)."""
+    return instance.connect(_connection_address(connection), timeout_ms) is True
+
+
+def andor_registration() -> DriverRegistration:
+    """Andor SDK2 camera + Shamrock spectrograph; pylablib is imported lazily.
+
+    Address: ``"<camera index>[,<spectrograph index>|none]"`` (blank = ``0,0``).
+    """
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="andor",
+            connection_fields={"address": _address_spec()},
+        ),
+        factory=_widget_factory("devices.andor.andor_main", "Andor"),
+        connect=_andor_connect,
+        startup_connect=_andor_connect,
+        disconnect=lambda instance: _call_logic(instance, "disconnect_all"),
+        start_scan=lambda instance: _call(instance, "start_scan"),
+        stop_scan=lambda instance: _call(instance, "stop_scan"),
+        force_stop=lambda instance: _call(instance, "force_stop"),
+        terminate=lambda instance: _terminate_with_true_result(instance, "terminate_dev"),
+        is_busy=lambda instance: instance.logic.lifecycle_busy(),
+        is_connected=lambda instance: bool(instance.logic.connected),
+    )
+
+
 def phase2_device_registrations() -> tuple[DriverRegistration, ...]:
     """Return the reviewed Phase 2 startup-only registrations."""
 
@@ -758,4 +786,5 @@ def phase2_device_registrations() -> tuple[DriverRegistration, ...]:
         auto_position_registration(),
         arduino_steppers_registration(),
         nema11_stepper_registration(),
+        andor_registration(),
     )

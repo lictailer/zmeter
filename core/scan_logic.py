@@ -25,6 +25,8 @@ from concurrent.futures import ThreadPoolExecutor
 import re
 
 from .shift_compensation.logic import SOURCE_GROUP, TARGET_GROUP
+from .array_getters import validate_array
+from .array_levels import FIXED_AXIS_KEY
 
 # Write phases after the plain writes of one scan point (see multi_thread_write).
 COMPENSATED_WRITE_ORDER = (SOURCE_GROUP, TARGET_GROUP)
@@ -170,6 +172,27 @@ class ScanLogic(QtCore.QThread):
         self.total_points = 0
         self.completed_points = 0
         self.last_auto_hour_triggered = 0
+        self.fixed_level_count = 0
+        self.array_block_shape = ()
+
+    @staticmethod
+    def count_fixed_levels(scan_config):
+        """Number of fixed array-axis levels; they must be level0..levelF-1."""
+        levels = scan_config['levels']
+        flags = [
+            isinstance(levels[f'level{i}'].get(FIXED_AXIS_KEY), dict)
+            for i in range(len(levels))
+        ]
+        count = 0
+        while count < len(flags) and flags[count]:
+            count += 1
+        if any(flags[count:]):
+            raise ValueError(
+                "Fixed array levels must be the lowest levels (level0, level1, ...)."
+            )
+        if count and count == len(flags):
+            raise ValueError("A scan with an array getter needs at least one user level.")
+        return count
 
     def initialize_scan_data(self, scan_config):
         """
@@ -190,12 +213,16 @@ class ScanLogic(QtCore.QThread):
         self.completed_points = 0
         self.last_auto_hour_triggered = 0
         
+        # Fixed array-axis levels (level0..levelF-1) are filled by one array
+        # read per outer point, so they are not loops and not progress steps.
+        self.fixed_level_count = self.count_fixed_levels(scan_config)
+
         # Total progress steps: completed_points counts every point of every
-        # level, so level k adds the product of the point counts of levels >= k
-        # (an 11 x 11 scan has 11*11 + 11 = 11*12 steps).
+        # user level, so level k adds the product of the point counts of
+        # levels >= k (an 11 x 11 scan has 11*11 + 11 = 11*12 steps).
         self.total_points = 0
         level_runs = 1
-        for level_index in reversed(range(len(scan_config['levels']))):
+        for level_index in reversed(range(self.fixed_level_count, len(scan_config['levels']))):
             level_runs *= scan_config['levels'][f'level{level_index}']['setting_array'].shape[1]
             self.total_points += level_runs
         
@@ -269,6 +296,26 @@ class ScanLogic(QtCore.QThread):
         self.current_target_indices = []
         for level_index in range(self.max_level + 1):
             self.current_target_indices.append(0)
+
+        # Shape every array getter must return, in array axis order: fixed
+        # level F-1 is the first array axis, fixed level0 the last.
+        self.array_block_shape = tuple(
+            self.level_target_counts[k]
+            for k in range(self.fixed_level_count - 1, -1, -1)
+        )
+        if self.fixed_level_count:
+            array_specs = [
+                spec for spec in self.level_getter_specs[0] if spec["kind"] != "none"
+            ]
+            if not array_specs or any(spec["kind"] != "direct" for spec in array_specs):
+                raise ValueError(
+                    "Fixed level0 must hold the array getters and nothing else."
+                )
+            for level_index in range(1, self.fixed_level_count):
+                if any(spec["kind"] != "none" for spec in self.level_getter_specs[level_index]):
+                    raise ValueError(
+                        f"Fixed level{level_index} cannot record getters."
+                    )
 
     def _find_direct_getter_index(self, level_index, getter_channel):
         if level_index >= len(self.level_getter_specs):
@@ -381,12 +428,69 @@ class ScanLogic(QtCore.QThread):
         detail_parts.append(f"cause={type(exc).__name__}: {exc}")
         raise RuntimeError("; ".join(detail_parts)) from exc
 
+    def read_array_block(self):
+        """Fill the fixed levels with one read of every array getter.
+
+        Runs in place of looping over the fixed levels: the arrays are read
+        once for the current outer (user-level) point, checked against the
+        fixed-level shape and stored as one slice of level 0's data.
+        """
+        fixed = self.fixed_level_count
+        reading_device_channels = self.group_reading_device_channels(0)
+        if len(reading_device_channels) == 0:
+            return
+        if self._pause_gate() or self.received_stop:
+            return
+        measurements = self.multi_thread_read(reading_device_channels, 0, 0)
+        if self._pause_gate() or self.received_stop:
+            return
+
+        outer_indices = tuple(
+            self.current_target_indices[level_index]
+            for level_index in range(self.max_level, fixed - 1, -1)
+        )
+        changed_getter_indices = []
+        for getter_index, getter_spec in enumerate(self.level_getter_specs[0]):
+            if getter_spec["kind"] != "direct":
+                continue
+            channel = getter_spec["channel"]
+            try:
+                array = validate_array(
+                    measurements.get(channel), self.array_block_shape, channel
+                )
+            except Exception as exc:
+                self._raise_scan_io_error(
+                    operation="array_read",
+                    channel=channel,
+                    level_index=0,
+                    exc=exc,
+                )
+            self.level_data_arrays[0][(getter_index, *outer_indices)] = array
+            changed_getter_indices.append(getter_index)
+
+        self.sig_new_data.emit(
+            [
+                self.level_data_arrays,
+                deepcopy(self.current_target_indices),
+                {
+                    "source_level": 0,
+                    "changed_getter_indices": changed_getter_indices,
+                    "phase": "block",
+                    "fixed_levels": fixed,
+                },
+            ]
+        )
+
     def looping(self, current_level):
         # Base case
         if current_level == -1:
             return
 
         if self._pause_gate() or self.received_stop:
+            return
+
+        if self.fixed_level_count and current_level == self.fixed_level_count - 1:
+            self.read_array_block()
             return
 
         if current_level == self.max_level and self.scan_start_time is None:

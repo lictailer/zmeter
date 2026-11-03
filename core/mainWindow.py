@@ -43,6 +43,7 @@ from .slack_notify.notifier import SlackNotifier
 from .slack_notify.settings import SlackTokenStore
 from .slack_notify.widgets import SlackPanel
 from .channel_value_record import ChannelValueRecord
+from .array_getters import ArrayCatalog, array_getter_specs
 from .shift_compensation.logic import (
     GROUPS as SHIFT_COMPENSATION_GROUPS,
     SOURCE_GROUP as SHIFT_COMPENSATION_SOURCE_GROUP,
@@ -192,6 +193,8 @@ class MainWindow(QtWidgets.QWidget):
         self.setter_equipment_info = {}
         # {equipment : [list of variable name]}
         self.getter_equipment_info = {}
+        # Array getters (spectra, frames): shape and axes per scan channel.
+        self.array_catalog = ArrayCatalog(self._resolve_array_channel)
         self.device_channel_catalog = {}
         self.scan_range_limits = {}
         self.active_scan_range_limits = {}
@@ -1395,6 +1398,7 @@ class MainWindow(QtWidgets.QWidget):
         router_catalog = self.build_device_channel_catalog(
             setter_channels,
             getter_channels,
+            equipment=equipment,
         )
         active_scan_range_limits = self._build_active_scan_range_limits(
             setter_channels
@@ -1441,7 +1445,7 @@ class MainWindow(QtWidgets.QWidget):
             getter_callables=self.getter_equipment_info_for_scanning,
             setter_channels=self.setter_equipment_info,
             getter_channels=self.getter_equipment_info,
-            router_catalog=self.build_device_channel_catalog(),
+            router_catalog=self.build_device_channel_catalog(equipment=self.equips),
             active_scan_range_limits=self._build_active_scan_range_limits(
                 self.setter_equipment_info
             ),
@@ -2491,19 +2495,47 @@ class MainWindow(QtWidgets.QWidget):
 
         return {key: value for key, value in variables.items() if key in normalized}
 
-    def build_device_channel_catalog(self, setter_info=None, getter_info=None):
+    def build_device_channel_catalog(self, setter_info=None, getter_info=None, equipment=None):
         if setter_info is None:
             setter_info = self.setter_equipment_info
         if getter_info is None:
             getter_info = self.getter_equipment_info
+        if equipment is None:
+            equipment = getattr(self, "equips", {}) or {}
         device_names = set(setter_info) | set(getter_info)
         catalog = {}
         for device_name in sorted(device_names):
+            # Array getters (spectra, frames) are scan-only: the router reads
+            # scalars, so autofocus, shift compensation and RouterIO users
+            # never see them.
+            try:
+                array_names = set(
+                    array_getter_specs(getattr(equipment.get(device_name), "logic", None))
+                )
+            except (TypeError, ValueError):
+                array_names = set()
             catalog[device_name] = {
-                "readable": list(getter_info.get(device_name, [])),
+                "readable": [
+                    name
+                    for name in getter_info.get(device_name, [])
+                    if name not in array_names
+                ],
                 "writable": list(setter_info.get(device_name, [])),
             }
         return catalog
+
+    def _resolve_array_channel(self, channel):
+        """``(logic, variable)`` for a scan channel, or ``None``."""
+        best = None
+        for label, equipment in (getattr(self, "equips", {}) or {}).items():
+            if channel.startswith(f"{label}_") and (best is None or len(label) > len(best[0])):
+                best = (label, equipment)
+        if best is None:
+            return None
+        logic = getattr(best[1], "logic", None)
+        if logic is None:
+            return None
+        return logic, channel[len(best[0]) + 1:]
 
     def refresh_device_catalog(self):
         snapshot = self.apply_device_snapshot(self._applied_device_snapshot)

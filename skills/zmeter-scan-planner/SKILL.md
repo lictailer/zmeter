@@ -50,6 +50,11 @@ them in ZMeter and starts them.
   Compensation, see `references/plan_format.md`) only when the export lists them
   and the user confirms that compensation is wanted for that scan. Mention that
   the user must check the active mappings in ZMeter before starting.
+- Array getters (spectra, camera images; listed under `array_getters` in the
+  export) can only be recorded on level0, and all of a scan's array getters must
+  share one shape. Count one array read as one point plus its exposure time,
+  and confirm exposure time, accumulations and the spectrometer centre
+  wavelength with the user, since they decide what the array holds.
 - Stay inside the scan range limits in the export. If the request needs more,
   plan within the limit and say so.
 - Name every step ZMeter cannot do by itself (warming up or cooling the cryostat

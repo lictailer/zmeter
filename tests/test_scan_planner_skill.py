@@ -20,6 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6 import QtWidgets
 
+from core.array_getters import ArrayInfo
 from core.brakets import Brakets
 from core.channel_check import catalog_names, find_unresolved, level_problems
 from core.queue_files import read_queue
@@ -66,6 +67,46 @@ def nlh_scan(name="NLH_gate_3p4K"):
             {"type": "line", "level": 0, "x": "Keithley_bg_V", "y": "SR860_0_Y"},
             {"type": "line", "level": 1, "x": "level", "y": "level0_average_SR860_0_X"},
             {"type": "image", "level": 0, "z": "SR860_0_X"},
+        ],
+    }
+
+
+class _ArrayCatalog:
+    """A spectrometer (16 pixels) and a camera (4 x 6) on device andor_0."""
+
+    SHAPES = {"andor_0_spectrum": (16,), "andor_0_image": (4, 6)}
+
+    def is_array(self, channel):
+        return channel in self.SHAPES
+
+    def info(self, channel):
+        shape = self.SHAPES.get(channel)
+        if shape is None:
+            return None
+        axes = ("pixel",) if len(shape) == 1 else ("row", "column")
+        values = tuple(tuple(float(i) for i in range(n)) for n in shape)
+        return ArrayInfo(channel, axes, shape, values, "counts")
+
+
+def spectrum_scan():
+    return {
+        "type": "scan",
+        "name": "PL_vs_gate",
+        "levels": [
+            {
+                "setters": [{"channel": "Keithley_bg_V", "start": -1.0, "end": 1.0, "points": 3}],
+                "getters": ["SR860_0_X", "andor_0_spectrum"],
+            },
+            {
+                "setters": [{"channel": "SR860_0_ampl", "start": 0.1, "end": 0.2, "points": 2}],
+                "getters": ["level0_average_SR860_0_X"],
+            },
+        ],
+        "plots": [
+            {"type": "line", "level": 0, "x": "axis", "y": "andor_0_spectrum"},
+            {"type": "image", "level": 0, "z": "andor_0_spectrum"},
+            {"type": "line", "level": 0, "x": "Keithley_bg_V", "y": "SR860_0_X"},
+            {"type": "line", "level": 1, "x": "level", "y": "level0_average_SR860_0_X"},
         ],
     }
 
@@ -241,6 +282,103 @@ class BuildPlanTests(unittest.TestCase):
             build_plan.main([str(plan_path), "--system", str(self.export_path), "--out", str(out)]), 1
         )
         self.assertEqual(list(out.iterdir()), [])
+
+    def _array_system(self):
+        self.main_window.getter_equipment_info["andor_0"] = ["spectrum", "image"]
+        self.main_window.array_catalog = _ArrayCatalog()
+        path = self.root / "zmeter_system_arrays.md"
+        path.write_text(
+            system_export.export_markdown(system_export.system_info(self.main_window), {}, [], ""),
+            encoding="utf-8",
+        )
+        return build_plan.read_system(str(path))
+
+    def test_array_getter_writes_fixed_levels_that_zmeter_keeps(self):
+        system = self._array_system()
+        self.assertEqual(
+            {entry["channel"]: entry["shape"] for entry in system["array_getters"]},
+            {"andor_0_spectrum": [16], "andor_0_image": [4, 6]},
+        )
+        plan = {"items": [spectrum_scan()]}
+        self.assertEqual(build_plan.check_plan(plan, system), [])
+        path = build_plan.write_plan(plan, str(self.root), system)
+        written = read_scan_file(path)
+
+        levels = written["levels"]
+        self.assertEqual(list(levels), ["level0", "level1", "level2"])
+        self.assertEqual(levels["level0"]["fixed_axis"]["name"], "pixel")
+        self.assertEqual(levels["level0"]["getters"], ["andor_0_spectrum"])
+        self.assertEqual(levels["level1"]["getters"], ["SR860_0_X"])
+        self.assertEqual(levels["level2"]["getters"], ["level1_average_SR860_0_X"])
+        self.assertEqual(level_problems(written), [])
+
+        persistence_window = _PersistenceMainWindow(self.root)
+        persistence_window.array_catalog = _ArrayCatalog()
+        info = copy.deepcopy(ScanInfo)
+        info["plots"] = {"line_plots": {}, "image_plots": {}}
+        scan = Scan(
+            name="probe",
+            info=info,
+            setter_equipment_info=self.main_window.setter_equipment_info,
+            getter_equipment_info=self.main_window.getter_equipment_info,
+            main_window=persistence_window,
+        )
+
+        def cleanup():
+            scan.close()
+            scan.deleteLater()
+            persistence_window.deleteLater()
+            self.app.processEvents()
+
+        self.addCleanup(cleanup)
+        scan.load_info(written, path)
+        saved = scan.setting_payload()
+        self.assertEqual(
+            {name: level["getters"] for name, level in saved["levels"].items()},
+            {name: level["getters"] for name, level in levels.items()},
+        )
+        self.assertEqual(
+            saved["plots"],
+            {
+                "line_plots": {
+                    "0": {"x": "L0S0_none", "y": "L0G0_andor_0_spectrum"},
+                    "1": {"x": "L1S0_Keithley_bg_V", "y": "L1G0_SR860_0_X"},
+                    "2": {"x": "level2", "y": "L2G0_level1_average_SR860_0_X"},
+                },
+                "image_plots": {"0": {"x": "level0", "y": "level1", "z": "L0G0_andor_0_spectrum"}},
+            },
+        )
+
+    def test_two_dimensional_array_adds_two_fixed_levels(self):
+        system = self._array_system()
+        scan = spectrum_scan()
+        scan["levels"][0]["getters"] = ["andor_0_image"]
+        scan["plots"] = [{"type": "image", "level": 0, "z": "andor_0_image"}]
+        payload = build_plan.scan_setting(scan, build_plan.array_getters(system))
+        levels = payload["levels"]
+        self.assertEqual(len(levels), 4)
+        self.assertEqual(levels["level0"]["fixed_axis"]["name"], "column")
+        self.assertEqual(len(levels["level0"]["setting_array"][0]), 6)
+        self.assertEqual(levels["level1"]["fixed_axis"]["name"], "row")
+        self.assertEqual(levels["level1"]["getters"], ["none"])
+        self.assertEqual(levels["level2"]["getters"], ["none"])
+        self.assertEqual(payload["plots"]["image_plots"]["0"], {"x": "level0", "y": "level1", "z": "L0G0_andor_0_image"})
+
+    def test_array_getter_problems(self):
+        system = self._array_system()
+        scan = spectrum_scan()
+        scan["levels"][0]["getters"].append("andor_0_image")
+        scan["levels"][1]["getters"].append("andor_0_spectrum")
+        scan["levels"][1]["getters"].append("level0_average_andor_0_spectrum")
+        scan["plots"].append({"type": "line", "level": 0, "x": "Keithley_bg_V", "y": "andor_0_spectrum"})
+        problems = "\n".join(build_plan.check_plan({"items": [scan]}, system))
+        for message in (
+            "must share one shape",
+            "can only be a getter of level0",
+            "averages an array getter",
+            "x of an array line plot must be 'axis'",
+        ):
+            self.assertIn(message, problems)
 
     def test_cli_writes_into_the_export_data_folder_and_never_overwrites(self):
         plan_path = self.root / "plan.json"

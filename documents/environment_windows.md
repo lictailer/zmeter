@@ -85,6 +85,12 @@ variant per environment. The headless build is appropriate because PyQt6,
 not OpenCV's HighGUI, owns the application UI; see the
 [OpenCV package guidance](https://pypi.org/project/opencv-python-headless/4.13.0.92/).
 
+The Andor camera/spectrograph integration adds `pylablib==1.4.3` (pip). It is
+imported only when the Andor device connects, so it does not affect machines
+without the camera. It also needs the Andor SDK2 and Shamrock DLLs, installed
+with Andor Solis or the Andor SDK (system software, not in the YAML); see
+[the device README](../devices/andor/README.md).
+
 attoDRY additionally needs the vendor-provided `atto_device` 1.12.0 wheel.
 The companion installer branch `MS/optional-attodry-installation` offers this
 only for releases containing the driver and only after explicit opt-in. It

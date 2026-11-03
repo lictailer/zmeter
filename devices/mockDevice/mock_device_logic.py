@@ -6,11 +6,24 @@ from typing import Any
 
 from PyQt6 import QtCore
 
+from core.array_getters import ArrayGetter
+
 from .mock_device_hardware import MockDeviceHardware
 from .mock_device_simulator import MockDeviceFailAfterError
 
 
 class MockDeviceLogic(QtCore.QThread):
+    # Array getters for exercising the fixed-level scan path without hardware.
+    ARRAY_GETTERS = {
+        "spectrum": ArrayGetter(
+            axes=("pixel",),
+            shape="spectrum_shape",
+            axis_values="spectrum_axis",
+            units="counts",
+        ),
+        "frame": ArrayGetter(axes=("row", "column"), shape="frame_shape", units="counts"),
+    }
+
     sig_connected = QtCore.pyqtSignal(object)
     sig_status = QtCore.pyqtSignal(str)
     sig_error = QtCore.pyqtSignal(str)
@@ -55,6 +68,24 @@ class MockDeviceLogic(QtCore.QThread):
         result = self._execute("Read random channel", self.hardware.read_random_channel)
         self.sig_random.emit(result)
         return result
+
+    def get_spectrum(self):
+        """64-pixel spectrum (array getter); the peak follows channel A."""
+        return self._execute("Read spectrum", self.hardware.read_spectrum)
+
+    def get_frame(self):
+        """8 x 12 frame (array getter); the spot follows channels A and B."""
+        return self._execute("Read frame", self.hardware.read_frame)
+
+    # Shape and axis of the array getters (not scan channels).
+    def spectrum_shape(self) -> tuple[int]:
+        return self.hardware.spectrum_shape()
+
+    def spectrum_axis(self) -> list[float]:
+        return self.hardware.spectrum_axis()
+
+    def frame_shape(self) -> tuple[int, int]:
+        return self.hardware.frame_shape()
 
     def set_ramp_channel_A(self, value: float) -> float:
         return self._run_ramp("A", value, self.hardware.ramp_channel_A)

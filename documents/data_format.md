@@ -19,7 +19,7 @@ The top-level fields are:
 | `plots_per_page` | Persisted UI selection, stored as text |
 | `shift_compensation` | Output files only (since the Shift Compensation feature): the Shift Compensation record written at scan start; see below. Not part of the scan settings and ignored on load |
 
-Each level stores ordered `setters`, `setting_method`, ordered `getters`, `setting_array`, `settle_time`, `start_wait_time`, `manual_set_before`, and `manual_set_after`. Each setter stores its full scan channel, explicit/linear selection, both setting descriptions, and selected destinations. See [scan_engine.md](scan_engine.md) for execution semantics.
+Each level stores ordered `setters`, `setting_method`, ordered `getters`, `setting_array`, `settle_time`, `start_wait_time`, `manual_set_before`, and `manual_set_after`. A fixed level (one axis of an array getter) also stores `fixed_axis: {"channel", "axis", "name", "units"}`; its setter is `none` and its destinations are the axis values (for example wavelengths in nm). Each setter stores its full scan channel, explicit/linear selection, both setting descriptions, and selected destinations. See [scan_engine.md](scan_engine.md) for execution semantics.
 
 Plot entries use string indices:
 
@@ -76,6 +76,10 @@ step.
 ## Array and `NaN` encoding
 
 In memory, `setting_array` and acquired `data` contain NumPy arrays. JSON serialization converts arrays to nested lists. The current encoder can emit non-finite list values as Python JSON's unquoted `NaN` literal; this is accepted by Python's loader but is not strict JSON. Loading also recursively converts the exact legacy/external string `"NaN"` to `numpy.nan`.
+
+Scan JSON is written compact (no indentation, separators `,` and `:`), because array getters make files large. Older indented files load unchanged.
+
+With array getters, the data of the levels and getters on and above the fixed levels keep the same layout: `data[L][g]` is shaped `[outermost_points, ..., level_L_points]`, so an array getter on fixed `level0` of a scan with a 1-D spectrum of 1024 pixels and a 21-point user level stores `data[0][g]` with shape `[21, 1024]` (more outer levels add leading axes). The array axis order is the device's axis order reversed into levels: the last array axis is `level0`. Levels without data (fixed `level1` of a 2-D frame) still hold a `NaN` placeholder for `none`. To read a spectrum, take the axis values from `levels.level0.setters.setter0.destinations` and the counts from `data[0][g]`.
 
 Do not change array axis ordering or normalize the `NaN` representation without auditing plotting, scan initialization, downstream loaders, and existing measurement files. Moving to strict JSON requires an explicit compatibility decision. Tests must include partially filled arrays, skipped points, averaged getters, unquoted and string `NaN`, and nested round trips.
 

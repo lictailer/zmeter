@@ -120,6 +120,22 @@ ordering, comments/logs, collision naming, serial discovery, canonical
 `autosave.json` replacement, disabled backup behavior, and intercepted
 PowerPoint/COM/`Z:\` paths. All files are confined to an OS temporary directory.
 
+Array getters and the Andor port have their own offscreen suites:
+
+```powershell
+python -B -m unittest -v tests.test_array_getters tests.test_andor_device tests.test_scan_planner_skill
+```
+
+`test_array_getters` covers the `ARRAY_GETTERS` declaration, shape checks,
+fixed-level sync (add, keep, rebuild, remove, offline device, renumbering of
+averages and plot tokens), engine block reads with the mock `spectrum` and
+`frame` getters (including a level average of a frame), the time-estimate point
+count, the size limit, and the Scan window (pick, remove, plots, compact JSON
+round trip). `test_andor_device` runs the Andor logic and widget against a fake
+pylablib. `test_scan_planner_skill` checks the planner's fixed-level output by
+loading it in a Scan window. The Andor bench checklist is in
+`devices/andor/README.md`.
+
 - Parse changed `.ui` files with a hardware-independent XML parser or load only the affected widget offscreen with simulated dependencies.
 - For persistence changes, save to a temporary directory, reload, compare schema/data including `NaN`, verify duplicate naming, and test partial-write/failure reporting.
 - For threading changes, use deterministic barriers/events and bounded waits; never rely on long sleeps or real transport timing.

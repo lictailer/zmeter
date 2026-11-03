@@ -91,8 +91,32 @@ def system_info(main_window) -> dict:
         "devices": devices,
         "setter_channels": _channel_names(getattr(main_window, "setter_equipment_info", None)),
         "getter_channels": _channel_names(getattr(main_window, "getter_equipment_info", None)),
+        "array_getters": _array_getters(main_window),
         "limits": limits,
     }
+
+
+def _array_getters(main_window) -> list[dict]:
+    """Getter channels that return arrays, with their live shape and axes."""
+
+    catalog = getattr(main_window, "array_catalog", None)
+    if catalog is None:
+        return []
+    output = []
+    for names in _channel_names(getattr(main_window, "getter_equipment_info", None)).values():
+        for channel in names:
+            if not catalog.is_array(channel):
+                continue
+            info = catalog.info(channel)
+            output.append(
+                {
+                    "channel": channel,
+                    "axes": list(info.axes) if info else [],
+                    "shape": list(info.shape) if info else [],
+                    "units": info.units if info else "",
+                }
+            )
+    return output
 
 
 def _bound_text(value: float | None) -> str:
@@ -146,6 +170,23 @@ def export_markdown(
             lines.append(f"- {device}: " + ", ".join(f"`{name}`" for name in names))
         lines.append("")
     lines += [
+        "## Array getters",
+        "",
+        "These getters return a whole spectrum or frame per read. Record them only "
+        "on the innermost level: ZMeter then adds one locked fixed level per array "
+        "axis below it (the last axis becomes level0) and the user levels move up. "
+        "All array getters of one scan must have the same shape.",
+        "",
+    ]
+    if info.get("array_getters"):
+        for item in info["array_getters"]:
+            shape = " x ".join(str(n) for n in item["shape"]) or "unknown (device offline)"
+            axes = ", ".join(item["axes"]) or "-"
+            lines.append(f"- `{item['channel']}`: axes {axes}; shape {shape}; units {item['units'] or '-'}")
+    else:
+        lines.append("(none)")
+    lines += [
+        "",
         "## Scan range limits",
         "",
         "ZMeter refuses to write a setter value outside these limits and records "
