@@ -17,6 +17,7 @@ from .all_plots import ImagePlot
 import os, shutil
 from .append_to_ppt import add_slide_with_png_bytes, add_slide_with_qpixmap
 from .setup_capture import runtime as setup_runtime
+from .slack_notify.capture import plots_png as slack_plots_png
 from .setup_capture import questionnaire as setup_questionnaire
 from .setup_capture.snapshot import changed_fields as setup_changed_fields
 from .setup_capture.widgets import (
@@ -452,6 +453,10 @@ class Scan(QtWidgets.QWidget):
         self._run_start_time = None
         self._run_stop_reason = None
         self._run_error_message = None
+        # Set by the queue while it runs this scan: the scan then sends no
+        # Slack message of its own; the queue sends one at its end.
+        self._slack_queue_run = False
+        self._slack_result = None
         self._stop_intent_logged = False
         self._finalize_outputs_scheduled = False
         self._outputs_finalized = True
@@ -862,6 +867,7 @@ class Scan(QtWidgets.QWidget):
 
     def _finalize_scan_outputs(self):
         """Capture Qt-owned pixels, then restore devices and persist off-thread."""
+        self._slack_result = self._capture_slack_result()
         snapshot = None
         try:
             snapshot = self._build_output_snapshot()
@@ -904,6 +910,10 @@ class Scan(QtWidgets.QWidget):
                 current_serial = self.main_window.scanlist.serial.value()
                 self.main_window.scanlist.serial.setValue(current_serial + 1)
 
+            # Before outputs_finalized is set, so a queue waiting on it sees
+            # this scan's result already handed over.
+            self._send_slack_scan_result()
+
             restart_after_finalize = bool(
                 self._start_new_scan_after_stop and not self._shutdown_requested
             )
@@ -917,6 +927,74 @@ class Scan(QtWidgets.QWidget):
 
         if restart_after_finalize:
             self._start_scan_now()
+
+    def _slack_notifier(self):
+        return getattr(self.main_window, "slack_notifier", None)
+
+    def _capture_slack_result(self):
+        """Name, numbers and plot screenshot for the Slack message (UI thread).
+
+        Returns None when Slack is off.  Never raises.
+        """
+        notifier = self._slack_notifier()
+        if notifier is None or not notifier.active:
+            return None
+        try:
+            serial = f"{self.main_window.scanlist.serial.value():04d}"
+            name = f"{serial}_{self.info.get('name', 'scan')}"
+            tabs = (self.Plots1Tab, self.Plots2Tab, self.Plots3Tab)
+            pages = [
+                (tab, area)
+                for tab, area in zip(tabs, self.graphing_plots)
+                if tab.findChildren((LinePlot, ImagePlot))
+            ]
+            stack = self.Plots1Tab.parentWidget()
+            png = None
+            try:
+                png = slack_plots_png(
+                    pages,
+                    (LinePlot, ImagePlot),
+                    stack.size() if stack is not None else None,
+                )
+            except Exception as exc:
+                self._log_warning(
+                    f"Slack screenshot failed: {type(exc).__name__}: {exc}"
+                )
+            return {
+                "name": name,
+                "elapsed_seconds": self._get_elapsed_seconds(),
+                "completed_points": getattr(self.logic, "completed_points", 0),
+                "total_points": getattr(self.logic, "total_points", 0),
+                "png": png,
+            }
+        except Exception as exc:
+            self._log_warning(f"Slack message skipped: {type(exc).__name__}: {exc}")
+            return None
+
+    def _send_slack_scan_result(self):
+        """Hand the finished scan to the Slack notifier; it returns at once."""
+        result, self._slack_result = self._slack_result, None
+        queue_run, self._slack_queue_run = self._slack_queue_run, False
+        notifier = self._slack_notifier()
+        if result is None or notifier is None:
+            return
+        finish = self._get_finish_status()
+        if finish == "stopped for restart":
+            return
+        status = {"completed": "completed", "error": "error"}.get(finish, "stopped")
+        try:
+            notifier.scan_finished(
+                name=result["name"],
+                status=status,
+                elapsed_seconds=result["elapsed_seconds"],
+                completed_points=result["completed_points"],
+                total_points=result["total_points"],
+                png=result["png"],
+                error_message=self._run_error_message,
+                queue_run=queue_run,
+            )
+        except Exception as exc:
+            self._log_warning(f"Slack message skipped: {type(exc).__name__}: {exc}")
 
     def handle_scan_error(self, error_message: str):
         self._run_error_message = error_message

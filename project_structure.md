@@ -46,6 +46,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `core/all_level.py`, `core/individual_setter.py`, `core/brakets.py` | Scan-level/setter editing and setting-array construction |
 | `core/all_plot_settings.py`, `core/all_plots.py` | Plot configuration and presentation |
 | `core/artificial_channel_logic.py` | Transformed two-channel state, range/ramp/skip coordination |
+| `core/slack_notify/` | Slack direct messages: the main-window row and bot-token dialog (`widgets.py`; token in the OS keyring, email never saved), message texts (`messages.py`), the Web API calls (`client.py`), the stacked plot screenshot (`capture.py`) and `SlackNotifier` (`notifier.py`): a bounded outbox drained by one daemon thread, so scans never wait on Slack. Scan end (`Scan._complete_scan_finalization`), queue end (`ScanList.on_queue_stopped`) and the built-in `default_slack_notification` setter feed it |
 | `core/shift_compensation/` | Shift Compensation: mapping CSV loading and cosine/polynomial fits (`fitting.py`), mappings and the `compensated_source_`/`compensated_target_` scan channels (`logic.py`), set files (`persistence.py`) and the mapping-block window (`window.py`); see `documents/shift_compensation.md` |
 | `core/channel_value_record.py` | Main-window last-value record of channels written/read through `write_info`/`read_info` and the scan setup snapshots; Shift Compensation's source-readback cache |
 | `devices/` | Flat package namespace for device integrations; it performs no eager device imports |
