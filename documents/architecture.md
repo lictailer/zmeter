@@ -107,6 +107,10 @@ Array getters (spectra, frames) are declared by devices in `ARRAY_GETTERS`; `Mai
 
 `Scan` stores emitted arrays in the active scan dictionary and updates only affected plots when emission metadata is present. On finish or error, `ScanLogic` emits a terminal result. `Scan` enters `finalizing`, captures required widget pixels on the GUI thread, then restores the captured devices and performs PPT, JSON, recovery, and backup I/O from an immutable snapshot on the boundary worker. The activity reservation is released and queue/restart admission reopens only after that worker completes. A failed/canceled primary JSON save still attempts a platform-local recovery JSON; persisted schema and serial rules are unchanged. See [scan_engine.md](scan_engine.md) and [data_format.md](data_format.md).
 
+## Planned v2 packages
+
+New code of the v2 transition lives in `zcore/` (no Qt, no hardware dependencies; file formats in `zcore/data/`) and `zui/`, with import rules enforced by `tests/test_layering.py`. Nothing in these packages is on the active runtime path until a phase switches its default. See [ADR 003](decisions/003-v2-architecture.md) and [naming.md](naming.md); the sections above describe the current architecture.
+
 ## Extension and coupling rules
 
 - Add instruments as device packages behind the device contract; do not add vendor calls to `core/`.
@@ -115,7 +119,7 @@ Array getters (spectra, frames) are declared by devices in `ARRAY_GETTERS`; `Mai
 - Use the shared router for cross-device reads/writes.
 - Preserve lifecycle coherence across widget, logic, hardware, scan start/stop, force stop, and shutdown.
 - Preserve scan ordering, signal payloads, persistence, and plotting consumers together when changing their contracts.
-- Do not create a second scan engine or duplicate persistence path without an explicit decision and migration plan.
+- Do not create a second scan engine or duplicate persistence path without an explicit decision and migration plan. [ADR 003](decisions/003-v2-architecture.md) is the explicit decision for the v2 transition: a v2 engine and storage may exist next to the legacy ones only under its transition rules and removal conditions.
 
 ## Where to edit
 
