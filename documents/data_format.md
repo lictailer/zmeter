@@ -153,7 +153,7 @@ If the loaded items name channels missing from the current device catalog, a win
 
 ## Queue start check
 
-Pressing start in the scan list first checks every pending item, without contacting any device: every channel is in the catalog (scans and manual sets), every level has a setter channel, and every level's setting array builds with at least one point. A level whose setters are all `none` fails the check: the scan engine skips `none` setters, so the level would step through its points setting nothing; use `default_count` or `default_wait` for a level that only repeats or waits. Any problem is shown in a warning and written to the queue log by queue position, and the queue does not start. Limits are not checked here. The scan window's own **Scan** button is unchanged.
+Pressing start in the scan list first checks every pending item, without contacting any device: every channel is in the catalog (scans and manual sets), every level has a setter channel, and every level's setting array builds with at least one point. A level whose setters are all `none` fails the check: the scan engine skips `none` setters, so the level would step through its points setting nothing; use `default_count` or `default_wait` for a level that only repeats or waits. (`default_slack_notification` is also a built-in setter; it only sends a Slack ping.) Any problem is shown in a warning and written to the queue log by queue position, and the queue does not start. Limits are not checked here. The scan window's own **Scan** button is unchanged.
 
 ## Autosave
 

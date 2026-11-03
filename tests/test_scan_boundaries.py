@@ -225,6 +225,59 @@ class ScanBoundaryTests(unittest.TestCase):
         self.assertEqual(self.main_window.reservations[0].release_count, 1)
         self.assertNotIn("Scan boundary timing", self.scan.logStatus_textEdit.toPlainText())
 
+    def test_finalization_hands_scan_to_slack_before_outputs_finalized(self):
+        calls = []
+        notifier = SimpleNamespace(
+            active=True,
+            scan_finished=lambda **kwargs: calls.append(
+                (kwargs, self.scan.outputs_finalized)
+            ),
+        )
+        self.main_window.slack_notifier = notifier
+        self.main_window.scanlist.serial.setValue(7)
+        self.logic.completed_points, self.logic.total_points = 3, 4
+        self.scan._acquire_runtime_activity_reservation()
+        self.scan._outputs_finalized = False
+        self.scan._finalize_outputs_scheduled = True
+        self.scan._set_scan_state("finalizing")
+        self.scan._run_stop_reason = "user_stop"
+        self.scan._slack_queue_run = True
+        self.scan._build_output_snapshot = lambda: None
+        self.scan._restore_and_persist = lambda _snapshot: _OutputJobResult(
+            messages=(), timings=()
+        )
+
+        self.scan._finalize_scan_outputs()
+        self.assertTrue(self._wait_until(lambda: self.scan.outputs_finalized))
+        self.assertEqual(len(calls), 1)
+        kwargs, finalized_at_call = calls[0]
+        self.assertFalse(finalized_at_call)
+        self.assertEqual(kwargs["name"], "0007_boundary")
+        self.assertEqual(kwargs["status"], "stopped")
+        self.assertEqual(
+            (kwargs["completed_points"], kwargs["total_points"]), (3, 4)
+        )
+        self.assertTrue(kwargs["queue_run"])
+        self.assertIsNone(kwargs["png"])  # no plots in this scan
+        self.assertFalse(self.scan._slack_queue_run)
+
+    def test_finalization_with_slack_off_sends_nothing(self):
+        calls = []
+        self.main_window.slack_notifier = SimpleNamespace(
+            active=False, scan_finished=lambda **kwargs: calls.append(kwargs)
+        )
+        self.scan._acquire_runtime_activity_reservation()
+        self.scan._outputs_finalized = False
+        self.scan._finalize_outputs_scheduled = True
+        self.scan._set_scan_state("finalizing")
+        self.scan._build_output_snapshot = lambda: None
+        self.scan._restore_and_persist = lambda _snapshot: _OutputJobResult(
+            messages=(), timings=()
+        )
+        self.scan._finalize_scan_outputs()
+        self.assertTrue(self._wait_until(lambda: self.scan.outputs_finalized))
+        self.assertEqual(calls, [])
+
     def test_completion_snapshot_uses_name_and_comments_edited_during_scan(self):
         self.scan._set_scan_configuration_locked(True)
 

@@ -119,7 +119,10 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
                     "readable": ["n", "E"],
                     "writable": ["n", "E"],
                 },
-                "default": {"readable": [], "writable": ["wait", "count"]},
+                "default": {
+                    "readable": [],
+                    "writable": ["wait", "count", "slack_notification"],
+                },
                 "mock_device_1": {
                     "readable": ["channel_A", "channel_B", "random_channel"],
                     "writable": [
@@ -142,6 +145,16 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         )
         self.assertFalse(self.services.visa.diagnostics["manager_created"])
         self.assertFalse(self.services.kinesis.diagnostics["validated"])
+
+    def test_slack_row_starts_inactive_and_channel_write_sends_nothing(self):
+        panel = self.window.slack_panel
+        self.assertFalse(panel.active_checkbox.isChecked())
+        self.assertEqual(panel.email_edit.text(), "")
+        self.assertFalse(self.window.slack_notifier.active)
+        self.assertTrue(
+            self.window.write_info(1.0, "default_slack_notification")
+        )
+        self.assertTrue(self.window.slack_notifier._outbox.empty())
 
     def test_profile_filter_silently_skips_unknown_channels_end_to_end(self):
         filtered_config = replace(

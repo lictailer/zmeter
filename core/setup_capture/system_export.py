@@ -30,7 +30,10 @@ DEFAULT_FILE_NAME = "zmeter_system.md"
 
 # Catalog entries that are not workbook devices.
 _BUILT_IN_DEVICES = {
-    "default": "built-in timing channels (default_wait = wait N seconds, default_count = step counter)",
+    "default": (
+        "built-in channels (default_wait = wait N seconds, default_count = step "
+        "counter, default_slack_notification = Slack ping to the operator)"
+    ),
     "artificial_channel": "derived channels defined in the artificial-channel window",
     "compensated_source": (
         "Shift Compensation: moves the raw source channel and corrects its coupled "

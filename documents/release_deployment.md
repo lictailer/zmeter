@@ -48,6 +48,8 @@ The ZMeter release workflow must produce the expected Windows ZIP and
 `deployment-manifest.json`, bind the artifact to the release tag/commit/channel,
 include the named environment YAML and root device workbook, and preserve the
 published source unchanged.
+Folders marked `export-ignore` in `.gitattributes` (root `archive/` and `tests/`) are
+developer-only and are left out of the release ZIP by `git archive`.
 Stable promotion remains separate from beta integration and requires the
 maintained release validation process.
 
