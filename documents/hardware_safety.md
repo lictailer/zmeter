@@ -6,6 +6,43 @@ All real-instrument operation and testing is reviewed and performed directly by 
 
 Agents may execute only confirmed hardware-independent compilation, unit tests, mocks, simulations, and offscreen GUI tests. Any real-instrument procedure must be labeled **User-executed hardware test**.
 
+The only exception is the test-PC bench test described in the last subsection of this section; without every one of its conditions the ban applies.
+
+### Agent bench tests on the test PC
+
+This is the only exception to the boundary above. The default stays forbidden unless every condition below is met.
+
+**Scope**
+
+- Only the designated test PC; never a lab measurement PC.
+- Only Keithley 24xx, SR860, and nidaq.
+- No sample is connected. Outputs are open, or connected to a dummy load or loopback that the user wired and stated in the authorization.
+
+**Authorization**
+
+- Per session. The user's message names the devices, addresses, test scripts to run, and the wiring state. "Test this" and "verify this" are not authorization.
+- An authorization covers only that session and only those scripts.
+
+**How tests run**
+
+- Only committed scripts that the user has reviewed, in `tests/bench/` with file names `bench_*.py`. The standard `test_*.py` discovery never runs them.
+- A skip gate requires the environment variable `ZMETER_BENCH=1` and an allowlist file on the test PC, outside the repository, that lists the allowed instrument addresses and per-channel test limits. Tests never touch instruments on other computers.
+- Test limits are stricter than device limits and are kept next to the allowlist. Values are chosen conservatively with the user when a test is prepared; they are not defined in this document.
+- Stop at the first error: no retries and no trying other parameters; hand the result to the user.
+- At the end, including after an error or interruption, write every output to its safe state, read it back to confirm, then disconnect.
+- Every run writes a log (time, script, commit, every written and read-back value) to a fixed folder on the test PC, outside the experiment data folder.
+
+**Forbidden**
+
+- Changing firmware, writing non-volatile memory, changing GPIB or network addresses, calibration, and saving or recalling instrument setups.
+- Touching any instrument that is not on the allowlist, or discovering new instruments on the bus.
+- Installing or upgrading packages on the test PC.
+- Loosening limits or safety checks to make a test pass.
+
+**How results count**
+
+Reports label the evidence "agent-executed bench test (test PC, no sample)". It can replace part of the repeated checking during development. It does not replace the user's acceptance on the lab PC; the user-executed bench check before each phase switches its default stays required.
+
 ## Ranges, units, and configuration
 
 - Device logic/hardware must validate finite values, units, device limits, and experiment/profile limits before an operation.

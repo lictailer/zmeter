@@ -46,6 +46,7 @@ Consult `project_structure.md` for current module names, relationships, and runt
 - Agents must never operate or test real laboratory hardware. All real-hardware execution is reviewed and performed directly by the user.
 - Agents may write or modify hardware-facing code, but must not execute any command or test that could discover, connect to, configure, home, ramp, move, source, trigger, write to, disconnect, reset, or otherwise affect a real instrument.
 - Requests such as "test this," "verify this fix," or "run the tests" do not authorize real-hardware execution.
+- Test PC exception: the only exception is an agent bench test on the designated test PC under the conditions in `documents/hardware_safety.md` ("Agent bench tests on the test PC"). It needs the user's explicit per-session authorization naming devices, addresses, scripts, and wiring state. General requests ("test this," "verify this") never authorize it, and the ban above stays the default.
 - Agents may run compilation, unit tests, mocks, simulations, hardware-independent tests, and offscreen GUI tests after confirming they cannot access instruments.
 - When hardware validation is needed, provide the exact proposed procedure or command, clearly label it **User-executed hardware test**, and leave review and execution to the user.
 - Preserve configured limits, units, ramp behavior, timeouts, emergency/force-stop flags, and cleanup after partial failure. Never weaken safety checks to pass tests; fail safely when state or units are uncertain.
@@ -65,7 +66,7 @@ python -B -m unittest discover -s devices/mockDevice/tests -p "test_*.py" -v
 
 For changed Python, run `python -B -m py_compile <files>`. Add focused hardware-independent checks for changed UI XML, imports, persistence, or shutdown. Record exact commands and results. If blocked, report the reason; never call an unrun check passing.
 
-Label evidence precisely: static, unit, mock/simulation, offscreen GUI, manual GUI, or user-executed hardware bench. Lower levels never imply higher ones.
+Label evidence precisely: static, unit, mock/simulation, offscreen GUI, manual GUI, agent-executed bench (test PC, no sample), or user-executed hardware bench. Lower levels never imply higher ones; an agent-executed bench test ranks below a user-executed hardware bench and does not replace it.
 
 ## Documentation contract
 
