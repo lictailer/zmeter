@@ -9,11 +9,9 @@ from .scan_info import *
 from .scan_logic import ScanLogic
 from .all_level import AllLevelSetting
 from .all_plot_settings import AllPlotSetting
-from .all_plots import AllPlots
+from .all_plots import AllPlots, ImagePlot, LinePlot
 from .channel_check import catalog_names, count_text, find_unresolved
 from .construct_scan_coordinates import Construct
-from .all_plots import LinePlot
-from .all_plots import ImagePlot
 import os, shutil
 from .append_to_ppt import add_slide_with_png_bytes, add_slide_with_qpixmap
 from .setup_capture import runtime as setup_runtime
@@ -28,6 +26,9 @@ from .setup_capture.widgets import (
 )
 
 SETUP_FORMAT_VERSION = 2
+# Live plots and progress labels are redrawn at most this often during a
+# scan, however fast points arrive (about 20 redraws per second).
+LIVE_REDRAW_INTERVAL_MS = 50
 SCAN_SETTING_PREFIX = "scan_setting_"
 
 
@@ -371,7 +372,10 @@ class Scan(QtWidgets.QWidget):
         uic.loadUi("core/ui/scan.ui", self)
 
         self.logic = ScanLogic(main_window=main_window)
-        # self.logic.sig_capture_ui.connect(self.capture_ui)###### April 2025
+        self._pending_progress_text = {}
+        self._live_redraw_timer = QtCore.QTimer(self)
+        self._live_redraw_timer.setInterval(LIVE_REDRAW_INTERVAL_MS)
+        self._live_redraw_timer.timeout.connect(self._on_live_redraw_timer)
         self.logic.sig_new_data.connect(self.new_data)
         self.logic.sig_update_remaining_time.connect(self.update_remaining_time_label)
         self.logic.sig_update_remaining_points.connect(self.update_remaining_points_label)
@@ -419,6 +423,13 @@ class Scan(QtWidgets.QWidget):
         self.resume_button_3.clicked.connect(self.when_resume_clicked)
         self.save_plots_button_3.clicked.connect(self.when_save_plots_clicked)
         self.update_plots_button_3.clicked.connect(self.update_all_plots)
+        self._levels_lock_checkboxes = (
+            self.lock_levels_checkbox_1,
+            self.lock_levels_checkbox_2,
+            self.lock_levels_checkbox_3,
+        )
+        for checkbox in self._levels_lock_checkboxes:
+            checkbox.toggled.connect(self._apply_levels_lock)
 
         self.all_level_setting = AllLevelSetting(all_level_info=info['levels'],setter_equipment_info=setter_equipment_info,getter_equipment_info=getter_equipment_info)
         # print(equipment_info)
@@ -432,6 +443,7 @@ class Scan(QtWidgets.QWidget):
         self.plots2_layout.addWidget(self.graphing_plots[1])
         self.plots3_layout.addWidget(self.graphing_plots[2])
         self._configure_plot_tab_stretch()
+        self._apply_levels_lock()
 
         self.scrollArea.setWidget(self.all_level_setting)
         if info is None:
@@ -614,6 +626,7 @@ class Scan(QtWidgets.QWidget):
         )
 
     def when_save_plots_clicked(self):  # Mohamed Change: April 2025
+        self.flush_live_display()
         base = self._next_unique_data_name()
         ppt_text = self.main_window.ppt_path.toPlainText().strip()
 
@@ -699,6 +712,9 @@ class Scan(QtWidgets.QWidget):
 
 
     def scan_finished(self, _terminal_result=None):
+        # Every point is recorded by now; draw them all (hidden pages too)
+        # before the plots are captured for the PPT, JSON and Slack.
+        self.flush_live_display()
         setup_runtime.release_scan_devices(id(self))
         status = self._get_finish_status()
         elapsed_seconds = self._get_elapsed_seconds()
@@ -867,6 +883,7 @@ class Scan(QtWidgets.QWidget):
 
     def _finalize_scan_outputs(self):
         """Capture Qt-owned pixels, then restore devices and persist off-thread."""
+        self.flush_live_display()
         self._slack_result = self._capture_slack_result()
         snapshot = None
         try:
@@ -1295,47 +1312,17 @@ class Scan(QtWidgets.QWidget):
         self.sig_info_changed.emit(self.info)
 
     def when_all_level_setting_infochanged(self, info):
-
-        
         self.info['levels'] = info
-        # print("all level setting info recieved")
-        # for i in range(self.all_plot_setting.verticalLayout_line.count()):
-        #     w = self.all_plot_setting.verticalLayout_line.itemAt(i).widget()
-        #     w.blockSignals(True)
-        # for i in range(self.all_plot_setting.verticalLayout_image.count()):
-        #     w = self.all_plot_setting.verticalLayout_image.itemAt(i).widget()
-        #     w.blockSignals(True)
         self.all_plot_setting.set_level_info(info)
         for gp in self.graphing_plots:
             gp.set_level_info(info)
-        # for i in range(self.all_plot_setting.verticalLayout_image.count()):
-        #     w = self.all_plot_setting.verticalLayout_image.itemAt(i).widget()
-        #     w.blockSignals(True)
-        # for i in range(self.all_plot_setting.verticalLayout_image.count()):
-        #     w = self.all_plot_setting.verticalLayout_image.itemAt(i).widget()
-        #     w.blockSignals(True)
 
     def when_all_plot_setting_infochanged(self, plot_setting_info):
         info = plot_setting_info
         self.info['plots'] = info
 
-        # for i in range(self.all_plot_setting.verticalLayout_line.count()):
-        #     w = self.all_plot_setting.verticalLayout_line.itemAt(i).widget()
-        #     w.blockSignals(True)
-        # for i in range(self.all_plot_setting.verticalLayout_image.count()):
-        #     w = self.all_plot_setting.verticalLayout_image.itemAt(i).widget()
-        #     w.blockSignals(True)
-
         for gp in self.graphing_plots:
             gp.receive_plot_info(plot_setting_info)
-
-        # for i in range(self.all_plot_setting.verticalLayout_image.count()):
-        #     w = self.all_plot_setting.verticalLayout_image.itemAt(i).widget()
-        #     w.blockSignals(True)
-        # for i in range(self.all_plot_setting.verticalLayout_image.count()):
-        #     w = self.all_plot_setting.verticalLayout_image.itemAt(i).widget()
-        #     w.blockSignals(True)
-        # print(self.info['name'])
         self.sig_info_changed.emit(self.info)
 
     def set_main_window(self, mainwindow):
@@ -1674,11 +1661,10 @@ class Scan(QtWidgets.QWidget):
         """Call AllPlots.update_plots() for every page."""
         self.update_alllevel_setting_array()
         for gp in self.graphing_plots:
-
-            
             gp.update_plots()
 
     def new_data(self,info):
+        """Record a new point in the live plots; the redraw timer draws it."""
         emit_metadata = None
         if isinstance(info, (list, tuple)) and len(info) >= 3:
             new_data, current_target_index, emit_metadata = info[0], info[1], info[2]
@@ -1705,20 +1691,44 @@ class Scan(QtWidgets.QWidget):
             return getter_level == source_level and getter_index in changed_getter_indices
 
         for gp in self.graphing_plots:
-            for plot in range(gp.plots_layout.count()):
-                w = gp.plots_layout.itemAt(plot).widget()
-                if isinstance(w,LinePlot):
-                    if not should_update_plot(w):
-                        continue
-                    if(current_target_index[w.setter_level_number]==0):
-                        w.y_coordinates=np.full(w.setting_info_length, np.nan)
-                    w.data=new_data                
-                    # plot_line method now handles clearing and preserves v_line position
-                    w.plot_line(current_target_index)
-                if isinstance(w,ImagePlot):
-                    if not should_update_plot(w):
-                        continue
-                    w.update_image(new_data,current_target_index)
+            for w in gp.plot_widgets():
+                if not should_update_plot(w):
+                    continue
+                if isinstance(w, LinePlot):
+                    w.data = new_data
+                    w.record_point(current_target_index)
+                else:
+                    w.record_point(new_data, current_target_index)
+        self._schedule_live_redraw()
+
+    def _schedule_live_redraw(self):
+        if not self._live_redraw_timer.isActive():
+            self._live_redraw_timer.start()
+
+    def _on_live_redraw_timer(self):
+        if not self.flush_live_display(include_hidden=False):
+            self._live_redraw_timer.stop()
+
+    def flush_live_display(self, *, include_hidden=True):
+        """Draw every recorded point and the latest progress text now.
+
+        Returns True while plots on hidden pages still wait for a redraw.
+        Called with ``include_hidden=True`` before plots are captured or
+        saved, so screenshots always show all recorded data.
+        """
+        for label, text in self._pending_progress_text.items():
+            label.setText(text)
+        self._pending_progress_text.clear()
+        still_pending = False
+        for gp in self.graphing_plots:
+            if gp.redraw_pending(include_hidden=include_hidden):
+                still_pending = True
+        return still_pending
+
+    def _apply_levels_lock(self, _checked=None):
+        """Each plot tab's "Lock color levels" box controls the images on that tab."""
+        for checkbox, gp in zip(self._levels_lock_checkboxes, self.graphing_plots):
+            gp.set_levels_locked(checkbox.isChecked())
 
     def _backup_subfolder(self) -> str:
         """
@@ -1765,189 +1775,6 @@ class Scan(QtWidgets.QWidget):
 
         self.unique_data_name = candidate          # remember for later
         return candidate
-
-    # def when_save_plots_clicked(self):
-    #     serial = f'{self.main_window.scanlist.serial.value():04d}'
-    #     name = self.info['name']
-    #     name = f'{serial}_{name}'
-    #     text = self.main_window.ppt_path.toPlainText()
-    #     if text == '':
-    #         fileName, _ = QFileDialog.getSaveFileName(self, 'Select PPT', '', 'PPT Files (*.pptx)')
-    #     else:
-    #         fileName = os.path.normpath(text.strip('"'))
-
-    #     # Check if the file exists
-    #     if not os.path.exists(fileName):
-    #         prs = Presentation()
-    #     else:
-    #         # Load the existing presentation
-    #         prs = Presentation(fileName)
-
-    #     # Take the screenshot
-    #     screenshot_path = "screenshot.png"
-    #     widget_width, widget_height = self.screenshot_widget(self.tab_2, screenshot_path)
-
-    #     try:
-    #         # Creating the new slide
-    #         slide_layout = prs.slide_layouts[6]
-    #         slide = prs.slides.add_slide(slide_layout)
-
-    #         # Scaling the screenshot
-    #         slide_width = prs.slide_width
-    #         slide_height = prs.slide_height
-    #         width_ratio = slide_width / widget_width
-    #         height_ratio = slide_height / widget_height
-    #         scaling_factor = min(width_ratio, height_ratio)
-    #         new_width = widget_width * scaling_factor
-    #         new_height = widget_height * scaling_factor
-    #         left = (slide_width - new_width) / 2
-    #         top = (slide_height - new_height) / 2
-
-    #         # Attaching the image
-    #         slide.shapes.add_picture(screenshot_path, left, top, width=new_width, height=new_height)
-
-    #         # Attach name
-    #         left_inch = Inches(0.5)
-    #         top_inch = Inches(0.5)
-    #         width_inch = Inches(2)
-    #         height_inch = Inches(1)
-    #         text_box_left = slide.shapes.add_textbox(left_inch, top_inch, width_inch, height_inch)
-    #         tf_left = text_box_left.text_frame
-    #         tf_left.text = name
-
-    #         # Attach comments
-    #         left_inch = slide_width - Inches(4)
-    #         text_box_right = slide.shapes.add_textbox(left_inch, top_inch, width_inch, height_inch)
-    #         tf_right = text_box_right.text_frame
-    #         tf_right.text = self.comments_textEdit.toPlainText()
-
-    #         prs.save(fileName)
-    #         print('Screenshot saved at', fileName)
-    #     except Exception as e:
-    #         print(f'An error occurred while saving the presentation: {e}')
-
-    def when_save_plots_clicked2(self):
-        """Save a PowerPoint slide for every tab that actually shows plots."""
-        serial = f'{self.main_window.scanlist.serial.value():04d}'
-        name   = self._next_unique_data_name()  
-        text   = self.main_window.ppt_path.toPlainText()
-
-        count = 1
-        while os.path.exists(name):
-            name_part, ext = os.path.splitext(name)
-            name = os.path.join(folder, f"{name_part}_{count}{ext}")
-            count += 1
-        self._log_info(f"PPT legacy save requested: {name}", persist_current_run=False)
-        # --- choose / create PPT file --------------------------------------------------
-        if text == '':
-            fileName, _ = QFileDialog.getSaveFileName(self, 'Select PPT', '', 'PPT Files (*.pptx)')
-            if not fileName:
-                return   # user cancelled
-        else:
-            fileName = os.path.normpath(text.strip('"'))
-
-        folder = os.path.dirname(fileName)
-        if folder and not os.path.exists(folder):
-            os.makedirs(folder, exist_ok=True)
-
-        if not os.path.exists(fileName):
-            prs = Presentation()
-            prs.slide_width  = Inches(13.333)   # 16:9
-            prs.slide_height = Inches(7.5)
-        else:
-            prs = Presentation(fileName)
-
-        # --- walk through every tab in the tab widget ---------------------------------
-        for idx, tab in enumerate([self.Plots1Tab, self.Plots2Tab, self.Plots3Tab]):
-
-            # 1.  does this tab have at least one plot?  (no helper needed)
-            if not tab.findChildren((LinePlot, ImagePlot)):
-                continue          # skip empty tab
-
-            # 2.  take screenshot of that tab
-            shot_path = f"screenshot.png"
-            w_px, h_px = self.screenshot_widget(tab, shot_path)
-
-            # 3.  add blank slide & picture (same sizing logic as before)
-            slide = prs.slides.add_slide(prs.slide_layouts[6])
-            sw, sh = prs.slide_width, prs.slide_height
-
-            scale = sh / h_px
-            nw, nh = w_px * scale, h_px * scale
-            if nw > sw * 0.8:
-                scale = (sw * 0.8) / w_px
-                nw, nh = w_px * scale, h_px * scale
-            left = sw - nw
-            top  = (sh - nh) / 2
-
-            slide.shapes.add_picture(shot_path, left, top, width=nw, height=nh)
-
-            try:
-                os.remove(shot_path)          # delete the PNG immediately
-            except OSError:
-                pass                          # silent if, for any reason, it’s gone
-            
-            # 4.  add name (bold) and comments box on left
-            left_in = Inches(0.0)
-            top_in  = Inches(0.2)
-            w_in    = Inches(3.0)
-            h_in    = Inches(0.5)
-
-            tb_name = slide.shapes.add_textbox(left_in, top_in, w_in, h_in)
-            tb_name.text_frame.text = name
-            for p in tb_name.text_frame.paragraphs:
-                for run in p.runs:
-                    run.font.bold = True
-
-            tb_comm = slide.shapes.add_textbox(left_in, top_in + h_in + Inches(0.2),
-                                               w_in, h_in * 2)
-            tf = tb_comm.text_frame
-            tf.word_wrap = True
-            tf.text = self.comments_textEdit.toPlainText()
-            for p in tf.paragraphs:
-                for run in p.runs:
-                    run.font.size = Pt(12)
-
-        # --- save ----------------------------------------------------------------------
-        try:
-            prs.save(fileName)
-            self._log_info(f"PPT legacy save succeeded: {fileName}", persist_current_run=False)
-
-            if os.path.exists(r"Z:\\"):                      # drive exists?
-                backup_sub = self._backup_subfolder()
-                if backup_sub == "":
-                    self._log_warning(
-                        "PPT legacy backup skipped: backup path is empty.",
-                        persist_current_run=False,
-                    )
-                else:
-                    backup_dir = os.path.join(backup_sub)
-                    os.makedirs(backup_dir, exist_ok=True)
-
-                    # 1) copy the PPT we just created
-                    shutil.copy2(fileName,
-                                 os.path.join(backup_dir,
-                                              os.path.basename(fileName)))
-                    self._log_info(
-                        f"PPT legacy backup succeeded: {backup_dir}",
-                        persist_current_run=False,
-                    )
-            else:
-                self._log_warning(
-                    "PPT legacy backup skipped: drive Z: not found.",
-                    persist_current_run=False,
-                )
-        except Exception as e:
-            self._log_error(
-                f"PPT legacy save failed: {type(e).__name__}: {e}",
-                persist_current_run=False,
-            )
-
-    def screenshot_widget(self,widget, filename):
-        """Capture a screenshot of the widget and save it as a PNG file."""
-        pixmap = widget.grab()
-        pixmap.save(filename, 'PNG')
-        return pixmap.width(), pixmap.height()
 
     def when_save_clicked(self):
         class CustomEncoder(json.JSONEncoder):
@@ -2188,6 +2015,7 @@ class Scan(QtWidgets.QWidget):
         self.plots2_layout.addWidget(self.graphing_plots[1])
         self.plots3_layout.addWidget(self.graphing_plots[2])
         self._configure_plot_tab_stretch()
+        self._apply_levels_lock()
 
         self.populate()
         self.all_level_setting.sig_info_changed.connect(self.when_all_level_setting_infochanged)
@@ -2283,14 +2111,16 @@ class Scan(QtWidgets.QWidget):
         return(output)
         
     def update_remaining_time_label(self, time_str):
-        self.scan_time_info_1.setText(f"Remaining / Total Time: {time_str}")
-        self.scan_time_info_2.setText(f"Remaining / Total Time: {time_str}")
-        self.scan_time_info_3.setText(f"Remaining / Total Time: {time_str}")
+        text = f"Remaining / Total Time: {time_str}"
+        for label in (self.scan_time_info_1, self.scan_time_info_2, self.scan_time_info_3):
+            self._pending_progress_text[label] = text
+        self._schedule_live_redraw()
 
     def update_remaining_points_label(self, point_str):
-        self.scan_point_info_1.setText(f"Finished / Total Points: {point_str}")
-        self.scan_point_info_2.setText(f"Finished / Total Points: {point_str}")
-        self.scan_point_info_3.setText(f"Finished / Total Points: {point_str}")
+        text = f"Finished / Total Points: {point_str}"
+        for label in (self.scan_point_info_1, self.scan_point_info_2, self.scan_point_info_3):
+            self._pending_progress_text[label] = text
+        self._schedule_live_redraw()
     
     # ------------------------------------------------------ setup capture --
     def _setup_controller(self):

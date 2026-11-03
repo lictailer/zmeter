@@ -129,7 +129,6 @@ class ScanLogic(QtCore.QThread):
     Signals:
         sig_new_data: Emitted when new measurement data is acquired
         sig_new_pos: Emitted when scan position changes
-        sig_update_line: Emitted to update line plots
         sig_set_image_source: Emitted to update image plot data source
         sig_scan_finished: Emitted when entire scan sequence completes
         sig_update_remaining_time: Emitted with time estimate string
@@ -139,7 +138,6 @@ class ScanLogic(QtCore.QThread):
     # Qt signals for communication with GUI
     sig_new_data = QtCore.pyqtSignal(object)                # New measurement data available
     sig_new_pos = QtCore.pyqtSignal(object)                 # Position update for tracking
-    sig_update_line = QtCore.pyqtSignal()                   # Update line plot displays
     sig_set_image_source = QtCore.pyqtSignal(object)        # Set data source for image plots
     sig_scan_finished = QtCore.pyqtSignal()                 # Scan completion notification
     sig_scan_error = QtCore.pyqtSignal(str)                 # Scan runtime error summary
