@@ -109,7 +109,7 @@ Changing rejection or artificial-pair behavior requires focused tests for writes
 
 ## Progress, logging, autosave, and output
 
-The worker emits remaining/total time and finished/total points after completed points. `Scan` maintains a bounded display history and persists the current `scan_log`. Each elapsed whole-hour boundary triggers `autosave.json`, overwriting the previous autosave in the configured save directory. See [data_format.md](data_format.md) for output details.
+The worker emits remaining/total time and finished/total points after completed points. `Scan` records each `sig_new_data` point and each progress string immediately, but draws plots and progress labels from one timer (`LIVE_REDRAW_INTERVAL_MS`, about 20 Hz), so fast scans cannot queue up redraws on the GUI thread. Plots on hidden pages wait until shown; `flush_live_display()` draws everything before plots are saved or captured at scan end. A line plot clears when its own sweep restarts at point 0, an image when the levels above it move on. `Scan` maintains a bounded display history and persists the current `scan_log`. Each elapsed whole-hour boundary triggers `autosave.json`, overwriting the previous autosave in the configured save directory. See [data_format.md](data_format.md) for output details.
 
 ## Compatibility and required tests
 

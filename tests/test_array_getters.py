@@ -514,6 +514,14 @@ class ArrayScanUiTests(unittest.TestCase):
         np.testing.assert_allclose(image.data[1], np.arange(5.0))
         self.assertTrue(np.isnan(image.data[0]).all())
 
+        # The live redraw timer draws the block like single points.
+        self.assertTrue(spectrum_line.needs_redraw)
+        self.scan.flush_live_display()
+        self.assertFalse(spectrum_line.needs_redraw)
+        self.assertFalse(image.needs_redraw)
+        drawn_x, drawn_y = spectrum_line.line.getData()
+        np.testing.assert_allclose(drawn_y, np.arange(5.0))
+
     def test_saved_json_is_compact_and_reloads_without_renumbering(self):
         self.choose(0, "cam_spectrum")
         payload = self.scan.setting_payload()

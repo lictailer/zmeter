@@ -1,10 +1,7 @@
-# from re import T
 from .scan_info import *
-# import random
-# import warnings
-# from pptx import Presentation
-# from pptx.util import Inches
-# from scipy.interpolate import interp2d
+
+
+LINE_PEN = pg.mkPen(color=(240, 255, 255), width=2)
 
 
 def _token_level(token):
@@ -38,9 +35,20 @@ def _emit_scan_log(widget, level, message, *, persist_current_run=False):
         return
 
 
+def _format_number(value):
+    return f"{value:.4e}"
+
+
 class LinePlot(QtWidgets.QWidget):
+    """Live 1D plot of one getter against one scan level.
+
+    During a scan ``record_point`` stores each new value (cheap, every point)
+    and ``redraw`` pushes the stored values to the screen (called from the
+    scan's redraw timer), so fast scans cannot queue up redraws.
+    """
+
     sig_info_changed = QtCore.pyqtSignal(object)
-    
+
     def __init__(self, label=None,coordinate=None,setting_info=None,data=None):
         super(LinePlot, self).__init__()
         uic.loadUi("core/ui/line_plot.ui", self)
@@ -64,7 +72,6 @@ class LinePlot(QtWidgets.QWidget):
 
 
         if "level" in self.x_name:
-            self.x_start = 0
             self.setting_info=[]
             self.setting_info_length=len(setting_info[0])
             for index in range(self.setting_info_length):
@@ -73,15 +80,13 @@ class LinePlot(QtWidgets.QWidget):
                     temp_point.append(setter_setting_info[index])
                 self.setting_info.append(temp_point)
             self.setter_level_number=_token_level(self.x_name)
-            self.x_coordinates=np.arange(self.setting_info_length)
+            self.x_coordinates=np.arange(self.setting_info_length, dtype=float)
 
         else:
             self.setter_level_number=_token_level(self.x_name)
             self.setting_info=setting_info
-            self.x_start = self.setting_info[0]
-            # self.setting_info=setting_info[~np.isnan(setting_info)]
             self.setting_info_length=len(self.setting_info)
-            self.x_coordinates = self.setting_info
+            self.x_coordinates = np.asarray(self.setting_info, dtype=float)
 
         getter_match = re.match(r"L(\d+)G(\d+)_", self.y_name or "")
         if getter_match:
@@ -92,135 +97,99 @@ class LinePlot(QtWidgets.QWidget):
             self.getter_number = int(self.y_name[3])
                 
         self.y_coordinates=np.full(self.setting_info_length, np.nan)
-        self.update_count = 0
-        # self.timer = QtCore.QTimer()
-        # self.timer.timeout.connect(self.update_plot)
-        # self.timer.start(100)
-        # self.plot_line()
-        
+        self.needs_redraw = False
+        self.line = self.plot.plot(pen=LINE_PEN)
+        self._show_line()
+
+    def _cursor_segment(self, x_pos):
+        """Return ``(left, right, fraction)`` of the sweep segment under ``x_pos``.
+
+        ``x_coordinates`` hold setter values (or point numbers for a level
+        axis), so the segment is found by value.  Works for ascending,
+        descending and back-and-forth sweeps; returns None outside the sweep.
+        """
+        xs = self.x_coordinates
+        if len(xs) == 1:
+            if np.isfinite(xs[0]) and np.isclose(x_pos, xs[0]):
+                return 0, 0, 0.0
+            return None
+        left_x = xs[:-1]
+        right_x = xs[1:]
+        with np.errstate(invalid="ignore"):
+            inside = (
+                (np.minimum(left_x, right_x) <= x_pos)
+                & (x_pos <= np.maximum(left_x, right_x))
+            )
+        hits = np.flatnonzero(inside)
+        if len(hits) == 0:
+            return None
+        left = int(hits[0])
+        right = left + 1
+        span = xs[right] - xs[left]
+        fraction = 0.0 if span == 0 else float((x_pos - xs[left]) / span)
+        return left, right, fraction
+
     def update_label(self):
-        pos = self.v_line.pos()
-        x_pos = pos.x()
-        if x_pos > self.x_coordinates[-1] or x_pos < self.x_start:
+        x_pos = self.v_line.pos().x()
+        segment = self._cursor_segment(x_pos)
+        if segment is None:
             self.label.setText('Out of bounds')
             return
-        
-        left_bound_x = math.floor(x_pos)
-        right_bound_x = math.ceil(x_pos)
-        
-        # Handle bounds checking
-        if left_bound_x < 0 or right_bound_x >= len(self.setting_info):
-            self.label.setText('Out of bounds')
-            return
-            
-        left_val_x = self.setting_info[left_bound_x]
-        right_val_x = self.setting_info[right_bound_x]
-        left_bound_y = self.y_coordinates[int(left_bound_x)]
-        right_bound_y = self.y_coordinates[int(right_bound_x)]
-        
-        # Handle X values that might be lists or single values, and might contain NaN
-        x_val_text = self._format_x_values(left_val_x, right_val_x, x_pos, left_bound_x, right_bound_x)
-        
-        # Handle Y value interpolation
-        if np.isnan(left_bound_y) or np.isnan(right_bound_y):
+        left, right, fraction = segment
+
+        x_val_text = self._format_x_values(
+            self.setting_info[left], self.setting_info[right], fraction
+        )
+
+        left_y = self.y_coordinates[left]
+        right_y = self.y_coordinates[right]
+        if np.isnan(left_y) or np.isnan(right_y):
             y_val_text = "NaN"
         else:
-            slope = self.slope(left_bound_x, left_bound_y, right_bound_x, right_bound_y)
-            y_val = (x_pos - left_bound_x) * slope + left_bound_y
-            y_val_text = f"{y_val:.4e}" if abs(y_val) >= 1e-3 or y_val == 0 else f"{y_val:.4e}"
-        
+            y_val_text = _format_number(left_y + fraction * (right_y - left_y))
+
         self.label.setText(f'X: {x_val_text}, Y: {y_val_text}')
     
-    def _format_x_values(self, left_val_x, right_val_x, x_pos, left_bound_x, right_bound_x):
+    def _format_x_values(self, left_val_x, right_val_x, fraction):
         """Format X values handling lists, single values, and NaN values"""
-        # Convert to numpy arrays if they aren't already
-        if not isinstance(left_val_x, (list, tuple, np.ndarray)):
-            left_val_x = [left_val_x]
-        if not isinstance(right_val_x, (list, tuple, np.ndarray)):
-            right_val_x = [right_val_x]
-            
-        left_val_x = np.array(left_val_x)
-        right_val_x = np.array(right_val_x)
-        
+        left_val_x = np.atleast_1d(np.asarray(left_val_x, dtype=float))
+        right_val_x = np.atleast_1d(np.asarray(right_val_x, dtype=float))
+
         # Handle case where arrays have different lengths
         min_len = min(len(left_val_x), len(right_val_x))
-        left_val_x = left_val_x[:min_len]
-        right_val_x = right_val_x[:min_len]
-        
+
         x_values = []
-        for i in range(len(left_val_x)):
-            left_val = left_val_x[i]
-            right_val = right_val_x[i]
-            
-            # Handle NaN values
+        for left_val, right_val in zip(left_val_x[:min_len], right_val_x[:min_len]):
             if np.isnan(left_val) or np.isnan(right_val):
                 x_values.append("NaN")
             else:
-                # Interpolate between left and right values
-                x_pos_slope = self.slope(left_bound_x, left_val, right_bound_x, right_val)
-                x_val = (x_pos - left_bound_x) * x_pos_slope + left_val
-                
-                # Format the value
-                if abs(x_val) >= 1e-3 or x_val == 0:
-                    x_values.append(f"{x_val:.4e}")
-                else:
-                    x_values.append(f"{x_val:.4e}")
-        
+                x_values.append(
+                    _format_number(left_val + fraction * (right_val - left_val))
+                )
+
         # Join multiple values with commas
         if len(x_values) == 1:
             return x_values[0]
-        else:
-            return "[" + ", ".join(x_values) + "]"
+        return "[" + ", ".join(x_values) + "]"
 
-    def slope(self,x1, y1, x2, y2): 
-        if(x2 - x1 != 0): 
-            # return (float)(y2-y1)/(x2-x1) 
-            return (y2-y1)/(x2-x1)
-        return 0 
+    def record_point(self, current_target_index):
+        """Store the newest value; the scan's redraw timer draws it later.
 
-    def plot_line(self,current_target_index):
-        # Update the data point
-        reversed_current_target_index=[]
-        for i in reversed(current_target_index):
-            reversed_current_target_index.append(i)
-        index_tuple = tuple(reversed_current_target_index[0:len(current_target_index) - self.setter_level_number])
-        self.y_coordinates[current_target_index[self.setter_level_number]] = self.data[self.setter_level_number][self.getter_number][index_tuple]
-        
-        # Remove existing data line if it exists
-        if hasattr(self, 'line') and self.line is not None:
-            try:
-                self.plot.removeItem(self.line)
-            except (ValueError, RuntimeError):
-                # Item might already be removed or invalid
-                pass
-        
-        # Check if v_line exists and is valid
-        v_line_exists = hasattr(self, 'v_line') and self.v_line is not None
-        
-        if v_line_exists:
-            try:
-                # Test if v_line is still valid by accessing its position
-                _ = self.v_line.pos()
-            except (AttributeError, RuntimeError):
-                v_line_exists = False
-            
-        if not v_line_exists:
-            # Only create v_line if it doesn't exist or is invalid
-            if hasattr(self, 'v_line') and self.v_line is not None:
-                try:
-                    self.plot.removeItem(self.v_line)
-                except (ValueError, RuntimeError):
-                    pass
-                    
-            self.v_line = pg.InfiniteLine(angle=90, movable=True)
-            self.plot.addItem(self.v_line)
-            self.v_line.sigPositionChanged.connect(self.update_label)
-        
-        # Add the updated data line
-        self.line = self.plot.plot(list(self.x_coordinates), list(self.y_coordinates), pen=pg.mkPen(color=(240, 255, 255), width=2))
+        The line starts empty again whenever its own sweep restarts at
+        point 0, so earlier sweeps never stay on screen.
+        """
+        point_index = current_target_index[self.setter_level_number]
+        if point_index == 0:
+            self.y_coordinates = np.full(self.setting_info_length, np.nan)
+        index_tuple = tuple(current_target_index[::-1][0:len(current_target_index) - self.setter_level_number])
+        self.y_coordinates[point_index] = self.data[self.setter_level_number][self.getter_number][index_tuple]
+        self.needs_redraw = True
 
     def update_block(self, data, current_target_index, fixed_levels):
-        """Redraw the whole line from one array read (fixed levels)."""
+        """Replace the whole line from one array read (fixed levels).
+
+        Drawn by the scan's redraw timer, like single points.
+        """
         if self.getter_level_number >= fixed_levels:
             return
         outer = _outer_block_index(current_target_index, fixed_levels)
@@ -232,48 +201,29 @@ class LinePlot(QtWidgets.QWidget):
         if block.shape != (self.setting_info_length,):
             return
         self.y_coordinates = block.copy()
-        if hasattr(self, 'line') and self.line is not None:
-            try:
-                self.plot.removeItem(self.line)
-            except (ValueError, RuntimeError):
-                pass
-        self.line = self.plot.plot(
-            list(self.x_coordinates),
-            list(self.y_coordinates),
-            pen=pg.mkPen(color=(240, 255, 255), width=2),
-        )
+        self.needs_redraw = True
 
-    def load_plot(self,data,target_index):
-        target_index=target_index[self.setter_level_number::]
-        reversed_current_target_index = target_index[::-1]
-        # for i in target_index[::-1]:
-        #     reversed_current_target_index.append(i)
-        # index_list = list(reversed_current_target_index[0:len(target_index) - self.setter_level_number])
-        # temp = data[self.setter_level_number][self.getter_number]
-        self.y_coordinates = np.array(data[self.setter_level_number][self.getter_number])
-        while True:
-            if self.y_coordinates.ndim > 1:
-                self.y_coordinates = self.y_coordinates[-1]
-            else:
-                break
+    def redraw(self):
+        self.needs_redraw = False
+        self._show_line()
 
-        # Remove existing data line if it exists
-        if hasattr(self, 'line') and self.line is not None:
-            try:
-                self.plot.removeItem(self.line)
-            except (ValueError, RuntimeError):
-                # Item might already be removed or invalid
-                pass
-        
-        # Add the new data line (preserve v_line)
+    def _show_line(self):
         try:
-            self.line = self.plot.plot(list(self.x_coordinates), self.y_coordinates, pen=pg.mkPen(color=(240, 255, 255), width=2))
+            self.line.setData(self.x_coordinates, self.y_coordinates)
         except Exception as e:
             _emit_scan_log(
                 self,
                 "WARNING",
                 f"Line plot update failed for {self.y_name}: {type(e).__name__}: {e}",
             )
+
+    def load_plot(self,data,target_index):
+        self.y_coordinates = np.array(data[self.setter_level_number][self.getter_number])
+        while self.y_coordinates.ndim > 1:
+            self.y_coordinates = self.y_coordinates[-1]
+        self.y_coordinates = np.asarray(self.y_coordinates, dtype=float)
+        self.needs_redraw = False
+        self._show_line()
 
 
 class SafeHistogramLUTItem(pg.HistogramLUTItem):
@@ -324,7 +274,6 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.z_name=coordinate['z']
 
         self.xy_label = self.addLabel('', row=1, col=0)
-        # self.y_label = self.addLabel('', row=1, col=1)
         self.z_label = self.addLabel('', row=2, col=0)
         
         self.x_level_number=_token_level(self.x_name)
@@ -355,7 +304,6 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         self.x_step = 1
         self.y_step = 1
         self.x_start = 0
-        self.x_start = 0
         
         y_datashape = len(list(self.y_setting_info.values())[0])
         x_datashape = len(list(self.x_setting_info.values())[0])
@@ -364,6 +312,9 @@ class ImagePlot(pg.GraphicsLayoutWidget):
 
         self.data = np.full((self.data_shape[0],self.data_shape[1]),np.nan)
         self.outer_context_key = None
+        self.needs_redraw = False
+        self.levels_locked = False
+        self._levels_fitted = False
 
         # Image plot panel
         self.image = pg.ImageItem()
@@ -388,8 +339,6 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         #infinite lines
         self.v_line = pg.InfiniteLine(angle=90, movable=True)
         self.h_line = pg.InfiniteLine(angle=0, movable=True)
-        # self.v_line.setValue(0)
-        # self.h_line.setValue(0)
         self.plot.addItem(self.v_line, ignoreBounds=True)
         self.plot.addItem(self.h_line, ignoreBounds=True)
         self.roi.sigRegionChanged.connect(self.update_lines_from_roi)
@@ -533,6 +482,12 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             self.roi.setPos([x, y + step])
         self.update_lines_from_roi()
 
+    def set_levels_locked(self, locked):
+        """Keep the current colour levels (True) or re-fit them on every redraw."""
+        self.levels_locked = bool(locked)
+        if not self.levels_locked:
+            self._safe_set_image(self.data)
+
     def _safe_set_image(self, image_data):
         data_array = np.asarray(image_data)
         if data_array.size == 0:
@@ -543,25 +498,27 @@ class ImagePlot(pg.GraphicsLayoutWidget):
         except Exception:
             all_nan = False
 
-        if all_nan:
-            self.image.setImage(data_array, autoLevels=False)
-        else:
-            self.image.setImage(data_array, autoLevels=True)
+        # Locked levels still need one fit once real data first arrive.
+        keep_levels = all_nan or (self.levels_locked and self._levels_fitted)
+        self.image.setImage(data_array, autoLevels=not keep_levels)
+        if not keep_levels:
+            self._levels_fitted = True
 
+    def record_point(self, new_data, current_target_index):
+        """Store the newest value; the scan's redraw timer draws it later.
 
-    def update_image(self,new_data,current_target_index):
+        The image starts empty again whenever the levels above it move on,
+        so earlier frames never stay on screen.
+        """
         outer_context_key = tuple(current_target_index[self.y_level_number + 1:])
         if self.outer_context_key != outer_context_key:
             self.outer_context_key = outer_context_key
             self.data = np.full((self.data_shape[0], self.data_shape[1]), np.nan)
+            self.needs_redraw = True
 
         current_y=current_target_index[self.x_level_number]
         current_x=current_target_index[self.y_level_number]
-        reversed_current_target_index=[]
-        for i in reversed(current_target_index):
-            reversed_current_target_index.append(i)
-        index_list = reversed_current_target_index[0:len(current_target_index) - self.x_level_number]
-        index_tuple = tuple(index_list)
+        index_tuple = tuple(current_target_index[::-1][0:len(current_target_index) - self.x_level_number])
         new_value = new_data[self.x_level_number][self.getter_number][index_tuple]
 
         current_value = self.data[current_x, current_y]
@@ -569,8 +526,11 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             return
 
         self.data[current_x, current_y] = new_value
-        self._safe_set_image(self.data)
+        self.needs_redraw = True
 
+    def redraw(self):
+        self.needs_redraw = False
+        self._safe_set_image(self.data)
 
     def update_block(self, new_data, current_target_index, fixed_levels):
         """Fill a row (spectrum vs. a user level) or a whole frame at once."""
@@ -596,7 +556,7 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             if block.shape != (self.data.shape[1],):
                 return
             self.data[current_target_index[self.y_level_number], :] = block
-        self._safe_set_image(self.data)
+        self.needs_redraw = True
 
     def load_image(self, data, target_index):
         temp = data[self.x_level_number][self.getter_number]
@@ -621,6 +581,7 @@ class ImagePlot(pg.GraphicsLayoutWidget):
             )
             return
 
+        self.needs_redraw = False
         self._safe_set_image(self.data)
 
 
@@ -635,15 +596,42 @@ class AllPlots(QtWidgets.QWidget):
 
         self.level_info = level_info or copy.deepcopy(ScanInfo['levels'])
         self.plot_setting_info = None
-        self.page_number = page_number        # <── new
+        self.page_number = page_number
         self.grid_size = []
         self.data = None
+        self.levels_locked = False
 
-    def sr830_xyrt_output(self,xyrt):
-        self.xyrt=deepcopy(xyrt)
+    def plot_widgets(self):
+        """The LinePlot / ImagePlot widgets currently on this page."""
+        widgets = []
         for i in range(self.plots_layout.count()):
-            w= self.plots_layout.itemAt(i).widget()
-            w.sr830_xyrt_output(self.xyrt)
+            w = self.plots_layout.itemAt(i).widget()
+            if isinstance(w, (LinePlot, ImagePlot)):
+                widgets.append(w)
+        return widgets
+
+    def set_levels_locked(self, locked):
+        """Lock or unlock the colour levels of every image plot on this page."""
+        self.levels_locked = bool(locked)
+        for w in self.plot_widgets():
+            if isinstance(w, ImagePlot):
+                w.set_levels_locked(self.levels_locked)
+
+    def redraw_pending(self, *, include_hidden=False):
+        """Redraw plots holding new points; return True if any are still waiting.
+
+        Plots on a page that is not shown wait until it is shown, unless
+        ``include_hidden`` (used before the plots are captured or saved).
+        """
+        still_pending = False
+        for w in self.plot_widgets():
+            if not w.needs_redraw:
+                continue
+            if include_hidden or w.isVisible():
+                w.redraw()
+            else:
+                still_pending = True
+        return still_pending
 
     def set_level_info(self, info):
         self.level_info = info
@@ -714,6 +702,7 @@ class AllPlots(QtWidgets.QWidget):
                 x_set, y_set = self.get_setting_info_image(coord)
                 w = ImagePlot(coordinate=coord, x_setting_info=x_set,
                               y_setting_info=y_set, level_info=self.level_info)
+                w.set_levels_locked(self.levels_locked)
 
             self.plots_layout.addWidget(w, row, col)
             col += 1
@@ -762,11 +751,3 @@ class AllPlots(QtWidgets.QWidget):
 
 
         return [x_setting_dict,y_setting_dict]
-        
-
-
-if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
-    window = AllPlots()
-    window.show()
-    app.exec()

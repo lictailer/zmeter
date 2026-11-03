@@ -376,6 +376,16 @@
            </property>
           </widget>
          </item>
+         <item row="0" column="3">
+          <widget class="QCheckBox" name="lock_levels_checkbox_1">
+           <property name="toolTip">
+            <string>Keep the current colour-map levels of the image plots on this tab. Drag the colour bar to set them; untick to fit them to the data again.</string>
+           </property>
+           <property name="text">
+            <string>Lock color levels</string>
+           </property>
+          </widget>
+         </item>
          <item row="2" column="2">
           <widget class="QPushButton" name="save_plots_button_1">
            <property name="text">
@@ -480,6 +490,16 @@
            </property>
           </widget>
          </item>
+         <item row="0" column="3">
+          <widget class="QCheckBox" name="lock_levels_checkbox_2">
+           <property name="toolTip">
+            <string>Keep the current colour-map levels of the image plots on this tab. Drag the colour bar to set them; untick to fit them to the data again.</string>
+           </property>
+           <property name="text">
+            <string>Lock color levels</string>
+           </property>
+          </widget>
+         </item>
          <item row="2" column="0">
           <widget class="QPushButton" name="pause_button_2">
            <property name="text">
@@ -581,6 +601,16 @@
           <widget class="QPushButton" name="update_plots_button_3">
            <property name="text">
             <string>Update Plots</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QCheckBox" name="lock_levels_checkbox_3">
+           <property name="toolTip">
+            <string>Keep the current colour-map levels of the image plots on this tab. Drag the colour bar to set them; untick to fit them to the data again.</string>
+           </property>
+           <property name="text">
+            <string>Lock color levels</string>
            </property>
           </widget>
          </item>
