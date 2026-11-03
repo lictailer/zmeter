@@ -1,3 +1,8 @@
 # These vendor data files are SHA-256/size checked. Preserve exact bytes in
 # checkouts AND git archives instead of normalizing manufacturer CRLF endings.
 core/shared_runtime/vendor/thorlabs_kinesis/*.xml -text -diff
+
+# Developer-only folders: kept in the repository but left out of release ZIPs
+# (the release workflow packages `git archive HEAD`, which honors export-ignore).
+/archive export-ignore
+/tests export-ignore

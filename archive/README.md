@@ -2,8 +2,10 @@
 
 Retired autofocus XZ and superseded UI/position prototypes are indexed in
 [legacy-autofocus/README.md](legacy-autofocus/README.md), outside active devices.
+The retired `core/scan_logic_old.py` is in
+[legacy-scan-engine/](legacy-scan-engine/README.md).
 
-This directory contains material retained for project history and recovery. It is not the source of truth for current ZMeter behavior.
+This directory contains material retained for project history and recovery. It is not the source of truth for current ZMeter behavior. This folder is in the repository only: `.gitattributes` marks it `export-ignore`, so release ZIPs and installed copies do not include it.
 
 ## 2026-08-21 reconstruction consolidation
 
