@@ -5,7 +5,7 @@ from threading import RLock
 from types import MappingProxyType
 from typing import Callable, Mapping
 
-from .models import ConnectionFieldSpec, DeviceConfig, DriverConfigSpec
+from .models import DeviceConfig, DriverConfigSpec
 
 
 DeviceFactory = Callable[..., object]
@@ -429,73 +429,12 @@ class DriverRegistry:
                 )
 
 
-def _create_mock_device():
-    from devices.mockDevice.mock_device_main import MockDevice
-
-    return MockDevice()
-
-
-def _mock_connect(instance, connection, _timeout_ms):
-    instance.connect(**connection)
-    return bool(instance.logic.hardware.connected)
-
-
-def _mock_disconnect(instance):
-    return instance.disconnect()
-
-
-def _mock_start_scan(instance):
-    return instance.start_scan()
-
-
-def _mock_stop_scan(instance):
-    return instance.stop_scan()
-
-
-def _mock_force_stop(instance):
-    return instance.force_stop()
-
-
-def _mock_terminate(instance):
-    return instance.terminate_dev()
-
-
-def _mock_is_busy(instance) -> bool:
-    return bool(instance.logic.is_busy())
-
-
-def _mock_is_connected(instance) -> bool:
-    return bool(instance.logic.hardware.connected)
-
-
-def mock_device_registration() -> DriverRegistration:
-    return DriverRegistration(
-        config_spec=DriverConfigSpec(
-            driver_id="mock_device",
-            aliases=("mockDevice",),
-            connection_fields={
-                "address": ConnectionFieldSpec((str,)),
-            },
-        ),
-        factory=_create_mock_device,
-        connect=_mock_connect,
-        startup_connect=_mock_connect,
-        disconnect=_mock_disconnect,
-        start_scan=_mock_start_scan,
-        stop_scan=_mock_stop_scan,
-        force_stop=_mock_force_stop,
-        terminate=_mock_terminate,
-        is_busy=_mock_is_busy,
-        is_connected=_mock_is_connected,
-        runtime_mutation_allowed=True,
-    )
-
-
 def build_default_registry() -> DriverRegistry:
     """Return reviewed registrations without importing any device package."""
 
     from .registrations import (
         mfli_registration,
+        mock_device_registration,
         phase1_device_registrations,
         phase2_device_registrations,
     )

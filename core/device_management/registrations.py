@@ -1,7 +1,9 @@
-"""Reviewed lazy registrations for non-mock device integrations.
+"""Reviewed lazy registrations for every device integration, mock included.
 
 This module intentionally imports no device package.  Factories resolve their
-widget class only when an enabled profile entry is constructed.
+widget class only when an enabled profile entry is constructed.  The core
+registry (``registry.py``) never imports ``devices``; it only collects the
+registrations defined here.
 """
 
 from __future__ import annotations
@@ -91,6 +93,62 @@ def _ni6423_connected(instance) -> bool:
 def _ni_startup_connect(instance, connection, _timeout_ms: int) -> bool:
     instance.connect(_connection_address(connection))
     return _logic_flag(instance, "is_initialized")
+
+
+def _mock_connect(instance, connection, _timeout_ms):
+    instance.connect(**connection)
+    return bool(instance.logic.hardware.connected)
+
+
+def _mock_disconnect(instance):
+    return instance.disconnect()
+
+
+def _mock_start_scan(instance):
+    return instance.start_scan()
+
+
+def _mock_stop_scan(instance):
+    return instance.stop_scan()
+
+
+def _mock_force_stop(instance):
+    return instance.force_stop()
+
+
+def _mock_terminate(instance):
+    return instance.terminate_dev()
+
+
+def _mock_is_busy(instance) -> bool:
+    return bool(instance.logic.is_busy())
+
+
+def _mock_is_connected(instance) -> bool:
+    return bool(instance.logic.hardware.connected)
+
+
+def mock_device_registration() -> DriverRegistration:
+    return DriverRegistration(
+        config_spec=DriverConfigSpec(
+            driver_id="mock_device",
+            aliases=("mockDevice",),
+            connection_fields={
+                "address": ConnectionFieldSpec((str,)),
+            },
+        ),
+        factory=_widget_factory("devices.mockDevice.mock_device_main", "MockDevice"),
+        connect=_mock_connect,
+        startup_connect=_mock_connect,
+        disconnect=_mock_disconnect,
+        start_scan=_mock_start_scan,
+        stop_scan=_mock_stop_scan,
+        force_stop=_mock_force_stop,
+        terminate=_mock_terminate,
+        is_busy=_mock_is_busy,
+        is_connected=_mock_is_connected,
+        runtime_mutation_allowed=True,
+    )
 
 
 def ni6423_registration() -> DriverRegistration:

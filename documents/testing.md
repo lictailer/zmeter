@@ -73,7 +73,7 @@ python -B -m unittest tests.test_layering -v
 ```
 
 - Hardware: none; the test parses source files with `ast` and imports nothing.
-- Proves: `zcore/` does not import `PyQt6`, `core`, `devices`, or `zui` (including relative imports that leave the package), and `core/` and `zcore/` import no optional vendor library (`openai`, `cv2`, `pylablib`, `zhinst`, `skimage`, `PyDAQmx`, `nidaqmx`, `clr`, `sshtunnel`) at module top level. Synthetic sources check that each rule fails when violated.
+- Proves: `zcore/` does not import `PyQt6`, `core`, `devices`, or `zui` (including relative imports that leave the package), and `core/` and `zcore/` import no optional vendor library (`openai`, `cv2`, `pylablib`, `zhinst`, `skimage`, `PyDAQmx`, `nidaqmx`, `clr`, `sshtunnel`) at module top level, and `core/device_management/registry.py` does not import or name `devices` (the mock registration lives in `registrations.py` with every other driver). Synthetic sources check that each rule fails when violated.
 
 ### Queue model and manual-item tests
 
