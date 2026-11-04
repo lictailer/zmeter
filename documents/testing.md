@@ -83,7 +83,17 @@ python -B -m unittest -v tests.test_zcore_device_declarations tests.test_zcore_d
 
 - Hardware: none; Qt-free, fake drivers only. No device package is imported; the example drivers copy the method names of the real hardware layers.
 - Proves: every declaration and class-creation rule of `zcore.devices` ([ADR 004](decisions/004-declarative-device-sdk.md), decisions 2 and 3) rejects a violating declaration and accepts a valid one; `DeviceSpec` is built once, immutable, and follows Python attribute lookup for inherited, overridden and hidden declarations; SR860-, SR830-, K10CR1-, nidaq-, auto_focus- and attoDRY-like devices declare cleanly and expose the expected readout, control, array and snapshot names; `Result` constructors and statuses.
-- Does not prove: anything about the Runner, threads, limits enforcement at write time, panels, or the bridge (later phase 1 PRs).
+- Does not prove: anything about the Runner, threads, limits enforcement at write time, panels, or the bridge (see the Runner tests below and later phase 1 PRs).
+
+### Device Runner and event bus tests
+
+```powershell
+python -B -m unittest -v tests.test_zcore_runner tests.test_zcore_events
+```
+
+- Hardware: none; Qt-free, fake drivers only. The fake driver blocks on purpose behind events (never on long sleeps) and fails the test if two driver calls ever overlap.
+- Proves ([ADR 004](decisions/004-declarative-device-sdk.md), decision 5, Runner core): priority order stop > scan > panel > poll with a blocked worker and FIFO within a priority; a running call past its deadline returns `timeout`, marks "state unknown" without retrying, and its late result is logged and discarded; only a successful read clears "state unknown"; a queued call past its deadline never reaches the driver; driver exceptions become `failed` with context; out-of-limit, NaN, infinite, wrong-type and not-an-option writes from every source never call the driver; values are converted to the declared type; a ramped parameter is never written directly; calls from the Runner's own thread run inline; connect reads every readable parameter and logs `unlimited` parameters, connect failure and timeout give "error" and a late connect is undone; disconnect drops queued work; scan admission refuses panel writes, actions, reset and self-test; `set_many` is all-or-nothing and uses `write_many`; shutdown cancels pending work and is bounded; one value event per read or write and state events only on change; many submitting threads at once; the event bus isolates a failing subscriber and keeps per-publisher order.
+- Does not prove: ramps, force stop, polling, safe values, the MultiParameter cache or `wait_stable` (phase 1, PR 5); anything with Qt, panels, the bridge, or a real driver. Before the PR the threaded tests were run 50 times in a row and 80 more times with eight copies in parallel on Linux.
 
 ### Registry and workbook expectations
 

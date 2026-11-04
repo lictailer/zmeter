@@ -170,6 +170,46 @@ return `None` or `False` to the scan.
   cache age.
 - `wait_stable(name)` honours `Stable` and is cancellable.
 
+Made precise by the Runner core (phase 1, PR 4, `zcore/runner.py`):
+
+- Every operation has a deadline counted from submission: the parameter's
+  `timeout`, the array's `timeout`, an explicit timeout passed by the caller,
+  or the Runner default (10 s). An operation that has not started by its
+  deadline never runs and returns `Result.timeout` without changing the
+  device state (waiting in the queue is not a device fault). One that is
+  still running returns `Result.timeout` and the device becomes "state
+  unknown". So a caller that was told "timeout" never sees its write happen
+  later, unless the driver call had already started.
+- "State unknown" is set by a timeout or a driver exception, and cleared only
+  by a successful read; a successful write does not clear it. A limit
+  rejection never reaches the driver and does not change the state.
+- Before the driver is called, a write is checked and converted to the
+  declared type: finite numbers only, inside the limits, an `int` accepts an
+  integral float (`3.0`), a `Choice` accepts one of its values, `bool`, `str`
+  and `Path` accept only their own type (a `str` for `Path`). Out-of-range,
+  non-finite and not-an-option values return a reason starting with "outside
+  device limit"; wrong types return "invalid value". A `Trigger` accepts any
+  finite number. `set_many` checks every value first and writes nothing if
+  one is refused; it uses `write_many` when the device has it.
+- Until ramps run in the Runner (PR 5), a write to a parameter that declares
+  a ramp is refused; it is never written in one step.
+- Scan admission is `begin_scan()` and `end_scan()`, both idempotent. While a
+  scan holds the device, panel writes, actions, connect and disconnect are
+  refused (queued ones are cancelled), panel reads stay allowed, and `reset()`
+  and `self_test()` are refused from every source. `begin_scan()` waits with
+  a bound for a panel call in progress and returns False if it does not
+  finish in time.
+- A connect is bounded by `Connection.timeout_s` plus 2 s, so a driver that
+  honours its own timeout fails first. A connect that times out leaves the
+  device in "error"; if it succeeds late, the Runner disconnects again so the
+  state stays truthful. A disconnect drops every queued operation and runs
+  next. `shutdown(timeout_s)` cancels queued work, disconnects, and joins the
+  worker with a bound.
+- Events are delivered in the order they happen, from one of the Runner's
+  threads, before the caller's future completes. A subscriber must return
+  quickly and must not wait on the Runner; the Qt layer re-emits events
+  through queued signals.
+
 Device lifecycle, the same for every device. The author writes only the
 hardware calls.
 
