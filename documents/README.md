@@ -23,6 +23,7 @@ the device package README. Completed plans and investigations live under
 | Install a published release | [release_deployment.md](release_deployment.md) | standalone installer repository and release workflow |
 | Name new code or check a renamed term | [naming.md](naming.md) | [ADR 003](decisions/003-v2-architecture.md) |
 | Understand the v2 transition rules | [ADR 003](decisions/003-v2-architecture.md) | [architecture.md](architecture.md) |
+| Write or review a declarative device (v2 device SDK) | [ADR 004](decisions/004-declarative-device-sdk.md) | [ADR 003](decisions/003-v2-architecture.md), [device_contract.md](device_contract.md) |
 | Record a durable design choice | [decisions/README.md](decisions/README.md) | affected code, tests, and canonical contracts |
 
 ## Current documents
@@ -43,7 +44,7 @@ the device package README. Completed plans and investigations live under
 | [environment_windows.md](environment_windows.md) | Windows environment and system prerequisites |
 | [release_deployment.md](release_deployment.md) | Published-release installer and packaging boundary |
 | [CODEX_CONTRIBUTION_WORKFLOW_TUTORIAL.md](CODEX_CONTRIBUTION_WORKFLOW_TUTORIAL.md) | Maintainer documentation workflow guide |
-| [decisions/](decisions/README.md) | Durable architecture decisions |
+| [decisions/](decisions/README.md) | Durable architecture decisions (ADR 003 v2 transition rules, ADR 004 declarative device SDK) |
 
 ## Device documentation
 

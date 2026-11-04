@@ -18,6 +18,9 @@ Code and tests remain authoritative for what the current application does.
 | `write_info` / `read_info` | `write_channel` / `read_channel` | Write / read one channel |
 | artificial channel | virtual channel (umbrella term); "artificial channel" is kept | A virtual channel is any non-physical channel. An artificial channel is specifically the 2D coordinate-transform channel, one kind of virtual channel |
 | `Brakets` | `SweepMethodParser` | Parses the `sweep_method` expression into combined write values (also fixes the spelling) |
+| (new term) | parameter | One named value of a declarative device; see [ADR 004](decisions/004-declarative-device-sdk.md) |
+| (new term) | readout parameter / control parameter | A parameter with `get` only / with `set`. Exposed as a readout channel / control channel when `scan=True` |
+| (new term) | action | A panel-only device operation declared with `@action`; a `Trigger` is a control channel that runs one call |
 | `scanlist` / `ScanList` | `queue_window` / `QueueWindow` | Scan queue window |
 
 ## General rules
