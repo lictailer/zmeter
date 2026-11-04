@@ -89,7 +89,7 @@ still forbidden.
 | Transition interface | Purpose | Removal condition |
 | --- | --- | --- |
 | Re-exports left at old module locations when a module moves into `zcore`/`zui` | Keep imports and tests working while callers are updated | Removed one stable tag after the move |
-| `zui` bridge adapter and `LegacyProvider` | Let the new channel layer reach devices that are still written in the old style | Removed at the end of phase 5 (all devices migrated) |
+| `zui` bridge adapter (logic facade, `BridgeWidget`, `declarative_registration`; see [ADR 004](004-declarative-device-sdk.md)) and `LegacyProvider` | Let the old core (registry, `DeviceManager`, `MainWindow` discovery, router, setup capture) use declarative devices, and the new channel layer reach devices that are still written in the old style | Removed at the end of phase 5 (all devices migrated) |
 | `scan_engine = legacy \| v2` setting and the legacy scan engine | Roll back the phase 3 switch without a code change | Removed one stable tag after the phase 3 default switch |
 | `demo_device` unavailable registration | Old workbooks that still contain the `demo_device` row keep loading (an unregistered driver in any row fails the whole profile) | Removed at the end of phase 5 |
 

@@ -9,6 +9,7 @@ Use this directory for durable choices with meaningful alternatives and conseque
 | 001 | [Shared process runtime services for hardware integrations](001-shared-runtime-services.md) | Implemented; hardware validation pending | 2026-08-14 |
 | 002 | [Profile-driven device management and behavior-preserving reconstruction](002-profile-driven-device-management-reconstruction.md) | Implemented in beta; stable promotion and hardware commissioning pending | 2026-08-21 |
 | 003 | [v2 architecture by incremental replacement on release/beta](003-v2-architecture.md) | Accepted | 2026-11-03 |
+| 004 | [Declarative device SDK](004-declarative-device-sdk.md) | Accepted | 2026-11-04 |
 
 ## Naming
 
