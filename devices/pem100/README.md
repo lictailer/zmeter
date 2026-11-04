@@ -8,7 +8,7 @@ It is registered under driver ID `pem100` with one optional text `address`. The 
 
 ## Dependencies and configuration
 
-- Python: PyQt6 and PyVISA from `zmeter_May2026_environment.yml`;
+- Python: PyQt6 and PyVISA from `zmeter_Sept2026_environment.yml`;
 - system: a compatible VISA implementation and serial adapter driver;
 - configuration: the exact VISA resource address, supplied explicitly by the laboratory profile.
 

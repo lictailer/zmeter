@@ -83,6 +83,18 @@ python -c "import sys; print(sys.executable)"
 
 The expected Python series is 3.12; the current environment file pins Python 3.12.12.
 
+#### Which environment file to use
+
+| File | What it is | Use it for |
+| --- | --- | --- |
+| `zmeter_Sept2026_environment.yml` | Full Conda export of the lab environment: every package pinned to an exact build, Windows only. The release workflow packages it and the installer builds the lab environment from it. | Lab PCs and anything that must match a release. Do not edit it by hand. |
+| `environment-dev.yml` | Hand-written list of the direct dependencies with version ranges, grouped into core, optional vendor libraries, and Windows-only packages. | Understanding what ZMeter needs, and building a development or hardware-free test environment (including on Linux, leaving out the Windows group). |
+
+`environment-dev.yml` never replaces the deployment file. When a direct dependency
+is added or changed, update both files in the same pull request. The file name does not
+end in `environment.yml` on purpose: the release workflow requires exactly one root file
+matching `*environment.yml`.
+
 ## Launching ZMeter
 
 The checked-in `device_config.xlsx` workbook is the default startup configuration. Review its `Devices` sheet before launching because enabled rows with `connect_on_start` set to `TRUE` request a connection.
@@ -254,7 +266,8 @@ tests/                          Hardware-independent core regression tests
 skills/zmeter-scan-planner/     AI scan-planning skill for Claude or Codex (installed separately)
 data/                           Default local measurement output
 scan_range_limits.json          Configured scan-output limits
-zmeter_Sept2026_environment.yml  Maintained Conda environment
+zmeter_Sept2026_environment.yml  Deployment Conda environment (exact export; release workflow and installer use it)
+environment-dev.yml             Readable direct dependencies for development and hardware-free tests
 project_structure.md            Authoritative maintained structure documentation
 AGENTS.md                       Coding-agent policy and safety instructions
 archive/                        Historical documentation and retired material

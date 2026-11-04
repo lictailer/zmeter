@@ -20,6 +20,16 @@ conda env update -f zmeter_Sept2026_environment.yml --prune
 conda activate zmeter_Aug2026
 ```
 
+## Readable dependency list
+
+`environment-dev.yml` in the repository root lists only the direct dependencies, with
+version ranges, grouped into core, optional vendor libraries, and Windows-only packages
+(commented out so the file also builds on Linux for hardware-free tests). It is
+documentation and a development starting point, not the deployment file: the release
+workflow packages exactly one root `*environment.yml` file and the installer builds the
+lab environment from `zmeter_Sept2026_environment.yml`, so lab PCs keep using that
+file. Update both files in the same change when a direct dependency changes.
+
 ## Workbook and .NET dependencies
 
 The September YAML explicitly includes `openpyxl=3.1.5` (Conda) and
