@@ -63,7 +63,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `devices/attodry/`, `devices/mc2000b/`, `devices/spectraphysicsx3_laser/` | Lazy startup-only cryostat, chopper and laser integrations; device-local requirements and commissioning procedures |
 | `devices/<device>/` | Device-specific widget/logic/hardware integrations, including driver-owned scan/monitor admission, and optional UI/dependencies |
 | `zcore/`, `zcore/data/`, `zui/` | Empty packages for the v2 transition ([ADR 003](documents/decisions/003-v2-architecture.md)); not on the active runtime path. `zcore` holds Qt-free, hardware-free code (file formats in `zcore/data/`); `zui` holds the Qt interface. `zcore` never imports `PyQt6`, `core`, `devices`, or `zui` |
-| `tests/` | Hardware-independent core regression tests, including `tests/test_layering.py` (import rules for `core/`, `zcore/` and the core device registry; left out of release ZIPs by `.gitattributes`) |
+| `tests/` | Hardware-independent core regression tests, including `tests/test_layering.py` (import rules for `core/`, `zcore/`, `zui/`, declarative device packages and the core device registry; left out of release ZIPs by `.gitattributes`) and `tests/registry_expectations.py` (the one canonical list of registered driver IDs) |
 | `skills/` | Claude Code / Codex agent skills for zmeter work outside the app (`skills/README.md` lists them and how to install); `zmeter-shift-mapping` and `zmeter-scan-planner` |
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |

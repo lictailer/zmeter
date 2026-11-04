@@ -14,6 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6 import QtWidgets
 from openpyxl import Workbook
 
+from tests.registry_expectations import DRIVER_IDS
 from core.device_management.config import DEVICE_HEADERS, load_profile
 from core.device_management.models import (
     ChannelFilters,
@@ -91,12 +92,7 @@ import sys
 from core.device_management.registry import build_default_registry
 
 registry = build_default_registry()
-assert registry.driver_ids == (
-    "mock_device", "ni6423", "nidaq", "pem100", "sp150",
-    "hp34401a", "keithley24xx", "sr860", "sr830", "demo_device",
-    "bbd30x", "k10cr1", "four9", "montana2", "opticool", "attodry", "tlpm",
-    "mc2000b", "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper", "andor", "mfli",
-)
+assert registry.driver_ids == __DRIVER_IDS__
 assert "mock_device" in registry.config_specs
 assert "mockDevice" not in registry.config_specs
 assert registry.config_specs["mock_device"].aliases == ("mockDevice",)
@@ -111,7 +107,7 @@ loaded = sorted(
 if loaded:
     raise SystemExit("unexpected device/vendor import: " + ", ".join(loaded))
 print("registry lookup remained lazy")
-"""
+""".replace("__DRIVER_IDS__", repr(DRIVER_IDS))
 
         result = subprocess.run(
             [sys.executable, "-B", "-c", script],

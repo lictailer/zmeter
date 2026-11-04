@@ -16,22 +16,8 @@ from core.device_management.registry import (
     build_default_registry,
 )
 from tests.excel_config_fixture import write_test_device_config
+from tests.registry_expectations import DRIVER_IDS, PHASE1_DRIVER_IDS
 
-
-PHASE1_DRIVER_IDS = (
-    "mock_device",
-    "ni6423",
-    "nidaq",
-    "pem100",
-    "sp150",
-    "hp34401a",
-    "keithley24xx",
-    "sr860",
-    "sr830",
-    "demo_device",
-    "bbd30x",
-    "k10cr1",
-)
 
 ARCHIVED_DRIVER_IDS = ("demo_device",)
 ACTIVE_PHASE1_DRIVER_IDS = tuple(
@@ -93,10 +79,8 @@ class Phase1RegistrationTests(unittest.TestCase):
 import sys
 from core.device_management.registry import build_default_registry
 
-expected = (*{PHASE1_DRIVER_IDS!r}, "four9", "montana2", "opticool", "attodry", "tlpm",
-            "mc2000b", "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper", "andor", "mfli")
 registry = build_default_registry()
-assert registry.driver_ids == expected
+assert registry.driver_ids == {DRIVER_IDS!r}
 watched = (
     "devices", "pyvisa", "clr", "System", "nidaqmx", "PyDAQmx",
 )
