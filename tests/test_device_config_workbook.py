@@ -73,6 +73,14 @@ class DeviceConfigWorkbookTests(unittest.TestCase):
             self.assertIn("UNKNOWN DRIVER", formula)
             self.assertIn("INVALID CONNECT FLAG", formula)
 
+    def test_archived_demo_device_row_still_loads_as_unavailable_driver(self):
+        registry = build_default_registry()
+        profile = load_profile(WORKBOOK_PATH, driver_specs=registry.config_specs)
+        demo_rows = [device for device in profile.devices if device.driver == "demo_device"]
+        for device in demo_rows:
+            self.assertFalse(device.enabled)
+        self.assertFalse(registry.config_specs["demo_device"].available)
+
     def test_andor_row_is_disabled_with_explicit_channels(self):
         self.assertEqual([self.devices.cell(32, col).value for col in range(1, 5)],
                          ["andor", "andor", False, False])

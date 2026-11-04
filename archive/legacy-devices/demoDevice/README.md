@@ -2,7 +2,7 @@
 
 ## Status
 
-`demoDevice` is an older template/simulator and is not the maintained reference integration. Use [mockDevice](../mockDevice/README.md) for new device work.
+`demoDevice` is an older template/simulator and is not the maintained reference integration. Use [mockDevice](../../../devices/mockDevice/README.md) for new device work.
 
 It is registered under driver ID `demo_device` with required dummy `address`. Its factory deliberately keeps the private `DummyResourceManager` instead of receiving the application's real shared VISA runtime. Runtime mutation remains disabled.
 
@@ -25,6 +25,6 @@ Because `MainWindow` inspects the `.logic` object and requires exact signatures,
 
 The module requires PyQt6 and the shared runtime infrastructure; the injected dummy manager requires no VISA driver. It retains logic-level connect/disconnect but no complete widget lifecycle for scan pause, force-stop, or application termination. Shared-runtime and offscreen-construction tests cover removal of global transport side effects.
 
-This simulator does not require a hardware bench procedure, but validate any refactor with hardware-independent unit and offscreen-GUI tests. See [device_contract.md](../../documents/device_contract.md) and [testing.md](../../documents/testing.md).
+This simulator does not require a hardware bench procedure, but validate any refactor with hardware-independent unit and offscreen-GUI tests. See [device_contract.md](../../../documents/device_contract.md) and [testing.md](../../../documents/testing.md).
 
-Hardware-independent syntax check: `python -B -m py_compile devices/demoDevice/demoDevice_hardware.py devices/demoDevice/demoDevice_logic.py devices/demoDevice/demoDevice_main.py devices/demoDevice/dummy_visa.py`. Do not adapt this template to real hardware until numeric channel discovery and lifecycle gaps are fixed.
+Archived: this package is no longer importable from `devices/`. Its fake VISA manager lives on as `tests/fixtures/dummy_visa.py`. Do not adapt this template to real hardware.

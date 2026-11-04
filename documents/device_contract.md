@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A device package adapts one instrument or simulator to ZMeter without leaking vendor-specific behavior into core scan code. Use `devices/mockDevice/` as the executable reference. `devices/demoDevice/` is historical/template evidence only until reconciled with this contract and current tests.
+A device package adapts one instrument or simulator to ZMeter without leaking vendor-specific behavior into core scan code. Use `devices/mockDevice/` as the executable reference. The retired `demoDevice` template is archived under `archive/legacy-devices/` and is historical evidence only.
 
 ## Package layout and ownership
 

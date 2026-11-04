@@ -8,7 +8,11 @@ from types import SimpleNamespace
 from unittest import mock
 
 from core.device_management.models import ChannelFilters, DeviceConfig
-from core.device_management.registry import DriverAdapter, build_default_registry
+from core.device_management.registry import (
+    DriverAdapter,
+    DriverUnavailableError,
+    build_default_registry,
+)
 
 
 PHASE1_DRIVER_IDS = (
@@ -24,6 +28,12 @@ PHASE1_DRIVER_IDS = (
     "demo_device",
     "bbd30x",
     "k10cr1",
+)
+
+ARCHIVED_DRIVER_IDS = ("demo_device",)
+ACTIVE_PHASE1_DRIVER_IDS = tuple(
+    driver_id for driver_id in PHASE1_DRIVER_IDS
+    if driver_id not in ARCHIVED_DRIVER_IDS
 )
 
 FACTORIES = {
@@ -49,9 +59,6 @@ FACTORIES = {
     ),
     "sr830": (
         "devices.sr830.sr830_main", "SR830", "visa", "visa_runtime"
-    ),
-    "demo_device": (
-        "devices.demoDevice.demoDevice_main", "DemoDevice", None, None
     ),
     "bbd30x": (
         "devices.BBD30X.BBD30X_main", "BBD30X", "kinesis", "kinesis_runtime"
@@ -146,6 +153,32 @@ print("phase1 registry remained lazy")
                 )
                 self.assertEqual(received, [expected_kwargs])
 
+    def test_demo_device_is_registered_as_an_unavailable_archived_driver(self):
+        registry = build_default_registry()
+        spec = registry.config_specs["demo_device"]
+        self.assertFalse(spec.available)
+        self.assertEqual(
+            spec.unavailable_reason,
+            "demoDevice was archived; remove this row from the workbook",
+        )
+
+        config = DeviceConfig(
+            id="demo_1",
+            driver="demo_device",
+            enabled=True,
+            connect_on_start=False,
+            connection={"address": "DUMMY::INSTR"},
+            scan_channels=ChannelFilters(setters=None, getters=None),
+        )
+        with mock.patch(
+            "core.device_management.registrations.import_module"
+        ) as import_device:
+            with self.assertRaisesRegex(
+                DriverUnavailableError, "demoDevice was archived"
+            ):
+                registry.create(config, object())
+        import_device.assert_not_called()
+
     def test_all_phase1_schemas_use_one_optional_address(self):
         registry = build_default_registry()
         for driver_id in CONNECTIONS:
@@ -158,7 +191,7 @@ print("phase1 registry remained lazy")
         registry = build_default_registry()
         self.assertTrue(registry.registration("mock_device").runtime_mutation_allowed)
         for driver_id in (
-            *PHASE1_DRIVER_IDS,
+            *ACTIVE_PHASE1_DRIVER_IDS,
             "four9",
             "montana2",
             "opticool",
@@ -235,7 +268,6 @@ print("phase1 registry remained lazy")
             ("hp34401a", "TEST::HP"),
             ("sr860", "TEST::SR860"),
             ("sr830", "TEST::SR830"),
-            ("demo_device", "DUMMY::INSTR"),
         ):
             with self.subTest(driver_id=driver_id):
                 logic = SimpleNamespace(

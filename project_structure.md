@@ -77,7 +77,7 @@ packaging workflow and the maintained contract in
 
 ## Device integration inventory
 
-Source subpackages under `devices/` currently include `mockDevice`, `demoDevice`, `andor`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `mfli`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `attodry`, `mc2000b`, `spectraphysicsx3_laser`, `arduino_steppers`, `auto_focus`, `auto_position`, and `ANC300`. Presence does not establish hardware readiness; see `documents/device_status.md` and device-local READMEs. Legacy autofocus XZ and superseded prototypes live only under `archive/legacy-autofocus/`. `BBD30X` retains its documented optional Kinesis lifecycle limitations.
+Source subpackages under `devices/` currently include `mockDevice`, `andor`, `nidaq`, `ni6423`, `keithley24xx`, `hp34401a`, `sr830`, `sr860`, `mfli`, `opticool`, `montana2`, `four9`, `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `attodry`, `mc2000b`, `spectraphysicsx3_laser`, `arduino_steppers`, `auto_focus`, and `auto_position`. Presence does not establish hardware readiness; see `documents/device_status.md` and device-local READMEs. Legacy autofocus XZ and superseded prototypes live only under `archive/legacy-autofocus/`; the retired `demoDevice` simulator and the unregistered `ANC300` fragment live under `archive/legacy-devices/` (see `archive/README.md`). The `demo_device` driver ID stays registered as an unavailable driver (no device code is imported) so older workbooks that still contain the row keep loading; ADR 003 lists its removal at the end of phase 5. `BBD30X` retains its documented optional Kinesis lifecycle limitations.
 
 The Phase 2 startup-only registry entries are `four9`, `montana2`, `opticool`,
 `attodry`, `tlpm`, `mc2000b`, `spectraphysicsx3_laser`, `auto_focus`,
@@ -87,8 +87,7 @@ limitations.
 
 Maintained VISA packages (`pem100`, `sp150`, `hp34401a`, `keithley24xx`,
 `sr830`, and `sr860`) use `VisaRuntime`. K10CR1 and BBD30X use one injected `KinesisRuntime` and the same local
-manifest-validated DLL directory. `devices.demoDevice` uses an injected fake VISA
-manager and does not patch PyVISA globally.
+manifest-validated DLL directory. The hardware-free VISA runtime tests use the fake manager in `tests/fixtures/dummy_visa.py`, injected into `VisaRuntime` without patching PyVISA globally.
 
 ## Maintenance rule
 

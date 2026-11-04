@@ -411,29 +411,32 @@ def sr830_registration() -> DriverRegistration:
     )
 
 
-def _demo_connect(instance, connection, _timeout_ms: int) -> bool:
-    address = _connection_address(connection)
-    instance.logic.connect_visa(address)
-    return bool(instance.logic.connected)
+DEMO_DEVICE_UNAVAILABLE_REASON = (
+    "demoDevice was archived; remove this row from the workbook"
+)
+
+
+def _archived_demo_factory(**_kwargs):
+    raise RuntimeError("demo_device is archived and cannot be constructed")
 
 
 def demo_device_registration() -> DriverRegistration:
+    """Keep old workbooks loadable after demoDevice moved to archive/.
+
+    An unregistered driver in any workbook row makes the whole profile fail to
+    load, so the ID stays registered as an unavailable driver (ADR 003
+    transition interface, removed at the end of phase 5). No device code is
+    imported; an enabled row reports the reason instead of constructing.
+    """
     return DriverRegistration(
         config_spec=DriverConfigSpec(
             driver_id="demo_device",
             connection_fields={"address": _address_spec()},
+            available=False,
+            unavailable_reason=DEMO_DEVICE_UNAVAILABLE_REASON,
         ),
-        # Deliberately do not inject RuntimeServices.visa: the demo keeps its
-        # private DummyResourceManager and must never become a real VISA driver.
-        factory=_widget_factory("devices.demoDevice.demoDevice_main", "DemoDevice"),
-        configure_instance=lambda instance, connection: _prefill_combo(
-            instance, "address_comboBox", connection
-        ),
-        connect=_demo_connect,
-        startup_connect=_demo_connect,
-        disconnect=lambda instance: _call_logic(instance, "disconnect"),
-        terminate=lambda instance: _call_logic(instance, "disconnect"),
-        is_connected=lambda instance: bool(instance.logic.connected),
+        factory=_archived_demo_factory,
+        terminate=lambda _instance: None,
     )
 
 

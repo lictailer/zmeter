@@ -77,7 +77,7 @@ everything below is a hint, not a rule.
   position), temperature (detector cooler, deg C; usually -60 to -80).
 - montana2, opticool, four9: cryostat / temperature controllers.
 - nema11_stepper, arduino_steppers, auto_focus: focus or positioning motors.
-- mock_device, demo_device: simulators, not real hardware.
+- mock_device: simulator, not real hardware. (demo_device was archived; an old workbook row with that driver shows as unavailable.)
 
 ## 4. Common experiment families (clues, not rules)
 What usually matters for each kind of measurement. Use what fits; most
