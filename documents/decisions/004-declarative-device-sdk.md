@@ -69,8 +69,8 @@ All of these are Qt-free values in `zcore.devices`.
 
 | Type | Meaning |
 | --- | --- |
-| `Parameter(dtype, *, unit, limits, get, set, scan, snapshot, poll, ramp, stable, safe, timeout, group, order, hidden, doc)` | One named value. `dtype` is `float`, `int`, `bool`, `str`, or `Path`. `get` and `set` are driver method names or callables. |
-| `Choice(options, settle_s=0.0)` | A fixed set of discrete states with labels (combo box in the panel). |
+| `Parameter(dtype, *, unit, limits, get, set, scan, snapshot, poll, ramp, stable, safe, timeout, group, order, hidden, doc)` | One named value. `dtype` is `float`, `int`, `bool`, `str`, `Path`, or a `Choice`. `get` and `set` are driver method names or callables. |
+| `Choice(options, settle_s=0.0)` | A fixed set of discrete states with labels (combo box in the panel), used as a `Parameter` dtype: `Parameter(Choice({"10 ms": 8, "30 ms": 9}), ...)`. Values are all numbers or all strings; the options are the limit. |
 | `ArrayParameter(axes, shape, axis_values=None, unit=None, get, timeout=None)` | A long array read, at most two axes. Has its own timeout and is cancellable. |
 | `MultiParameter(components, get, unit)` | Several values from one hardware read (SR860 X, Y, R, theta). |
 | `Ramp(rate, interval=0.05)` | Stepped write. `rate` is a number or the name of another parameter. |
@@ -93,6 +93,17 @@ Rules that hold for every declaration:
 - Units are part of the contract. Changing a unit later is a visible change of
   one declaration and appears in data files.
 - `Parameter` stays small. New fields are added only for a concrete device.
+- A reference to a hardware call (`get`, `set`, `Trigger.call`, an array
+  `shape` or `axis_values`) is the name of a `driver_class` method or a
+  callable that receives the device instance: `get(device)`,
+  `set(device, value)`. A function defined earlier in the class body is such
+  a callable.
+- "Numeric" means `float`, `int`, or a `Choice` whose values are numbers.
+  `bool` is not numeric; a flag that must be scanned or captured is declared
+  as an `int` or a numeric `Choice`.
+- Declaration names and `MultiParameter` component names share one name space
+  per device. Names that the `Device` base uses (`connect`, `driver`, `spec`,
+  the standard actions, ...) and names starting with `_` are reserved.
 
 ### 3. Validation at class creation
 
@@ -102,7 +113,17 @@ exist on `driver_class`; `scan` and `snapshot` parameters are numeric; limits
 are finite with `low < high`; `safe` lies inside the limits; `ramp` appears
 only on settable numerics; `poll > 0`; array axes are unique and at most two;
 `Choice` options are non-empty and unique; a device with a ramp or a long
-action implements `stop_hardware`.
+action implements `stop_hardware`. Also checked (phase 1, PR 3): `limits` only
+on settable `float`/`int` parameters and `unit` only on numeric ones; `safe`
+needs `set`; a ramped parameter needs `get` (the ramp starts from the read
+value), and a ramp rate given by name refers to another readable `float`/`int`
+parameter; references accept the call (`get` with no value, `set` with one);
+user actions take no arguments besides `self`, and standard actions are
+defined by name without `@action`; the default `connect` needs a
+`driver_class` that is built without arguments and has
+`connect(address, timeout_s)` and `disconnect()`, otherwise the device
+overrides them. A subclass inherits declarations in attribute-lookup order; an
+attribute set to a non-declaration hides an inherited one.
 
 ### 4. Result type
 
