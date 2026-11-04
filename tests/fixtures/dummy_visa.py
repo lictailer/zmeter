@@ -1,31 +1,23 @@
-"""demo_device.dummy_visa
+"""Test fixture: dummy_visa
 
-Light-weight stand-in for PyVISA that lets you run *DemoDeviceHardware* and
-*DemoDeviceLogic* without physical hardware attached.  It implements the subset
-of the VISA API used by our drivers: ``ResourceManager`` → ``open_resource``
-returning an object that exposes ``write`` and ``query``.
-
-The fake manager is injected into ``VisaRuntime`` and never monkey-patches the
-real :mod:`pyvisa` module or process-global imports.
+Light-weight stand-in for PyVISA for hardware-free tests. ``DummyResourceManager``
+implements the subset of the VISA API the shared runtime tests use
+(``open_resource`` returning an object with ``write`` and ``query``) and is
+injected into ``VisaRuntime``; it never monkey-patches the real :mod:`pyvisa`
+module or process-global imports. ``DummyVisaHardware`` is a minimal hardware
+class that leases a resource from the runtime, like the maintained drivers.
 
 Usage example
 -------------
 >>> from core.shared_runtime.visa import VisaRuntime
->>> from devices.demoDevice.dummy_visa import DummyResourceManager
->>> from devices.demoDevice.demoDevice_hardware import DemoDeviceHardware
+>>> from tests.fixtures.dummy_visa import DummyResourceManager, DummyVisaHardware
 >>> runtime = VisaRuntime(manager_factory=DummyResourceManager)
->>> dev = DemoDeviceHardware("DUMMY::INSTR", visa_runtime=runtime)
+>>> dev = DummyVisaHardware("DUMMY::INSTR", runtime)
 >>> print(dev.idn())
-DemoDevice,Simulated,1.0
->>> dev.operating_mode("remote", write=True)
->>> print(dev.operating_mode(read=True))
-remote
->>> dev.voltage_level(1.234, write=True)
->>> print(dev.voltage_level(read=True))
-1.234
+DummyInstrument,Simulated,1.0
+>>> dev.disconnect()
 
-The dummy driver tracks MODE and VOLT commands internally so you can verify
-logic end-to-end, including the Qt GUI.
+The dummy instrument tracks MODE and VOLT commands internally.
 """
 
 from __future__ import annotations
@@ -33,19 +25,21 @@ from __future__ import annotations
 from typing import Tuple
 import random
 
+from core.shared_runtime.visa import VisaRuntime
+
 # -----------------------------------------------------------------------------
 # Dummy VISA instrument implementation
 # -----------------------------------------------------------------------------
 class _DummyInstrument:
     """Simulated VISA instrument supporting basic SCPI subset."""
 
-    # attributes that DemoDeviceHardware expects to set
+    # attributes that drivers set after opening a resource
     write_termination: str = "\n"
     read_termination: str = "\n"
     timeout: int = 100  # milliseconds
 
     def __init__(self):
-        self._mode: int = 0  # 0=local, 1=remote, 2=lockout (see DemoDeviceLogic.MODES)
+        self._mode: int = 0  # 0=local, 1=remote, 2=lockout
         self._voltage: float = 0.0
 
     # ---------------- SCPI helpers ----------------
@@ -63,7 +57,7 @@ class _DummyInstrument:
     def query(self, cmd: str) -> str:  # noqa: D401 – keep simple signature
         cmd = cmd.strip()
         if cmd == "*IDN?":
-            return "DemoDevice,Simulated,1.0"
+            return "DummyInstrument,Simulated,1.0"
         if cmd == "MODE?":
             return str(self._mode)
         if cmd == "VOLT?":
@@ -98,3 +92,22 @@ class DummyResourceManager:
     def close(self):
         """No-op manager shutdown for the in-process simulator."""
         pass
+
+
+class DummyVisaHardware:
+    """Minimal hardware class that leases a resource from a ``VisaRuntime``."""
+
+    def __init__(self, address: str, visa_runtime: VisaRuntime):
+        self._lease = visa_runtime.open_resource(
+            f"DummyVisaHardware:{id(self):x}", address
+        )
+        self._instrument = self._lease.resource
+
+    def idn(self) -> str:
+        return self._instrument.query("*IDN?").strip()
+
+    def disconnect(self) -> None:
+        if self._lease is not None:
+            self._lease.close()
+        self._lease = None
+        self._instrument = None

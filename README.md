@@ -154,14 +154,14 @@ The flat `devices/` package contains integrations or experimental work for sever
 
 | Area | Modules present |
 | --- | --- |
-| Simulation | `mockDevice`, `demoDevice` |
+| Simulation | `mockDevice` |
 | NI data acquisition | `nidaq`, `ni6423` |
 | Source meters and multimeters | `keithley24xx`, `hp34401a` |
 | Lock-in amplifiers | `sr830` (official maintained implementation), `sr860` |
 | Cryostats/environment control | `opticool`, `montana2`, `four9`, `attodry` |
 | Optical power, modulation, spectroscopy, and motion | `tlpm`, `pem100`, `sp150`, `k10cr1`, `BBD30X`, `mc2000b`, `spectraphysicsx3_laser` |
 | Cameras and spectrographs | `andor` (Andor CCD + Shamrock, array getters) |
-| Positioning/autofocus | `arduino_steppers`, `auto_focus`, `auto_position`, `ANC300` (unregistered) |
+| Positioning/autofocus | `arduino_steppers`, `auto_focus`, `auto_position` |
 
 The [MS integration notes](documents/ms_lab_integration.md) list changes from
 beta.4, optional dependencies, disabled example rows, compatibility and testing.

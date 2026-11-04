@@ -25,7 +25,7 @@ final result.
 | `sr860` | [sr860](../devices/sr860/README.md) | Best-effort synchronous | Disabled | Fake/shared-runtime and scan-lifecycle coverage; hardware pending | Restrict reviewed numeric scan filters and validate lifecycle faults on hardware |
 | `mfli` | [mfli](../devices/mfli/README.md) | Asynchronous pending | Disabled | User reports standalone hardware success; fake scan/lifecycle and offscreen integration coverage; integrated hardware scan pending | Complete user-executed integrated scan, abort, and shutdown acceptance |
 | `sr830` | [sr830](../devices/sr830/README.md) | Best-effort synchronous | Disabled | Maintained former v2 implementation; fake/shared-runtime and scan-lifecycle coverage; hardware pending | Restrict reviewed numeric scan filters and validate lifecycle faults on hardware |
-| `demo_device` | [demoDevice](../devices/demoDevice/README.md) | Confirmed synchronous simulator | Disabled | Dummy-runtime automated coverage | Keep as a legacy template; use `mock_device` for new integration work |
+| `demo_device` | [demoDevice (archived)](../archive/legacy-devices/demoDevice/README.md) | Archived; registered as an unavailable driver | Disabled | None; code moved to `archive/legacy-devices/` | Remove the workbook row; the registry entry is removed at the end of v2 phase 5 (ADR 003). Use `mock_device` for new integration work |
 | `bbd30x` | [BBD30X](../devices/BBD30X/README.md) | Asynchronous pending | Disabled | Fake Kinesis coverage; hardware pending | Complete motion busy/timeout/partial-connect and interrupted-position evidence |
 | `k10cr1` | [k10cr1](../devices/k10cr1/README.md) | Asynchronous pending | Disabled | Fake Kinesis coverage; hardware pending | Implement a bounded real force-stop path and software motion limits |
 | `four9` | [four9](../devices/four9/README.md) | Asynchronous pending | Disabled | Loopback/fake TCP coverage; environment bench pending | Connection-loss/shutdown races and installation/service manifest |
@@ -48,7 +48,7 @@ and retain `connect_on_start=FALSE` until the connection is requested manually.
 
 | Package | Current availability | Blocking work before registration |
 | --- | --- | --- |
-| [ANC300](../devices/ANC300/README.md) | Source fragment retained; not an importable ZMeter device | Build widget/logic/hardware package, explicit transport/axes/units/limits/channels, bounded lifecycle, and simulator |
+| [ANC300](../archive/legacy-devices/ANC300/README.md) | Source fragment archived under `archive/legacy-devices/`; not an importable ZMeter device | Build widget/logic/hardware package, explicit transport/axes/units/limits/channels, bounded lifecycle, and simulator |
 
 Selecting an unregistered ID must continue to produce a visible configuration
 validation error rather than constructing an uncertain integration.

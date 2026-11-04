@@ -48,6 +48,7 @@ release, environment, or driver-validation gates. See
 ## Deliberately separate future work
 
 Array-valued getters, spectra/images, object-array storage, new persistence
-shapes, and corresponding plotting are a separate future project. Autofocus,
-auto-position, and ANC300 remain ongoing integrations rather than incomplete
-core reconstruction.
+shapes, and corresponding plotting are a separate future project. Autofocus
+and auto-position remain ongoing integrations rather than incomplete
+core reconstruction. The ANC300 fragment is archived under
+`archive/legacy-devices/`.

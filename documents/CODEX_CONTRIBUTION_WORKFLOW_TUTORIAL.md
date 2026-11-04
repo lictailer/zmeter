@@ -205,7 +205,7 @@ Use a table like:
 | Task | Read first | Then inspect |
 | --- | --- | --- |
 | Change scan traversal | `scan_engine.md` | `core/scan.py`, `core/scan_logic.py` |
-| Add a device | `device_contract.md` | `devices/demoDevice/`, target module |
+| Add a device | `device_contract.md` | `devices/mockDevice/`, target module |
 | Change save/load | `data_format.md` | `core/scan.py`, loaders/tests |
 | Change hardware limits | `hardware_safety.md` | device logic/hardware, range config |
 | Change environment | `environment_windows.md` | environment YAML files |
@@ -269,9 +269,8 @@ Describe the contract for a device module:
 - minimum mock/unit/GUI/hardware tests;
 - checklist for registering a device in a lab profile.
 
-Use `devices/mockDevice` as the preferred executable reference. Treat
-`devices/demoDevice` as a historical/template reference until its instructions
-are reconciled with current code.
+Use `devices/mockDevice` as the executable reference. The retired `demoDevice`
+template is archived under `archive/legacy-devices/` and is historical only.
 
 ### `documents/testing.md`
 

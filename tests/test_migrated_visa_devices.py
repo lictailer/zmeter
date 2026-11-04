@@ -3,12 +3,11 @@ from __future__ import annotations
 import unittest
 
 from core.shared_runtime.visa import VisaRuntime
-from devices.demoDevice.demoDevice_hardware import DemoDeviceHardware
-from devices.demoDevice.dummy_visa import DummyResourceManager
 from devices.hp34401a.hp34401a_hardware import HP34401A_Hardware
 from devices.keithley24xx.keithley24xx_hardware import Keithly24xxHardware
 from devices.sr830.sr830_hardware import SR830_Hardware
 from devices.sr860.sr860_hardware import SR860_Hardware
+from tests.fixtures.dummy_visa import DummyResourceManager, DummyVisaHardware
 
 
 class FakeInstrument:
@@ -81,10 +80,10 @@ class MigratedVisaDeviceTests(unittest.TestCase):
         runtime.shutdown()
         self.assertEqual(manager.close_calls, 1)
 
-    def test_demo_device_uses_injected_fake_without_global_patch(self):
+    def test_dummy_visa_fixture_uses_injected_fake_without_global_patch(self):
         runtime = VisaRuntime(manager_factory=DummyResourceManager)
-        device = DemoDeviceHardware("DUMMY::INSTR", runtime)
-        self.assertIn("DemoDevice", device.idn())
+        device = DummyVisaHardware("DUMMY::INSTR", runtime)
+        self.assertIn("DummyInstrument", device.idn())
         device.disconnect()
         runtime.shutdown()
 
