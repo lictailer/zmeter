@@ -1,8 +1,9 @@
 """Every module under ``core/`` imports in a fresh interpreter.
 
 The imports run in a child process so that nothing the test runner or other
-tests imported earlier can hide a missing import. Importing a module does not
-construct devices or touch hardware.
+tests imported earlier can hide a missing import. The child hides
+``HIDDEN_MODULES`` first, so the test also fails on a PC that has them
+installed. Importing a module does not construct devices or touch hardware.
 """
 
 import json
@@ -13,6 +14,26 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# No core module may need these at import time: tkinter, python-pptx and PIL
+# are no longer used by core, pywin32 is Windows-only and imported only when a
+# slide is appended, and the optional vendor libraries load on first use.
+HIDDEN_MODULES = (
+    "tkinter",
+    "pptx",
+    "PIL",
+    "win32com",
+    "pythoncom",
+    "openai",
+    "cv2",
+    "pylablib",
+    "zhinst",
+    "skimage",
+    "PyDAQmx",
+    "nidaqmx",
+    "clr",
+    "sshtunnel",
+)
 
 
 def _core_modules():
@@ -48,7 +69,9 @@ def _run_child(code):
 
 
 _IMPORT_ALL = """
-import importlib, json, traceback
+import importlib, json, sys, traceback
+for hidden in %r:
+    sys.modules[hidden] = None  # import of a hidden module raises ImportError
 failures = {}
 for name in %r:
     try:
@@ -75,7 +98,7 @@ class CoreImportTests(unittest.TestCase):
         self.assertIn("core.device_management.registry", modules)
 
     def test_every_core_module_imports_in_a_fresh_process(self):
-        failures = _run_child(_IMPORT_ALL % (_core_modules(),))
+        failures = _run_child(_IMPORT_ALL % (HIDDEN_MODULES, _core_modules()))
         self.assertEqual(
             failures,
             {},

@@ -133,5 +133,5 @@ condition in the same pull request that introduces it.
 - Persistence: round trips on old files for every format change; old files stay
   readable.
 - User-executed hardware bench: required before each phase switches its default.
-  An agent bench test on the test PC (see `documents/hardware_safety.md`, when
-  that section exists) never replaces it.
+  An agent bench test on the test PC ("Agent bench tests on the test PC" in
+  `documents/hardware_safety.md`) never replaces it.
