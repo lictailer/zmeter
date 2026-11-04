@@ -2665,43 +2665,78 @@ class MainWindow(QtWidgets.QWidget):
         if self._is_nan_value(val):
             return False
 
-        for label, setters in self.setter_equipment_info_for_scanning.items():
-            # exact prefix match: label followed by an underscore
-            if master.startswith(f"{label}_"): #elif
-                variable = self.get_variable(master, label)
-                scan_range_limits = getattr(self, "active_scan_range_limits", {})
-                limits = scan_range_limits.get((label, variable))
-                if limits is not None:
-                    low_limit, high_limit = limits
-                    numeric_val = float(val)
-                    if numeric_val < low_limit or numeric_val > high_limit:
-                        message = (
-                            f"[ScanRange] Denied write '{master}'={numeric_val} "
-                            f"outside [{low_limit}, {high_limit}]."
-                        )
-                        self._log_scan_range("WARNING", message)
-                        self.mark_skip_next_scan_read_from_global_limit()
-                        return False
-                try:
-                    setter = setters[variable]
-                except KeyError:
-                    raise KeyError(
-                        f"Variable '{variable}' not found in equipment '{label}'. "
-                        f"Check your channel name '{master}'."
-                    ) from None
-                result = setter(val)
-                # Only compensated setters report partial failure; a device
-                # setter's return value carries no meaning here.
-                written = not (
-                    label in SHIFT_COMPENSATION_GROUPS and result is False
+        label = self._setter_label_for_channel(master)
+        if label is None:
+            raise KeyError(f"No equipment found that matches channel '{master}'.")
+        setters = self.setter_equipment_info_for_scanning[label]
+        variable = self.get_variable(master, label)
+        scan_range_limits = getattr(self, "active_scan_range_limits", {})
+        limits = scan_range_limits.get((label, variable))
+        if limits is not None:
+            low_limit, high_limit = limits
+            numeric_val = float(val)
+            if numeric_val < low_limit or numeric_val > high_limit:
+                message = (
+                    f"[ScanRange] Denied write '{master}'={numeric_val} "
+                    f"outside [{low_limit}, {high_limit}]."
                 )
-                if written:
-                    record = getattr(self, "channel_value_record", None)
-                    if record is not None:
-                        record.record_write(master, val)
-                return written
+                self._log_scan_range("WARNING", message)
+                self.mark_skip_next_scan_read_from_global_limit()
+                return False
+        try:
+            setter = setters[variable]
+        except KeyError:
+            raise KeyError(
+                f"Variable '{variable}' not found in equipment '{label}'. "
+                f"Check your channel name '{master}'."
+            ) from None
+        result = setter(val)
+        # Only compensated setters report partial failure; a device
+        # setter's return value carries no meaning here.
+        written = not (
+            label in SHIFT_COMPENSATION_GROUPS and result is False
+        )
+        if written:
+            record = getattr(self, "channel_value_record", None)
+            if record is not None:
+                record.record_write(master, val)
+        return written
 
-        raise KeyError(f"No equipment found that matches channel '{master}'.")
+    def _setter_label_for_channel(self, channel):
+        """Device label of a writable channel, as ``write_info`` resolves it.
+
+        The first label in ``setter_equipment_info_for_scanning`` that the
+        channel starts with, followed by an underscore; None when none does.
+        """
+        for label in self.setter_equipment_info_for_scanning:
+            if channel.startswith(f"{label}_"):
+                return label
+        return None
+
+    def channels_without_scan_limit(self, channels):
+        """Physical channels in ``channels`` that have no active scan limit.
+
+        Labels are resolved like ``write_info`` does.  Channels that are not
+        physical device channels are skipped: the built-in ``default_*``
+        setters, artificial channels and Shift Compensation channels; the
+        physical writes they cause go through ``write_info`` and are what the
+        limits apply to.  Channels missing from the catalog are skipped too
+        (the scan reports those itself).  Each channel is listed once, in the
+        order given.
+        """
+        virtual_labels = {"default", "artificial_channel", *SHIFT_COMPENSATION_GROUPS}
+        limits = getattr(self, "active_scan_range_limits", {})
+        missing = []
+        for channel in dict.fromkeys(channels):
+            label = self._setter_label_for_channel(channel)
+            if label is None or label in virtual_labels:
+                continue
+            variable = self.get_variable(channel, label)
+            if variable not in self.setter_equipment_info_for_scanning[label]:
+                continue
+            if (label, variable) not in limits:
+                missing.append(channel)
+        return missing
 
     def _is_nan_value(self, value) -> bool:
         try:

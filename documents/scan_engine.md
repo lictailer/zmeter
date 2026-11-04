@@ -93,7 +93,7 @@ Do not assume a vendor transport is thread-safe. If a device can also be used by
 
 ## Limits and skipped points
 
-`MainWindow.write_info()` rejects configured values outside `scan_range_limits.json`, does not call the setter, and marks the next scan read as skipped. Artificial-channel logic may also reject a transformed/ramped point. Rejected measurements are stored as `NaN`; the two skip flags are reset at scan start and cleanup.
+`MainWindow.write_info()` rejects configured values outside `scan_range_limits.json`, does not call the setter, and marks the next scan read as skipped. When a scan starts, before device preparation, `Scan` logs one warning in its run log (and so in the saved `scan_log`) naming every physical channel the scan writes (level setters and manual before/after sets) that has no active scan limit, for example `[ScanRange] No scan limit for nidaq_0_AO0, nidaq_0_AO1; these writes are not range-checked.` `MainWindow.channels_without_scan_limit()` resolves labels with the same prefix rule as `write_info()` and skips `default_*`, artificial and Shift Compensation channels. It is a warning only; writes are unchanged. In v2 such a scan will refuse to start (ADR 003). Artificial-channel logic may also reject a transformed/ramped point. Rejected measurements are stored as `NaN`; the two skip flags are reset at scan start and cleanup.
 
 Changing rejection or artificial-pair behavior requires focused tests for writes not performed, recursion choice, retained target/current state, `NaN` placement, force-stop propagation, and next-point recovery.
 

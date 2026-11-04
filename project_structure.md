@@ -29,7 +29,7 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `device_config.xlsx` | Default Excel-only device configuration beside the launcher |
 | `core/device_management/` | Immutable configuration models, Excel validation, reviewed lazy registration adapters for every driver including the mock (`registrations.py`; the core `registry.py` never imports `devices`), generation/call gates, session-only runtime mutation, device ownership, truthful scan-lifecycle completion, and lifecycle reports |
 | `core/device_catalog.py` | Immutable rebuilt channel/catalog snapshots and typed refusal errors |
-| `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks, scan coordination, and shutdown barrier |
+| `core/mainWindow.py` | App UI, two-phase catalog acknowledgement, dynamic device controls, routing, logged range checks and the scan-start list of written channels without a scan limit, scan coordination, and shutdown barrier |
 | `core/scanlist.py` | Available/queue/manual/past item widgets, queue orchestration, per-item manual-set workers, UI state transitions, and runtime-mutation seals |
 | `core/queue_files.py`, `core/channel_check.py` | Saved-queue folders (`queue.json` plus scan setting files); hardware-free lookup and replacement of scan/queue channels missing from the device catalog, and the queue pre-start level checks |
 | `core/queue_model.py` | Thread-safe live queue entries with stable IDs, ordered pending mutations, current-item ownership, and atomic run completion |

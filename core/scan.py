@@ -1487,6 +1487,7 @@ class Scan(QtWidgets.QWidget):
             device_ids = self._capture_participating_device_ids()
             self.update_alllevel_setting_array()
             scan_config = {"levels": copy.deepcopy(self.info["levels"])}
+            self._warn_channels_without_scan_limit(scan_config["levels"])
             self._start_boundary_job(
                 lambda: self._prepare_devices(device_ids, scan_config),
                 self._complete_scan_preparation,
@@ -1498,6 +1499,36 @@ class Scan(QtWidgets.QWidget):
             self._set_scan_configuration_locked(False)
             self._release_runtime_activity_reservation()
             raise
+
+    # Written channel references: level setters and manual sets (not plots).
+    _WRITTEN_REFERENCE_KINDS = ("setter", "manual_set_before", "manual_set_after")
+
+    def _warn_channels_without_scan_limit(self, levels):
+        """Log once which written channels have no scan limit.  Never raises.
+
+        Warning only: writes are unchanged.  In v2 a scan that writes a
+        channel without a scan limit will refuse to start (ADR 003).
+        """
+        check = getattr(self.main_window, "channels_without_scan_limit", None)
+        if not callable(check):
+            return
+        try:
+            written = [
+                reference.channel
+                for reference in self.channel_references_from_models(levels, {})
+                if reference.kind in self._WRITTEN_REFERENCE_KINDS
+            ]
+            missing = [str(channel) for channel in check(written)]
+        except Exception as exc:
+            self._log_warning(
+                f"[ScanRange] Scan-limit check failed: {type(exc).__name__}: {exc}"
+            )
+            return
+        if missing:
+            self._log_warning(
+                f"[ScanRange] No scan limit for {', '.join(missing)}; "
+                "these writes are not range-checked."
+            )
 
     def _prepare_devices(self, device_ids, scan_config):
         phase = "device"

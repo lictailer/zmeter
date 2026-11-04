@@ -46,7 +46,7 @@ Reports label the evidence "agent-executed bench test (test PC, no sample)". It 
 ## Ranges, units, and configuration
 
 - Device logic/hardware must validate finite values, units, device limits, and experiment/profile limits before an operation.
-- Repository-wide scan limits are loaded from `scan_range_limits.json` and keyed by registered device label plus channel. Device-specific physical limits remain in device configuration/README and must not be weakened by a broader global limit.
+- Repository-wide scan limits are loaded from `scan_range_limits.json` and keyed by registered device label plus channel. Device-specific physical limits remain in device configuration/README and must not be weakened by a broader global limit. A scan that writes a physical channel without a scan limit logs one `[ScanRange] No scan limit for ...` warning at start and still runs; see `scan_engine.md`.
 - A missing, mismatched, or uncertain label/channel/unit is a configuration error; fail safely rather than guessing.
 - Keep addresses, serials, enabled devices, calibration, and lab-specific limits outside shared core logic.
 
