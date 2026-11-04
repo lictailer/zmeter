@@ -35,13 +35,13 @@ dependencies:
   - pip
 
   # --- Optional vendor libraries (cross-platform packages) ---
-  - nidaqmx-python >=1.4,<2  # nidaq / ni6423 (NI-DAQmx driver installed separately)
+  - nidaqmx-python >=1.4,<2  # ni6423 (NI-DAQmx driver installed separately)
   - scikit-image >=0.26,<1   # auto_position
   - sshtunnel >=0.4,<1       # opticool / remote tunnels
 
   # --- Windows only (not installable on Linux): uncomment on a lab PC ---
   # - pywin32 =311            # PowerPoint log (win32com) and COM helpers
-  # - pydaqmx =1.4.7          # legacy NI path used by nidaq / ni6423
+  # - pydaqmx =1.4.7          # nidaq (PyDAQmx; NI-DAQmx driver installed separately)
 
   # --- pip packages (keep a single `pip:` entry; uncomment what you need) ---
   - pip:

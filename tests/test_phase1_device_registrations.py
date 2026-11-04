@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from core.device_management.config import load_profile
 from core.device_management.models import ChannelFilters, DeviceConfig
 from core.device_management.registry import (
     DriverAdapter,
     DriverUnavailableError,
     build_default_registry,
 )
+from tests.excel_config_fixture import write_test_device_config
 
 
 PHASE1_DRIVER_IDS = (
@@ -178,6 +181,30 @@ print("phase1 registry remained lazy")
             ):
                 registry.create(config, object())
         import_device.assert_not_called()
+
+    def test_workbook_with_demo_device_rows_still_loads(self):
+        # Lab workbooks may still name the archived driver; the profile loads
+        # and only an enabled demo_device row is refused when constructed.
+        registry = build_default_registry()
+        with tempfile.TemporaryDirectory() as root:
+            path = write_test_device_config(
+                Path(root) / "old_lab.xlsx",
+                rows=(
+                    {"id": "mock_1", "driver": "mock_device", "enabled": True},
+                    {"id": "demo_off", "driver": "demo_device", "address": "DUMMY::INSTR"},
+                    {"id": "demo_on", "driver": "demo_device", "enabled": True,
+                     "address": "DUMMY::INSTR"},
+                ),
+            )
+            profile = load_profile(
+                path, driver_specs=registry.config_specs, repository_root=root
+            )
+
+        devices = {device.id: device for device in profile.devices}
+        self.assertEqual(list(devices), ["mock_1", "demo_off", "demo_on"])
+        self.assertFalse(devices["demo_off"].enabled)
+        with self.assertRaisesRegex(DriverUnavailableError, "demoDevice was archived"):
+            registry.create(devices["demo_on"], object())
 
     def test_all_phase1_schemas_use_one_optional_address(self):
         registry = build_default_registry()

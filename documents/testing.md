@@ -113,7 +113,7 @@ python -B -m unittest tests.test_core_imports -v
 ```
 
 - Hardware: none; child interpreters import modules only (offscreen Qt), and no device is constructed.
-- Proves: every module under `core/` imports in a fresh interpreter without `tkinter`, `python-pptx`, or `pywin32` (PowerPoint COM is imported only when a slide is appended); `core/scan_info.py` holds only the `ScanInfo` template and loads neither Qt nor pyqtgraph; importing `core.all_plots` or `core.mainWindow` sets pyqtgraph's row-major image order.
+- Proves: every module under `core/` imports in a fresh interpreter with `tkinter`, `python-pptx`, `PIL`, `pywin32` and the optional vendor libraries hidden, so the check also holds on a PC that has them installed (PowerPoint COM is imported only when a slide is appended); `core/scan_info.py` holds only the `ScanInfo` template and loads neither Qt nor pyqtgraph; importing `core.all_plots` or `core.mainWindow` sets pyqtgraph's row-major image order.
 
 ### Scan-finished hook tests
 
