@@ -231,8 +231,8 @@ class ScanItem(QtWidgets.QLabel):
             self._run_queued_scan()
         finally:
             # Finalization has used the mark (or the start failed); a later
-            # manual run of this scan sends its own Slack message again.
-            self.scan._slack_queue_run = False
+            # manual run of this scan is no queue run.
+            self.scan._queue_run = False
 
     def _run_queued_scan(self):
         # Use the same flow as pressing the Scan button, then block until done
@@ -272,8 +272,8 @@ class ScanItem(QtWidgets.QLabel):
     @QtCore.pyqtSlot()
     def _start_scan_from_queue(self):
         self.set_queue_state(QueueItemState.CURRENT)
-        # The queue sends one Slack message at its end instead.
-        self.scan._slack_queue_run = True
+        # Scan-finished hooks see a queue run (Slack reports at the queue end).
+        self.scan._queue_run = True
         scan_list = getattr(getattr(self, "main_window", None), "scanlist", None)
         if bool(getattr(scan_list, "_shutdown_sealed", False)) or bool(
             getattr(self.scan, "_shutdown_requested", False)

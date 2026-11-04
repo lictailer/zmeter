@@ -27,6 +27,7 @@ from .device_management import (
 )
 
 from .plot_config import configure_pyqtgraph
+from .scan_hooks import ScanHooks
 from .scan_info import ScanInfo
 from .scanlist import (
     ScanList,
@@ -41,6 +42,7 @@ from .scan_range_main import ScanRangeWindow
 from .setup_capture.controller import SetupCaptureController
 from .setup_capture.widgets import SetupCaptureDialog
 from .slack_notify.notifier import SlackNotifier
+from .slack_notify.scan_hook import register_slack_scan_hook
 from .slack_notify.settings import SlackTokenStore
 from .slack_notify.widgets import SlackPanel
 from .channel_value_record import ChannelValueRecord
@@ -208,8 +210,11 @@ class MainWindow(QtWidgets.QWidget):
         # read_info (and the scan setup snapshots).
         self.channel_value_record = ChannelValueRecord()
 
+        # Called after every finished scan; Slack is the first hook.
+        self.scan_hooks = ScanHooks()
         # Slack messages; the default_slack_notification setter needs it.
         self.slack_notifier = SlackNotifier(log=self.log_system_message, parent=self)
+        register_slack_scan_hook(self.scan_hooks, self.slack_notifier)
 
         self.make_equipment_info()
         self.setup_default_channel_info()

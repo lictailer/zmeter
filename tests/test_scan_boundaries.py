@@ -19,7 +19,9 @@ from core.scan import (
     _ScanOutputSnapshot,
     _persist_scan_outputs,
 )
+from core.scan_hooks import ScanHooks
 from core.scan_info import ScanInfo
+from core.slack_notify.scan_hook import register_slack_scan_hook
 from devices.mfli.MFLI_logic import MFLILogic
 
 
@@ -225,6 +227,82 @@ class ScanBoundaryTests(unittest.TestCase):
         self.assertEqual(self.main_window.reservations[0].release_count, 1)
         self.assertNotIn("Scan boundary timing", self.scan.logStatus_textEdit.toPlainText())
 
+    def _use_slack(self, notifier):
+        self.main_window.scan_hooks = ScanHooks()
+        register_slack_scan_hook(self.main_window.scan_hooks, notifier)
+
+    def _finalize_with_hooks(self, *, json_path=None, stop_reason=None):
+        self.scan._acquire_runtime_activity_reservation()
+        self.scan._outputs_finalized = False
+        self.scan._finalize_outputs_scheduled = True
+        self.scan._set_scan_state("finalizing")
+        self.scan._run_stop_reason = stop_reason
+        self.scan._build_output_snapshot = lambda: None
+        self.scan._restore_and_persist = lambda _snapshot: _OutputJobResult(
+            messages=(), timings=(), json_path=json_path
+        )
+        self.scan._finalize_scan_outputs()
+        self.assertTrue(self._wait_until(lambda: self.scan.outputs_finalized))
+
+    def test_failing_hook_is_logged_and_later_hooks_still_run(self):
+        hooks = ScanHooks()
+        events = []
+
+        def broken(_event):
+            raise RuntimeError("hook exploded")
+
+        hooks.register_scan_finished(broken, name="broken")
+        hooks.register_scan_finished(events.append, name="recorder")
+        self.main_window.scan_hooks = hooks
+
+        self._finalize_with_hooks(json_path="C:/data/0000_boundary.json")
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].json_path, "C:/data/0000_boundary.json")
+        self.assertEqual(self.scan.scan_state, "idle")
+        self.assertEqual(self.main_window.reservations[0].release_count, 1)
+        self.assertIn(
+            "Scan-finished hook 'broken' failed: RuntimeError: hook exploded",
+            self.scan.logStatus_textEdit.toPlainText(),
+        )
+
+    def test_no_plot_screenshot_when_no_hook_wants_one(self):
+        events = []
+        hooks = ScanHooks()
+        hooks.register_scan_finished(events.append, wants_plot_png=lambda: False)
+        hooks.register_scan_finished(events.append)
+        self.main_window.scan_hooks = hooks
+        self.scan._capture_plot_png = mock.Mock(return_value=b"png")
+
+        self._finalize_with_hooks()
+
+        self.scan._capture_plot_png.assert_not_called()
+        self.assertEqual([event.plot_png for event in events], [None, None])
+
+    def test_plot_screenshot_captured_when_a_hook_wants_it(self):
+        events = []
+        hooks = ScanHooks()
+        hooks.register_scan_finished(events.append, wants_plot_png=lambda: True)
+        self.main_window.scan_hooks = hooks
+        self.scan._capture_plot_png = mock.Mock(return_value=b"png")
+
+        self._finalize_with_hooks()
+
+        self.scan._capture_plot_png.assert_called_once_with()
+        self.assertEqual(events[0].plot_png, b"png")
+
+    def test_stopped_for_restart_emits_nothing(self):
+        events = []
+        hooks = ScanHooks()
+        hooks.register_scan_finished(events.append)
+        self.main_window.scan_hooks = hooks
+        self.scan._queue_run = True
+
+        self._finalize_with_hooks(stop_reason="restart_requested")
+
+        self.assertEqual(events, [])
+        self.assertFalse(self.scan._queue_run)
+
     def test_finalization_hands_scan_to_slack_before_outputs_finalized(self):
         calls = []
         notifier = SimpleNamespace(
@@ -233,7 +311,7 @@ class ScanBoundaryTests(unittest.TestCase):
                 (kwargs, self.scan.outputs_finalized)
             ),
         )
-        self.main_window.slack_notifier = notifier
+        self._use_slack(notifier)
         self.main_window.scanlist.serial.setValue(7)
         self.logic.completed_points, self.logic.total_points = 3, 4
         self.scan._acquire_runtime_activity_reservation()
@@ -241,7 +319,7 @@ class ScanBoundaryTests(unittest.TestCase):
         self.scan._finalize_outputs_scheduled = True
         self.scan._set_scan_state("finalizing")
         self.scan._run_stop_reason = "user_stop"
-        self.scan._slack_queue_run = True
+        self.scan._queue_run = True
         self.scan._build_output_snapshot = lambda: None
         self.scan._restore_and_persist = lambda _snapshot: _OutputJobResult(
             messages=(), timings=()
@@ -259,12 +337,14 @@ class ScanBoundaryTests(unittest.TestCase):
         )
         self.assertTrue(kwargs["queue_run"])
         self.assertIsNone(kwargs["png"])  # no plots in this scan
-        self.assertFalse(self.scan._slack_queue_run)
+        self.assertFalse(self.scan._queue_run)
 
     def test_finalization_with_slack_off_sends_nothing(self):
         calls = []
-        self.main_window.slack_notifier = SimpleNamespace(
-            active=False, scan_finished=lambda **kwargs: calls.append(kwargs)
+        self._use_slack(
+            SimpleNamespace(
+                active=False, scan_finished=lambda **kwargs: calls.append(kwargs)
+            )
         )
         self.scan._acquire_runtime_activity_reservation()
         self.scan._outputs_finalized = False

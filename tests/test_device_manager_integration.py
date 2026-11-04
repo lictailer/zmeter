@@ -156,6 +156,12 @@ class DeviceManagerMainWindowTests(unittest.TestCase):
         )
         self.assertTrue(self.window.slack_notifier._outbox.empty())
 
+    def test_slack_is_registered_as_scan_finished_hook(self):
+        hooks = self.window.scan_hooks
+        self.assertTrue(hooks.has_scan_finished_hooks)
+        # Slack is off, so nobody wants the plot screenshot.
+        self.assertFalse(hooks.wants_plot_png(self.fail))
+
     def test_profile_filter_silently_skips_unknown_channels_end_to_end(self):
         filtered_config = replace(
             self.profile.devices[0],
