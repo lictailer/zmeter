@@ -23,6 +23,7 @@ import re
 import shutil
 
 from .scan import _write_json_payload, read_scan_file
+from .scan_file_info import stamp_scan_payload
 
 QUEUE_FILE = "queue.json"
 QUEUE_FORMAT = "zmeter_queue"
@@ -55,7 +56,7 @@ def save_queue(folder, items):
         entries = []
         for position, item in enumerate(items, start=1):
             if "scan" in item:
-                payload = item["scan"]
+                payload = stamp_scan_payload(item["scan"])
                 file_name = f"{position:0{width}d}_{_file_stem(payload.get('name'))}.json"
                 _write_json_payload(os.path.join(temporary, file_name), payload)
                 entries.append({"scan": file_name})

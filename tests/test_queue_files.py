@@ -110,6 +110,9 @@ class QueueFileTests(unittest.TestCase):
         )
         # Each scan file is a plain scan setting file.
         alone = read_scan_file(folder / "01_gate sweep.json")
+        self.assertEqual(alone["format_version"], 2)
+        self.assertIn("source", alone["software"])
+        self.assertNotIn("format_version", queue)
         self.assertEqual(alone["name"], "gate sweep")
         self.assertEqual(alone["comments"], "first")
         self.assertEqual(alone["data"], {})

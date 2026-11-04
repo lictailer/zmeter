@@ -17,6 +17,7 @@ from PyQt6 import QtWidgets
 
 from core.mainWindow import MainWindow
 from core.scan import Scan
+from core.scan_file_info import SCAN_FORMAT_VERSION, software_info
 from core.scan_info import ScanInfo
 
 
@@ -147,6 +148,8 @@ class ScanPersistenceCompatibilityTests(unittest.TestCase):
         self.assertEqual(
             list(saved),
             [
+                "format_version",
+                "software",
                 "levels",
                 "data",
                 "plots",
@@ -156,6 +159,9 @@ class ScanPersistenceCompatibilityTests(unittest.TestCase):
                 "scan_log",
             ],
         )
+        self.assertEqual(saved["format_version"], SCAN_FORMAT_VERSION)
+        self.assertEqual(saved["software"], software_info())
+        self.assertNotIn("format_version", self.scan.info)
         self.assertEqual(saved["name"], "scalar_probe")
         self.assertEqual(saved["comments"], "gate-f scalar comment")
         self.assertEqual(saved["scan_log"], ["baseline scalar log"])
@@ -245,6 +251,8 @@ class ScanPersistenceCompatibilityTests(unittest.TestCase):
             list((application_data / "ZMeter" / "recovery").glob("*.tmp"))
         )
         recovered = json.loads(recovery_files[-1].read_text(encoding="utf-8"))
+        self.assertEqual(recovered["format_version"], SCAN_FORMAT_VERSION)
+        self.assertEqual(recovered["software"], software_info())
         self.assertEqual(recovered["name"], "recovery probe")
         self.assertEqual(recovered["data"]["result"][0], 2.5)
         self.assertTrue(math.isnan(recovered["data"]["result"][1]))
@@ -339,6 +347,8 @@ class ScanPersistenceCompatibilityTests(unittest.TestCase):
             self.scan.auto_backup(True)
         self.assertEqual(blocked.z_checks, [])
         first = json.loads(autosave_path.read_text(encoding="utf-8"))
+        self.assertEqual(first["format_version"], SCAN_FORMAT_VERSION)
+        self.assertEqual(first["software"], software_info())
         self.assertEqual(first["comments"], "autosave first")
         self.assertEqual(first["data"]["level0_result"][0], 3.5)
         self.assertTrue(math.isnan(first["data"]["level0_result"][1]))

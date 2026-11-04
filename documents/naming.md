@@ -45,6 +45,7 @@ Code and tests remain authoritative for what the current application does.
    phase 2, scan window in phase 3). The old name is shown as a hint during the
    transition.
 5. **Keys in scan files** (`setter0`, `getter0`, `setting_array`, ...) change
-   last: in phase 4, together with `format_version: 2`. Readers accept both
-   versions, and the scan planner skill is updated at the same time. Old files
-   stay readable.
+   last: in phase 4, together with `format_version: 3` (2 is already used by
+   v1.0-beta.5 files; see ADR 003). Readers accept every older version, and
+   the scan planner skill is updated at the same time. Old files stay
+   readable.

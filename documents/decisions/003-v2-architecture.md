@@ -62,9 +62,12 @@ other repository documents and agents must follow.
    device without device limits refuses to connect and a scan that writes a
    channel without a scan limit refuses to start.
 5. **Persisted formats carry `format_version`.** Scan JSON gets
-   `format_version: 1` and `software` in phase 0. A missing value is read as 1.
-   Key renames in files happen once, together with `format_version: 2`; readers
-   accept both versions and old files stay readable.
+   `format_version` and `software` in phase 0. A missing value is read as 1.
+   The phase 0 value is 2, not 1: v1.0-beta.5 already writes
+   `format_version: 2` into scans that ran (setup capture), so lab files with
+   2 exist. Key renames in files happen once, together with
+   `format_version: 3`; readers accept every older version and old files stay
+   readable.
 6. **Naming.** `documents/naming.md` is the naming reference. New code uses the
    new names; old names are replaced in stages and persisted keys change last.
 7. **English only.** Everything committed to the repository (code, comments,
