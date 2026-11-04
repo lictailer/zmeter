@@ -188,6 +188,39 @@ class ScanBoundaryTests(unittest.TestCase):
         self.assertIsInstance(self.scan._last_start_error, RuntimeError)
         self.assertEqual(self.main_window.reservations[0].release_count, 1)
 
+    def test_missing_scan_limit_warning_is_logged_before_device_preparation(self):
+        self._participants(("nidaq_0",))
+        self.scan.info["levels"]["level0"]["manual_set_before"] = [
+            {"keithley_0_voltage": 0.0}
+        ]
+        checked = []
+
+        def channels_without_scan_limit(channels):
+            checked.append(list(channels))
+            return [channel for channel in channels if channel == "keithley_0_voltage"]
+
+        self.main_window.channels_without_scan_limit = channels_without_scan_limit
+        log_at_prepare = []
+        self.main_window.stop_callback = lambda _ids: log_at_prepare.append(
+            list(self.scan.info["scan_log"])
+        )
+
+        self.assertTrue(self.scan._start_scan_now())
+        self.assertTrue(self._wait_until(lambda: self.logic.started))
+
+        self.assertEqual(len(checked), 1)
+        self.assertIn("nidaq_0_AO0", checked[0])
+        self.assertIn("keithley_0_voltage", checked[0])
+        self.assertNotIn("nidaq_0_AI0", checked[0])
+        line = (
+            "[ScanRange] No scan limit for keithley_0_voltage; "
+            "these writes are not range-checked."
+        )
+        self.assertEqual(
+            sum(line in entry for entry in self.scan.info["scan_log"]), 1
+        )
+        self.assertTrue(any(line in entry for entry in log_at_prepare[0]))
+
     def test_slow_restore_and_output_keep_finalizing_and_gui_responsive(self):
         self._participants(("device-a",))
         self.scan._acquire_runtime_activity_reservation()

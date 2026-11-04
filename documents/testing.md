@@ -150,6 +150,18 @@ ordering, comments/logs, collision naming, serial discovery, canonical
 `autosave.json` replacement, disabled backup behavior, and intercepted
 PowerPoint/COM/`Z:\` paths. All files are confined to an OS temporary directory.
 
+The missing scan-limit warning has its own suite (fake catalogs, no device):
+
+```powershell
+python -B -m unittest -v tests.test_scan_limit_warning
+```
+
+It covers which written channels are listed (physical only, once each, in
+order, with the `write_info` label rule), the skipped virtual and unknown
+channels, that getters are not checked, the log line, and that a failing check
+never blocks a scan start. `tests.test_scan_boundaries` checks that the line is
+in the scan log before device preparation runs.
+
 Array getters and the Andor port have their own offscreen suites:
 
 ```powershell
