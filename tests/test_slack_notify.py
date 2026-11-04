@@ -570,25 +570,34 @@ class ScanAndQueueHookTests(unittest.TestCase):
     def setUp(self):
         app()
 
+    @staticmethod
+    def _hooks(notifier):
+        from core.scan_hooks import ScanHooks
+        from core.slack_notify.scan_hook import register_slack_scan_hook
+
+        hooks = ScanHooks()
+        register_slack_scan_hook(hooks, notifier)
+        return hooks
+
     def _scan(self, notifier, *, finish="completed", queue_run=False, error=None):
         from core.scan import Scan
 
         fake = SimpleNamespace(
-            main_window=SimpleNamespace(slack_notifier=notifier),
-            _slack_result={
+            main_window=SimpleNamespace(scan_hooks=self._hooks(notifier)),
+            _finish_context={
                 "name": "0123_gate_map",
                 "elapsed_seconds": 10,
                 "completed_points": 4,
                 "total_points": 4,
-                "png": b"png",
+                "plot_png": b"png",
             },
-            _slack_queue_run=queue_run,
+            _queue_run=queue_run,
             _run_error_message=error,
             _get_finish_status=lambda: finish,
             _log_warning=lambda message: None,
         )
-        fake._slack_notifier = lambda: Scan._slack_notifier(fake)
-        Scan._send_slack_scan_result(fake)
+        fake._scan_hooks = lambda: Scan._scan_hooks(fake)
+        Scan._emit_scan_finished(fake, "C:/data/0123_gate_map.json")
         return fake
 
     def test_scan_end_statuses(self):
@@ -603,7 +612,9 @@ class ScanAndQueueHookTests(unittest.TestCase):
             kwargs = notifier.scan_finished.call_args.kwargs
             self.assertEqual(kwargs["status"], status)
             self.assertEqual(kwargs["queue_run"], False)
-            self.assertIsNone(fake._slack_result)
+            self.assertEqual(kwargs["png"], b"png")
+            self.assertEqual(kwargs["name"], "0123_gate_map")
+            self.assertIsNone(fake._finish_context)
 
     def test_restart_stop_and_queue_run(self):
         notifier = mock.Mock()
@@ -611,21 +622,31 @@ class ScanAndQueueHookTests(unittest.TestCase):
         notifier.scan_finished.assert_not_called()
         fake = self._scan(notifier, queue_run=True)
         self.assertTrue(notifier.scan_finished.call_args.kwargs["queue_run"])
-        self.assertFalse(fake._slack_queue_run)
+        self.assertFalse(fake._queue_run)
 
-    def test_scan_end_with_slack_off_does_nothing(self):
+    def test_scan_end_without_finish_context_does_nothing(self):
         notifier = mock.Mock()
         from core.scan import Scan
 
         fake = SimpleNamespace(
-            main_window=SimpleNamespace(slack_notifier=notifier),
-            _slack_result=None,
-            _slack_queue_run=True,
+            main_window=SimpleNamespace(scan_hooks=self._hooks(notifier)),
+            _finish_context=None,
+            _queue_run=True,
         )
-        fake._slack_notifier = lambda: notifier
-        Scan._send_slack_scan_result(fake)
+        fake._scan_hooks = lambda: Scan._scan_hooks(fake)
+        Scan._emit_scan_finished(fake)
         notifier.scan_finished.assert_not_called()
-        self.assertFalse(fake._slack_queue_run)
+        self.assertFalse(fake._queue_run)
+
+    def test_slack_hook_skips_the_notifier_while_slack_is_off(self):
+        # Also for a queue run: the queue-end message keeps no scan result.
+        notifier = mock.Mock(active=False)
+        self._scan(notifier, queue_run=True)
+        notifier.scan_finished.assert_not_called()
+        hooks = self._hooks(notifier)
+        self.assertFalse(hooks.wants_plot_png(lambda message: None))
+        notifier.active = True
+        self.assertTrue(hooks.wants_plot_png(lambda message: None))
 
     def test_queue_counts_items_and_failures(self):
         from core.scanlist import ManualSetItem, ScanList

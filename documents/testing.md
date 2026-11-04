@@ -115,6 +115,15 @@ python -B -m unittest tests.test_core_imports -v
 - Hardware: none; child interpreters import modules only (offscreen Qt), and no device is constructed.
 - Proves: every module under `core/` imports in a fresh interpreter without `tkinter`, `python-pptx`, or `pywin32` (PowerPoint COM is imported only when a slide is appended); `core/scan_info.py` holds only the `ScanInfo` template and loads neither Qt nor pyqtgraph; importing `core.all_plots` or `core.mainWindow` sets pyqtgraph's row-major image order.
 
+### Scan-finished hook tests
+
+```powershell
+python -B -m unittest -v tests.test_scan_hooks tests.test_scan_boundaries tests.test_slack_notify
+```
+
+- Hardware: none; offscreen Qt, a fake main window and a fake or inactive Slack notifier (no network).
+- Proves: hooks run in order and a failing hook is a warning while later hooks, device restore and the queue are unaffected; the plot screenshot is captured only when a hook wants it; nothing is emitted for a scan stopped for restart; the hooks run before the scan is marked finalized; the Slack hook reports status, points, queue run and screenshot as before and skips the notifier while Slack is off.
+
 ### Mock-device tests
 
 ```powershell
