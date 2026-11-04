@@ -191,9 +191,10 @@ It should contain:
 8. Links to the documentation index and testing guide.
 9. A short troubleshooting section.
 
-The maintained exported environment is `zmeter_May2026_environment.yml`. Do not
-document a generic `environment.yml` unless that file is deliberately introduced
-and its migration is reviewed.
+The deployment environment is the exported `zmeter_Sept2026_environment.yml`; the
+readable list of direct dependencies is `environment-dev.yml`. Do not document or
+add a generic root `environment.yml`: the release workflow requires exactly one
+root file matching `*environment.yml`.
 
 ## 5. Documentation index: `documents/README.md`
 

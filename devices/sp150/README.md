@@ -8,7 +8,7 @@ It is registered under driver ID `sp150` with one optional text `address`. The a
 
 ## Dependencies and configuration
 
-- Python: PyQt6 and PyVISA from `zmeter_May2026_environment.yml`;
+- Python: PyQt6 and PyVISA from `zmeter_Sept2026_environment.yml`;
 - system: NI-VISA or another compatible VISA implementation plus the correct GPIB/USB adapter driver;
 - configuration: the exact VISA resource address, supplied explicitly by the laboratory profile.
 

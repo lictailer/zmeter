@@ -25,10 +25,10 @@ Bench tests live in `tests/bench/` and are named `bench_*.py`, so the standard `
 
 ## Environment
 
-Use the maintained Windows Conda environment:
+Use the maintained Windows Conda environment (`zmeter_Aug2026`, built from `zmeter_Sept2026_environment.yml`). A development or Linux environment for hardware-free tests can be built from `environment-dev.yml`; it does not replace the lab environment.
 
 ```powershell
-conda activate zmeter_May2026
+conda activate zmeter_Aug2026
 python --version
 python -c "import sys; print(sys.executable)"
 ```

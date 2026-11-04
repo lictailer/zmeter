@@ -67,7 +67,8 @@ The checked-in root `device_config.xlsx` workbook supplies the ordered device ro
 | `documents/` | Canonical contracts, current status/readiness, guides, and decisions |
 | `data/` | Default local measurement output; ignored by Git |
 | `scan_range_limits.json` | Default global scan-output limit configuration |
-| `zmeter_Sept2026_environment.yml` | Current Windows Conda environment, including openpyxl, Python.NET, and the pinned optional MFLI Core dependency |
+| `zmeter_Sept2026_environment.yml` | Deployment Windows Conda environment (exact export), including openpyxl, Python.NET, and the pinned optional MFLI Core dependency; the release workflow requires exactly one root file matching `*environment.yml` |
+| `environment-dev.yml` | Hand-written list of direct dependencies with version ranges (core, optional vendor libraries, Windows-only); not matched by the release filter and not used by the installer |
 | `archive/` | Retired documentation/code evidence; not current authority (left out of release ZIPs by `.gitattributes`) |
 
 The standalone deployment installer is maintained in

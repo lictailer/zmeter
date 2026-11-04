@@ -1,0 +1,52 @@
+# ZMeter readable dependency list (direct dependencies only).
+#
+# This file is documentation and a convenient starting point for development
+# and hardware-free test environments. It is NOT the deployment file:
+# `zmeter_Sept2026_environment.yml` is the exact export that the release workflow
+# packages and the installer uses, and it stays authoritative for lab PCs.
+# Keep the two in step by hand when a direct dependency changes.
+#
+# Build (Linux or Windows, hardware-free tests only; skip the Windows group on Linux):
+#   conda env create -f environment-dev.yml
+#
+# Conda environment files have no platform selectors, so the Windows-only and
+# vendor-SDK groups below are commented out. Uncomment what the machine needs.
+# Importing a device package without its vendor library fails at first use,
+# not at application start (drivers load lazily).
+name: zmeter-dev
+channels:
+  - conda-forge
+  - anaconda   # PyQt 6 comes from here (the deployment file uses the same channels)
+  - defaults
+dependencies:
+  - python=3.12
+
+  # --- Core: needed to start ZMeter and to run the hardware-free test suite ---
+  - pyqt >=6.9,<7
+  - pyqtgraph >=0.13.7,<0.14
+  - numpy >=2.4,<3
+  - scipy >=1.16,<2
+  - matplotlib >=3.10,<4
+  - openpyxl >=3.1,<4        # device_config.xlsx
+  - pyvisa >=1.16,<2
+  - pyserial >=3.5,<4
+  - requests >=2.32,<3
+  - keyring >=25.7,<26       # API keys for setup capture and Slack
+  - pip
+
+  # --- Optional vendor libraries (cross-platform packages) ---
+  - nidaqmx-python >=1.4,<2  # nidaq / ni6423 (NI-DAQmx driver installed separately)
+  - scikit-image >=0.26,<1   # auto_position
+  - sshtunnel >=0.4,<1       # opticool / remote tunnels
+
+  # --- Windows only (not installable on Linux): uncomment on a lab PC ---
+  # - pywin32 =311            # PowerPoint log (win32com) and COM helpers
+  # - pydaqmx =1.4.7          # legacy NI path used by nidaq / ni6423
+
+  # --- pip packages (keep a single `pip:` entry; uncomment what you need) ---
+  - pip:
+      - openai>=3.36,<4         # setup capture questionnaire (optional at runtime)
+      # - opencv-python-headless>=4.13,<5   # auto_focus / auto_position camera paths
+      # - pylablib==1.4.3                   # andor (Andor CCD + Shamrock)
+      # - zhinst-core==26.7.1.4             # mfli (exact pin, see devices/mfli/README.md)
+      # - pythonnet>=3.0.5,<4               # Windows: opticool and Kinesis (k10cr1, BBD30X)
