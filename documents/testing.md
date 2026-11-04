@@ -75,6 +75,16 @@ python -B -m unittest tests.test_layering -v
 - Hardware: none; the test parses source files with `ast` and imports nothing.
 - Proves (rule numbers as in the docstring of `tests/test_layering.py`): (1) `zcore/` does not import `PyQt6`, `core`, `devices`, or `zui`, including relative imports that leave the package and `import_module("...")` / `__import__("...")` strings; (2) `core/`, `zcore/` and `zui/` import no optional vendor library (`openai`, `cv2`, `pylablib`, `zhinst`, `skimage`, `PyDAQmx`, `nidaqmx`, `clr`, `sshtunnel`) at module top level; (3) `core/device_management/registry.py` does not import or name `devices` (the mock registration lives in `registrations.py` with every other driver); (4) `zui/` never imports `devices`, and only `zui/bridge/` imports `core`; (5) a device package in which any non-test file imports `zcore.devices` (a declarative device) imports nothing from `core`, `zui`, `PyQt6`, or another device package (its `tests/` directory is exempt). Synthetic sources check that each rule fails when violated.
 
+### Declarative device SDK tests
+
+```powershell
+python -B -m unittest -v tests.test_zcore_device_declarations tests.test_zcore_device_examples tests.test_zcore_results
+```
+
+- Hardware: none; Qt-free, fake drivers only. No device package is imported; the example drivers copy the method names of the real hardware layers.
+- Proves: every declaration and class-creation rule of `zcore.devices` ([ADR 004](decisions/004-declarative-device-sdk.md), decisions 2 and 3) rejects a violating declaration and accepts a valid one; `DeviceSpec` is built once, immutable, and follows Python attribute lookup for inherited, overridden and hidden declarations; SR860-, SR830-, K10CR1-, nidaq-, auto_focus- and attoDRY-like devices declare cleanly and expose the expected readout, control, array and snapshot names; `Result` constructors and statuses.
+- Does not prove: anything about the Runner, threads, limits enforcement at write time, panels, or the bridge (later phase 1 PRs).
+
 ### Registry and workbook expectations
 
 ```powershell

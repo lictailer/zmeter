@@ -125,7 +125,8 @@ class CoreImportTests(unittest.TestCase):
 
     def test_every_zcore_module_imports_without_qt_or_the_application(self):
         self.assert_package_imports("zcore", ZCORE_HIDDEN_MODULES)
-        self.assertIn("zcore.data", _modules("zcore"))
+        for module in ("zcore.data", "zcore.devices", "zcore.devices.device", "zcore.results"):
+            self.assertIn(module, _modules("zcore"))
 
     def test_every_zui_module_imports_without_devices(self):
         self.assert_package_imports("zui", ZUI_HIDDEN_MODULES)
