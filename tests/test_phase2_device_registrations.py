@@ -25,15 +25,13 @@ from core.device_management.registry import (
     UnknownDriverError,
     build_default_registry,
 )
+from tests.registry_expectations import PHASE1_DRIVER_IDS, PHASE2_DRIVER_IDS
 
 
 DEFERRED_DRIVER_IDS = (
     "autofocus_xz",
     "anc300",
 )
-
-PHASE2_DRIVER_IDS = ("four9", "montana2", "opticool", "attodry", "tlpm", "mc2000b",
-                     "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper", "andor")
 
 
 class Phase2RegistrationTests(unittest.TestCase):
@@ -44,9 +42,10 @@ import sys
 from core.device_management.registry import build_default_registry
 
 registry = build_default_registry()
-assert registry.driver_ids[12:-1] == ("four9", "montana2", "opticool", "attodry", "tlpm", "mc2000b",
-                                   "spectraphysicsx3_laser", "auto_focus", "auto_position", "arduino_steppers", "nema11_stepper", "andor")
-for driver_id in registry.driver_ids[12:-1]:
+phase2_ids = __PHASE2_DRIVER_IDS__
+start = __PHASE2_START__
+assert registry.driver_ids[start:start + len(phase2_ids)] == phase2_ids
+for driver_id in phase2_ids:
     assert driver_id in registry.config_specs
 loaded = sorted(
     name for name in sys.modules
@@ -56,7 +55,9 @@ loaded = sorted(
 if loaded:
     raise SystemExit("unexpected device import: " + ", ".join(loaded))
 print("phase2 registry remained lazy")
-"""
+""".replace("__PHASE2_DRIVER_IDS__", repr(PHASE2_DRIVER_IDS)).replace(
+            "__PHASE2_START__", repr(len(PHASE1_DRIVER_IDS))
+        )
         result = subprocess.run(
             [sys.executable, "-B", "-c", script],
             cwd=repository_root,

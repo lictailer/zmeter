@@ -73,7 +73,17 @@ python -B -m unittest tests.test_layering -v
 ```
 
 - Hardware: none; the test parses source files with `ast` and imports nothing.
-- Proves: `zcore/` does not import `PyQt6`, `core`, `devices`, or `zui` (including relative imports that leave the package), and `core/` and `zcore/` import no optional vendor library (`openai`, `cv2`, `pylablib`, `zhinst`, `skimage`, `PyDAQmx`, `nidaqmx`, `clr`, `sshtunnel`) at module top level, and `core/device_management/registry.py` does not import or name `devices` (the mock registration lives in `registrations.py` with every other driver). Synthetic sources check that each rule fails when violated.
+- Proves (rule numbers as in the docstring of `tests/test_layering.py`): (1) `zcore/` does not import `PyQt6`, `core`, `devices`, or `zui`, including relative imports that leave the package and `import_module("...")` / `__import__("...")` strings; (2) `core/`, `zcore/` and `zui/` import no optional vendor library (`openai`, `cv2`, `pylablib`, `zhinst`, `skimage`, `PyDAQmx`, `nidaqmx`, `clr`, `sshtunnel`) at module top level; (3) `core/device_management/registry.py` does not import or name `devices` (the mock registration lives in `registrations.py` with every other driver); (4) `zui/` never imports `devices`, and only `zui/bridge/` imports `core`; (5) a device package in which any non-test file imports `zcore.devices` (a declarative device) imports nothing from `core`, `zui`, `PyQt6`, or another device package (its `tests/` directory is exempt). Synthetic sources check that each rule fails when violated.
+
+### Registry and workbook expectations
+
+```powershell
+python -B -m unittest -v tests.test_device_registry tests.test_device_manager tests.test_phase1_device_registrations tests.test_phase2_device_registrations tests.test_device_config_workbook
+```
+
+- Hardware: none; the registry is built without importing any device, and the workbook is only read.
+- `tests/registry_expectations.py` is the one place that lists every registered driver ID in registration order. Adding a driver means adding its ID to that file; no other test repeats the list. The registry tests still compare against it explicitly, so an unreviewed or missing registration fails.
+- `tests/test_device_config_workbook.py` finds Devices rows by device id and reads the Guide's accepted driver IDs down to the first blank cell, so adding a row or a driver does not change row numbers in tests. It derives the table range and the config-check formula range from those extents. A new driver still needs its Guide row (and, if wanted, a Devices row) added in Excel, because editing the workbook with `openpyxl` drops the checkbox cells.
 
 ### Queue model and manual-item tests
 
@@ -113,7 +123,7 @@ python -B -m unittest tests.test_core_imports -v
 ```
 
 - Hardware: none; child interpreters import modules only (offscreen Qt), and no device is constructed.
-- Proves: every module under `core/` imports in a fresh interpreter with `tkinter`, `python-pptx`, `PIL`, `pywin32` and the optional vendor libraries hidden, so the check also holds on a PC that has them installed (PowerPoint COM is imported only when a slide is appended); `core/scan_info.py` holds only the `ScanInfo` template and loads neither Qt nor pyqtgraph; importing `core.all_plots` or `core.mainWindow` sets pyqtgraph's row-major image order.
+- Proves: every module under `core/` imports in a fresh interpreter with `tkinter`, `python-pptx`, `PIL`, `pywin32` and the optional vendor libraries hidden, so the check also holds on a PC that has them installed (PowerPoint COM is imported only when a slide is appended); every module under `zcore/` imports with `PyQt6`, `core`, `devices` and `zui` hidden as well, and every module under `zui/` imports with `devices` hidden; `core/scan_info.py` holds only the `ScanInfo` template and loads neither Qt nor pyqtgraph; importing `core.all_plots` or `core.mainWindow` sets pyqtgraph's row-major image order.
 
 ### Scan-finished hook tests
 

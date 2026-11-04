@@ -1,9 +1,13 @@
-"""Every module under ``core/`` imports in a fresh interpreter.
+"""Every module under ``core/``, ``zcore/`` and ``zui/`` imports in a fresh interpreter.
 
 The imports run in a child process so that nothing the test runner or other
 tests imported earlier can hide a missing import. The child hides
 ``HIDDEN_MODULES`` first, so the test also fails on a PC that has them
 installed. Importing a module does not construct devices or touch hardware.
+
+``zcore/`` is imported with PyQt6 hidden as well, and also with ``core``,
+``devices`` and ``zui`` hidden, so it cannot lean on the rest of the
+application. ``zui/`` is imported with ``devices`` hidden.
 """
 
 import json
@@ -36,9 +40,9 @@ HIDDEN_MODULES = (
 )
 
 
-def _core_modules():
+def _modules(package):
     modules = []
-    for path in sorted((REPO_ROOT / "core").rglob("*.py")):
+    for path in sorted((REPO_ROOT / package).rglob("*.py")):
         if "__pycache__" in path.parts:
             continue
         parts = list(path.relative_to(REPO_ROOT).with_suffix("").parts)
@@ -46,6 +50,10 @@ def _core_modules():
             parts.pop()
         modules.append(".".join(parts))
     return modules
+
+
+def _core_modules():
+    return _modules("core")
 
 
 def _run_child(code):
@@ -81,6 +89,10 @@ for name in %r:
 print(json.dumps(failures))
 """
 
+# Hidden for every new package: the rest of the application must not be needed.
+ZCORE_HIDDEN_MODULES = HIDDEN_MODULES + ("PyQt6", "core", "devices", "zui")
+ZUI_HIDDEN_MODULES = HIDDEN_MODULES + ("devices",)
+
 _AXIS_ORDER = """
 import importlib, json
 import pyqtgraph as pg
@@ -97,14 +109,26 @@ class CoreImportTests(unittest.TestCase):
         self.assertIn("core.mainWindow", modules)
         self.assertIn("core.device_management.registry", modules)
 
-    def test_every_core_module_imports_in_a_fresh_process(self):
-        failures = _run_child(_IMPORT_ALL % (HIDDEN_MODULES, _core_modules()))
+    def assert_package_imports(self, package, hidden):
+        modules = _modules(package)
+        self.assertIn(package, modules)
+        failures = _run_child(_IMPORT_ALL % (hidden, modules))
         self.assertEqual(
             failures,
             {},
-            "core modules that fail to import:\n"
+            f"{package} modules that fail to import:\n"
             + "\n".join(f"{name}:\n{trace}" for name, trace in failures.items()),
         )
+
+    def test_every_core_module_imports_in_a_fresh_process(self):
+        self.assert_package_imports("core", HIDDEN_MODULES)
+
+    def test_every_zcore_module_imports_without_qt_or_the_application(self):
+        self.assert_package_imports("zcore", ZCORE_HIDDEN_MODULES)
+        self.assertIn("zcore.data", _modules("zcore"))
+
+    def test_every_zui_module_imports_without_devices(self):
+        self.assert_package_imports("zui", ZUI_HIDDEN_MODULES)
 
     def test_scan_info_is_only_the_template(self):
         result = _run_child(
