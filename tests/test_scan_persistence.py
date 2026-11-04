@@ -83,10 +83,9 @@ class ScanPersistenceCompatibilityTests(unittest.TestCase):
             mock.patch("core.scan.os.path.exists", side_effect=isolated_exists),
             mock.patch("core.scan.shutil.copy2") as copy_backup,
             mock.patch("core.scan.add_slide_with_qpixmap") as add_slide,
-            mock.patch("core.scan.Presentation") as presentation,
             mock.patch(
-                "core.append_to_ppt.win32com.client.Dispatch", create=True
-            ) as dispatch,
+                "core.append_to_ppt._add_slide_with_image_files"
+            ) as powerpoint_com,
             mock.patch(
                 "core.scan.QFileDialog.getSaveFileName",
                 side_effect=AssertionError("unexpected save dialog"),
@@ -96,14 +95,12 @@ class ScanPersistenceCompatibilityTests(unittest.TestCase):
                 z_checks=z_checks,
                 copy_backup=copy_backup,
                 add_slide=add_slide,
-                presentation=presentation,
-                dispatch=dispatch,
+                powerpoint_com=powerpoint_com,
             )
 
         copy_backup.assert_not_called()
         add_slide.assert_not_called()
-        presentation.assert_not_called()
-        dispatch.assert_not_called()
+        powerpoint_com.assert_not_called()
         self.assertFalse((self.output_root / "must-not-be-created.pptx").exists())
 
     def _set_name(self, name):

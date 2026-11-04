@@ -1,11 +1,13 @@
+"""Append scan slides to a PowerPoint presentation through Windows COM.
+
+``pywin32`` (``win32com`` and ``pythoncom``) is imported inside the function
+that talks to PowerPoint, so importing this module, and ``core.scan`` with
+it, works on any operating system. Only appending a slide needs Windows.
+"""
+
 import os
 import sys
 import tempfile
-import win32com.client
-import pythoncom
-#pip install pywin32
-# from PyQt5.QtWidgets import QApplication, QWidget
-# from PyQt5.QtGui import QPixmap
 import gc
 
 
@@ -23,6 +25,9 @@ def _add_slide_with_image_files(
     The caller owns the image files.  Keeping the COM work independent from
     Qt image objects lets scan finalization run outside the GUI thread.
     """
+    import pythoncom
+    import win32com.client
+
     presentation = None
     ppt_app = None
     pythoncom.CoInitialize()
@@ -243,6 +248,8 @@ def add_slide_with_qpixmap(
 
 
 if __name__ == "__main__":
+    from PyQt6.QtWidgets import QApplication, QWidget
+
     app = QApplication(sys.argv)
     widget = QWidget()
     widget.resize(300, 200)

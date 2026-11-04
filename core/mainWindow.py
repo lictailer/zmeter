@@ -26,7 +26,8 @@ from .device_management import (
     StartupReport,
 )
 
-from .scan_info import *
+from .plot_config import configure_pyqtgraph
+from .scan_info import ScanInfo
 from .scanlist import (
     ScanList,
     ScanListShutdownStopError,
@@ -50,6 +51,8 @@ from .shift_compensation.logic import (
     TARGET_GROUP as SHIFT_COMPENSATION_TARGET_GROUP,
     ShiftCompensationLogic,
 )
+
+configure_pyqtgraph()
 
 
 @dataclass(frozen=True, slots=True)

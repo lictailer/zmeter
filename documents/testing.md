@@ -106,6 +106,15 @@ acknowledgement/reconciliation, cleanup quarantine and delete retry, injected
 worker-dispatch failures, and asynchronous application teardown. They do not
 load a vendor runtime or validate physical equipment.
 
+### Core import test
+
+```powershell
+python -B -m unittest tests.test_core_imports -v
+```
+
+- Hardware: none; child interpreters import modules only (offscreen Qt), and no device is constructed.
+- Proves: every module under `core/` imports in a fresh interpreter without `tkinter`, `python-pptx`, or `pywin32` (PowerPoint COM is imported only when a slide is appended); `core/scan_info.py` holds only the `ScanInfo` template and loads neither Qt nor pyqtgraph; importing `core.all_plots` or `core.mainWindow` sets pyqtgraph's row-major image order.
+
 ### Mock-device tests
 
 ```powershell
